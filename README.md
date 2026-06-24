@@ -17,6 +17,6 @@ sudo apt install ros-noetic-xgc2-gazebo-sim-worlds
 
 ## Installed Assets
 
-- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/common/empty.world`
-- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/scenes/weston_robot_empty.world`
-- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/scenes/clearpath_playpen.world`
+- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/empty/empty.world`
+- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/weston_robot_empty/weston_robot_empty.world`
+- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world`

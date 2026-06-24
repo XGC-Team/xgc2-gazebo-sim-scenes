@@ -40,9 +40,9 @@ required_files=(
   .xgc2/scripts/publish_apt_repo.sh
   CMakeLists.txt
   package.xml
-  worlds/common/empty.world
-  worlds/scenes/weston_robot_empty.world
-  worlds/scenes/clearpath_playpen.world
+  worlds/empty/empty.world
+  worlds/weston_robot_empty/weston_robot_empty.world
+  worlds/clearpath_playpen/clearpath_playpen.world
 )
 
 for file in "${required_files[@]}"; do
@@ -54,9 +54,24 @@ done
 
 xmllint --noout \
   package.xml \
-  worlds/common/empty.world \
-  worlds/scenes/weston_robot_empty.world \
-  worlds/scenes/clearpath_playpen.world
+  worlds/empty/empty.world \
+  worlds/weston_robot_empty/weston_robot_empty.world \
+  worlds/clearpath_playpen/clearpath_playpen.world
+
+while IFS= read -r scene_dir; do
+  scene_name="$(basename "${scene_dir}")"
+  if [[ ! -f "${scene_dir}/${scene_name}.world" ]]; then
+    echo "Scene directory must include same-name world file: ${scene_dir}/${scene_name}.world" >&2
+    exit 1
+  fi
+done < <(find worlds -mindepth 1 -maxdepth 1 -type d | sort)
+
+while IFS= read -r world; do
+  if [[ "$(head -n 1 "${world}")" != '<?xml version="1.0"?>' ]]; then
+    echo "World file must start with XML declaration: ${world}" >&2
+    exit 1
+  fi
+done < <(find worlds -type f -name '*.world' | sort)
 
 if rg -n '<node|<include file=' worlds >/dev/null; then
   echo "gazebo_sim_worlds must remain a pure world asset package." >&2

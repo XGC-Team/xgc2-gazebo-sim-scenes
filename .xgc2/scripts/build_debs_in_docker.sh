@@ -63,11 +63,11 @@ docker run --rm \
     .xgc2/scripts/package_debs.sh --output-dir /workspace/out
 
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/common/empty.world >/dev/null
+      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/empty/empty.world >/dev/null
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/scenes/weston_robot_empty.world >/dev/null
+      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/weston_robot_empty/weston_robot_empty.world >/dev/null
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/scenes/clearpath_playpen.world >/dev/null
+      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world >/dev/null
 
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
       apt-get install -y /workspace/out/*.deb
