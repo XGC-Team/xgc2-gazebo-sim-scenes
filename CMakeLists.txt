@@ -5,6 +5,6 @@ find_package(catkin REQUIRED)
 
 catkin_package()
 
-install(DIRECTORY worlds
+install(DIRECTORY worlds models
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <model name="tunnel_exp">
+    <static>true</static>
+    <link name="tunnel_link">
+      <collision name="collision">
+        <geometry>
+          <mesh>
+          <scale>0.001 0.001 0.001</scale>
+            <uri>model://tunnel_exp/tunnel_experiment_58m.STL</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <mesh>
+          <scale>0.001 0.001 0.001</scale>
+            <uri>model://tunnel_exp/tunnel_experiment_58m.STL</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>
+

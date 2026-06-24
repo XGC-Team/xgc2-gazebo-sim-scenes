@@ -54,6 +54,7 @@ mkdir -p "${share_root}" "${pkg_root}/DEBIAN" "${pkg_root}/usr/share/doc/${PACKA
 
 cp -a "${REPO_ROOT}/package.xml" "${share_root}/package.xml"
 cp -a "${REPO_ROOT}/worlds" "${share_root}/worlds"
+cp -a "${REPO_ROOT}/models" "${share_root}/models"
 
 cat > "${pkg_root}/DEBIAN/control" <<EOF
 Package: ${PACKAGE}

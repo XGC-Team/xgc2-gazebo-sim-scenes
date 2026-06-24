@@ -54,6 +54,7 @@ docker run --rm \
       dpkg-dev \
       fakeroot \
       file \
+      gazebo11 \
       libxml2-utils \
       ripgrep \
       ros-noetic-rospack
@@ -68,6 +69,12 @@ docker run --rm \
       | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/weston_robot_empty/weston_robot_empty.world >/dev/null
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
       | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world >/dev/null
+    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
+      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world >/dev/null
+    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
+      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/models/corridor/model.sdf >/dev/null
+    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
+      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/models/jersey_barrier/model.sdf >/dev/null
 
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
       apt-get install -y /workspace/out/*.deb

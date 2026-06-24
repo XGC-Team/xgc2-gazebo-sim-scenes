@@ -1,0 +1,866 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+            <world name="default">
+                <light name="sun" type="directional">
+                <cast_shadows>1</cast_shadows>
+                <pose>0 0 10 0 -0 0</pose>
+                <diffuse>0.8 0.8 0.8 1</diffuse>
+                <specular>0.2 0.2 0.2 1</specular>
+                <attenuation>
+                    <range>1000</range>
+                    <constant>0.9</constant>
+                    <linear>0.01</linear>
+                    <quadratic>0.001</quadratic>
+                </attenuation>
+                <direction>-0.5 0.1 -0.9</direction>
+                <spot>
+                    <inner_angle>0</inner_angle>
+                    <outer_angle>0</outer_angle>
+                    <falloff>0</falloff>
+                </spot>
+                </light>
+                <model name="ground_plane">
+                <static>1</static>
+                <link name="link">
+                    <collision name="collision">
+                    <geometry>
+                        <plane>
+                        <normal>0 0 1</normal>
+                        <size>100 100</size>
+                        </plane>
+                    </geometry>
+                    <surface>
+                        <contact>
+                        <collide_bitmask>65535</collide_bitmask>
+                        <ode />
+                        </contact>
+                        <friction>
+                        <ode>
+                            <mu>100</mu>
+                            <mu2>50</mu2>
+                        </ode>
+                        <torsional>
+                            <ode />
+                        </torsional>
+                        </friction>
+                        <bounce />
+                    </surface>
+                    <max_contacts>10</max_contacts>
+                    </collision>
+                    <visual name="visual">
+                    <cast_shadows>0</cast_shadows>
+                    <geometry>
+                        <plane>
+                        <normal>0 0 1</normal>
+                        <size>100 100</size>
+                        </plane>
+                    </geometry>
+                    <material>
+                        <script>
+                        <uri>file://media/materials/scripts/gazebo.material</uri>
+                        <name>Gazebo/Grey</name>
+                        </script>
+                    </material>
+                    </visual>
+                    <self_collide>0</self_collide>
+                    <enable_wind>0</enable_wind>
+                    <kinematic>0</kinematic>
+                </link>
+                </model>
+                <gravity>0 0 -9.8</gravity>
+                <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+                <atmosphere type="adiabatic" />
+                <physics type="ode">
+                <max_step_size>0.001</max_step_size>
+                <real_time_factor>1</real_time_factor>
+                <real_time_update_rate>1000</real_time_update_rate>
+                </physics>
+                <scene>
+                <ambient>0.4 0.4 0.4 1</ambient>
+                <background>0.7 0.7 0.7 1</background>
+                <shadows>1</shadows>
+                </scene>
+                <wind />
+                <spherical_coordinates>
+                <surface_model>EARTH_WGS84</surface_model>
+                <latitude_deg>0</latitude_deg>
+                <longitude_deg>0</longitude_deg>
+                <elevation>0</elevation>
+                <heading_deg>0</heading_deg>
+                </spherical_coordinates>
+                
+                            <model name="cylinder_0_0.7_0.7_2.1">
+                                <static>true</static>
+                                <pose>0.9762700785464951 4.30378732744839 1.0448831829968968 0 0 0</pose> 
+                                <link name="link">
+                                    <visual name="visual">
+                                        <geometry>
+                                            <cylinder>
+                                                <radius>0.3270964398016714</radius>
+                                                <length>2.0897663659937935</length>
+                                            </cylinder>
+                                        </geometry>
+                                    </visual>
+                                    <collision name="collision">
+                                        <geometry>
+                                            <cylinder>
+                                                <radius>0.3270964398016714</radius>
+                                                <length>2.0897663659937935</length>
+                                            </cylinder>
+                                        </geometry>
+                                        
+                                        <collision>
+                                            <collide_bitmask>0x1</collide_bitmask> 
+                                            <collide_with>0x2</collide_with>       
+                                        </collision>
+                                    </collision>
+                                </link>
+                            </model>
+                            
+                            <model name="cylinder_1_0.6_0.6_2.9">
+                                <static>true</static>
+                                <pose>2.917882261333123 -1.2482557747461502 1.4636627605010293 0 0 0</pose> 
+                                <link name="link">
+                                    <visual name="visual">
+                                        <geometry>
+                                            <cylinder>
+                                                <radius>0.3150324556477333</radius>
+                                                <length>2.9273255210020586</length>
+                                            </cylinder>
+                                        </geometry>
+                                    </visual>
+                                    <collision name="collision">
+                                        <geometry>
+                                            <cylinder>
+                                                
+                                                <radius>0.3150324556477333</radius>
+                                                <length>2.9273255210020586</length>
+                                            </cylinder>
+                                        </geometry>
+                                        
+                                        <collision>
+                                            <collide_bitmask>0x1</collide_bitmask> 
+                                            <collide_with>0x2</collide_with>       
+                                        </collision>
+                                    </collision>
+                                </link>
+                            </model>
+
+                            
+                            <model name="cylinder_7_0.8_0.8_2.9">
+                            <static>true</static>
+                            <pose>2.352709941517542 2.2419144544484286 1.4437480785146242 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.404546089731045</radius>
+                                        <length>2.8874961570292483</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.80909217946209 0.80909217946209 2.8874961570292483</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_8_0.8_0.8_1.1">
+                            <static>true</static>
+                            <pose>-2.80984198852428 -1.259360924013171 0.5602254716292698 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.4000300146337003</radius>
+                                        <length>1.1204509432585397</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.8000600292674006 0.8000600292674006 1.1204509432585397</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_9_0.5_0.5_3.0">
+                            <static>true</static>
+                            <pose>-2.725784581147548 1.4039354083575937 1.4883738380592262 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.23061344322440844</radius>
+                                        <length>2.9767476761184524</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.4612268864488169 0.4612268864488169 2.9767476761184524</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_19_0.8_0.8_2.9">
+                            <static>true</static>
+                            <pose>3.850631801555318 4.50508559639281 1.4560836347232238 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.3931970597688912</radius>
+                                        <length>2.9121672694464475</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.7863941195377824 0.7863941195377824 2.9121672694464475</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_20_0.5_0.5_1.9">
+                            <static>true</static>
+                            <pose>3.2034707498537003 -4.198447855791119 0.9287687009457661 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.24064221926673507</radius>
+                                        <length>1.8575374018915323</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.48128443853347014 0.48128443853347014 1.8575374018915323</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_27_0.5_0.5_1.8">
+                            <static>true</static>
+                            <pose>-1.3116674888375854 -3.764082360117948 0.8777518392924809 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.25388110326789043</radius>
+                                        <length>1.7555036785849618</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.5077622065357809 0.5077622065357809 1.7555036785849618</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_37_0.5_0.5_1.6">
+                            <static>true</static>
+                            <pose>0.2003370463650036 0.7235498940690395 0.7775960977317661 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.23865816963989606</radius>
+                                        <length>1.5551921954635322</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.4773163392797921 0.4773163392797921 1.5551921954635322</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_45_0.7_0.7_2.2">
+                            <static>true</static>
+                            <pose>-3.440239981838406 3.606973320300032 1.107249374011541 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.3432939508629248</radius>
+                                        <length>2.214498748023082</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.6865879017258496 0.6865879017258496 2.214498748023082</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="cylinder_48_0.5_0.5_1.7">
+                            <static>true</static>
+                            <pose>0.6983370985416784 -1.9151276412148235 0.8650998770600098 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <cylinder>
+                                        <radius>0.25717007448202045</radius>
+                                        <length>1.7301997541200196</length>
+                                    </cylinder>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.5143401489640409 0.5143401489640409 1.7301997541200196</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_4_0.2_0.4_2.4">
+                            <static>true</static>
+                            <pose>-4.467005395816209 0.1268583864760835 1.206410577667011 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.2 0.4 2.4</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2 0.4 2.4</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_10_0.5_0.4_1.6">
+                            <static>true</static>
+                            <pose>-1.3480671386427048 3.1960805878154357 0.8062690951677486 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.5 0.4 1.6</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.5 0.4 1.6</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_18_0.3_0.5_2.5">
+                            <static>true</static>
+                            <pose>-4.564360170334614 -3.0721112863463134 1.2664119839578025 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.3 0.5 2.5</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.3 0.5 2.5</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_22_0.4_0.4_1.9">
+                            <static>true</static>
+                            <pose>4.916316481088979 -3.06732546911781 0.9431091384338327 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.4 0.4 1.9</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.4 0.4 1.9</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_28_0.2_0.3_2.2">
+                            <static>true</static>
+                            <pose>0.9291258212460001 -3.7348301979196563 1.0775940791907155 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.2 0.3 2.2</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2 0.3 2.2</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_30_0.5_0.2_1.0">
+                            <static>true</static>
+                            <pose>4.464506109105033 1.4159431969696623 0.5181416660316917 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.5 0.2 1.0</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.5 0.2 1.0</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_33_0.5_0.3_1.2">
+                            <static>true</static>
+                            <pose>4.672418581388806 -1.0200588335684948 0.597226469354613 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.5 0.3 1.2</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.5 0.3 1.2</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_34_0.4_0.4_1.3">
+                            <static>true</static>
+                            <pose>-1.247919934143214 4.86622578327642 0.6558907168274684 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.4 0.4 1.3</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.4 0.4 1.3</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_35_0.5_0.2_1.8">
+                            <static>true</static>
+                            <pose>0.7252978011621849 2.27458122753273 0.9199412609170742 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.5 0.2 1.8</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.5 0.2 1.8</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_37_0.2_0.3_2.7">
+                            <static>true</static>
+                            <pose>-1.355811067008446 -2.0894462399592717 1.3683394874879498 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.2 0.3 2.7</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2 0.3 2.7</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_39_0.2_0.4_1.5">
+                            <static>true</static>
+                            <pose>2.000524343217922 0.6195940721407105 0.7742883198308734 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.2 0.4 1.5</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2 0.4 1.5</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_47_0.2_0.3_2.8">
+                            <static>true</static>
+                            <pose>2.3285115651441597 -2.772124970157801 1.397285272580829 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.2 0.3 2.8</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2 0.3 2.8</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="box_48_0.3_0.3_2.7">
+                            <static>true</static>
+                            <pose>-2.8941664654011445 -3.2153695479817106 1.3740450250527239 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                <geometry>
+                                    <box>
+                                        <size>0.3 0.3 2.7</size> 
+                                    </box>
+                                </geometry>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.3 0.3 2.7</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            </model> 
+                            
+                            <model name="dynamic_cylinder_0_0.5_0.5_1.6">
+                            <static>true</static>
+                            <pose>-2.9946536448126686 2.1934232710004764 0.7857869475825525 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <cylinder>
+                                            <radius>0.24845360426862487</radius>
+                                            <length>1.571573895165105</length>
+                                        </cylinder>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.49690720853724973 0.49690720853724973 1.571573895165105</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.9441818211455691</velocity>
+                                <path>
+                                <waypoint>-2.9946536448126686 2.1934232710004764 0.7857869475825525</waypoint>
+                                <waypoint>7.7701436804043915 3.133102733647588 0.7857869475825525</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_cylinder_1_0.6_0.6_1.9">
+                            <static>true</static>
+                            <pose>-2.797294724296271 -4.646734892248996 0.9311371469944523 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <cylinder>
+                                            <radius>0.30979703292790034</radius>
+                                            <length>1.8622742939889045</length>
+                                        </cylinder>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.6195940658558007 0.6195940658558007 1.8622742939889045</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.5596992337409327</velocity>
+                                <path>
+                                <waypoint>-2.797294724296271 -4.646734892248996 0.9311371469944523</waypoint>
+                                <waypoint>-9.231721088843495 7.669628419277412 0.9311371469944523</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_cylinder_3_1.0_1.0_1.9">
+                            <static>true</static>
+                            <pose>-0.7442642711546288 -3.0412325565278575 0.9493577862690079 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <cylinder>
+                                            <radius>0.47746672400213486</radius>
+                                            <length>1.8987155725380158</length>
+                                        </cylinder>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.9549334480042697 0.9549334480042697 1.8987155725380158</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.7043768180558272</velocity>
+                                <path>
+                                <waypoint>-0.7442642711546288 -3.0412325565278575 0.9493577862690079</waypoint>
+                                <waypoint>-6.583994029169982 -2.9642028622316214 0.9493577862690079</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_cylinder_10_1.0_1.0_1.8">
+                            <static>true</static>
+                            <pose>-3.937515791268204 -0.46207247195070167 0.8885212608367177 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <cylinder>
+                                            <radius>0.4780384155585556</radius>
+                                            <length>1.7770425216734353</length>
+                                        </cylinder>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.9560768311171112 0.9560768311171112 1.7770425216734353</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.6928920416409474</velocity>
+                                <path>
+                                <waypoint>-3.937515791268204 -0.46207247195070167 0.8885212608367177</waypoint>
+                                <waypoint>4.000648212438945 -6.927215493583638 0.8885212608367177</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_cylinder_16_0.7_0.7_1.5">
+                            <static>true</static>
+                            <pose>0.7855122462073894 4.377357266246214 0.7631757451365173 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <cylinder>
+                                            <radius>0.3483594185648371</radius>
+                                            <length>1.5263514902730346</length>
+                                        </cylinder>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.6967188371296742 0.6967188371296742 1.5263514902730346</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.8466830503100422</velocity>
+                                <path>
+                                <waypoint>0.7855122462073894 4.377357266246214 0.7631757451365173</waypoint>
+                                <waypoint>0.8972539509822575 -4.732949260121513 0.7631757451365173</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_cylinder_27_0.6_0.6_1.1">
+                            <static>true</static>
+                            <pose>3.186537886977817 2.5733640891092513 0.5663459130917383 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <cylinder>
+                                            <radius>0.27818766821510793</radius>
+                                            <length>1.1326918261834766</length>
+                                        </cylinder>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.5563753364302159 0.5563753364302159 1.1326918261834766</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.5393587072344521</velocity>
+                                <path>
+                                <waypoint>3.186537886977817 2.5733640891092513 0.5663459130917383</waypoint>
+                                <waypoint>8.323761386493018 -7.227517745884575 0.5663459130917383</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_1_0.3_0.4_0.5">
+                            <static>true</static>
+                            <pose>1.373606283478308 -1.7382147720256107 0.599659964622127 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.2530435267666224 0.36498977423415135 0.5130808387106492</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2530435267666224 0.36498977423415135 0.5130808387106492</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.663339712981367</velocity>
+                                <path>
+                                <waypoint>1.373606283478308 -1.7382147720256107 0.599659964622127</waypoint>
+                                <waypoint>6.5938005274865255 -9.611868846224755 0.8690028077160052</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_7_0.5_0.4_0.7">
+                            <static>true</static>
+                            <pose>-2.464910674984358 4.996080583674585 1.6269235409979816 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.49254132567175624 0.3824290819246837 0.7167628052572891</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.49254132567175624 0.3824290819246837 0.7167628052572891</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.6554260282422725</velocity>
+                                <path>
+                                <waypoint>-2.464910674984358 4.996080583674585 1.6269235409979816</waypoint>
+                                <waypoint>4.450669148785224 -8.064212682156864 0.5550837113101732</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_9_0.3_0.3_1.2">
+                            <static>true</static>
+                            <pose>0.7285261849534859 1.9442001830950986 2.492408064485497 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.31734366568543004 0.300503545662104 1.1694322765117091</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.31734366568543004 0.300503545662104 1.1694322765117091</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.9638152427706254</velocity>
+                                <path>
+                                <waypoint>0.7285261849534859 1.9442001830950986 2.492408064485497</waypoint>
+                                <waypoint>-3.470358788563363 6.389981041194854 1.675408245896195</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_16_0.2_0.3_0.8">
+                            <static>true</static>
+                            <pose>2.558456562346711 -3.437800377987024 1.9465736094540858 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.2310953051733298 0.32751613763558485 0.7696474951189869</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2310953051733298 0.32751613763558485 0.7696474951189869</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.5378542502736708</velocity>
+                                <path>
+                                <waypoint>2.558456562346711 -3.437800377987024 1.9465736094540858</waypoint>
+                                <waypoint>-9.915253364551994 -0.8856896341425582 2.170527046193845</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_20_0.2_0.3_1.2">
+                            <static>true</static>
+                            <pose>-1.7680918422856866 -0.9111421342217909 0.9075737312565388 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.2373161613055156 0.2739211489972099 1.199545750798512</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.2373161613055156 0.2739211489972099 1.199545750798512</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.7481958929051509</velocity>
+                                <path>
+                                <waypoint>-1.7680918422856866 -0.9111421342217909 0.9075737312565388</waypoint>
+                                <waypoint>-8.765765392361967 0.20468414915677258 0.8303807025615693</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_21_0.3_0.3_1.0">
+                            <static>true</static>
+                            <pose>4.190408162788486 -0.06541744674206029 2.402395697469707 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.29029176622488706 0.30794555372527216 0.9968702464984072</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.29029176622488706 0.30794555372527216 0.9968702464984072</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.550463289818544</velocity>
+                                <path>
+                                <waypoint>4.190408162788486 -0.06541744674206029 2.402395697469707</waypoint>
+                                <waypoint>-8.08984742825884 0.362207740525168 2.407655705315584</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_26_0.2_0.4_1.5">
+                            <static>true</static>
+                            <pose>4.54475844901677 4.636098265112004 1.9274453888489673 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.21624689394986982 0.4183197756210159 1.4534944101540985</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.21624689394986982 0.4183197756210159 1.4534944101540985</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.8647973155917649</velocity>
+                                <path>
+                                <waypoint>4.54475844901677 4.636098265112004 1.9274453888489673</waypoint>
+                                <waypoint>-1.2821719334695132 9.628423416467733 1.339123036502933</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            <model name="dynamic_box_27_0.4_0.3_1.3">
+                            <static>true</static>
+                            <pose>-1.0875972310569892 2.930229933934317 2.459191218638721 0 0 0</pose> 
+                            <link name="link">
+                                <visual name="visual">
+                                    <geometry>
+                                        <box>
+                                            <size>0.3679003783143384 0.3495749723520408 1.2527815168082577</size> 
+                                        </box>
+                                    </geometry>
+                                    <material>
+                                        <ambient>1 0 0 1</ambient> 
+                                        <diffuse>1 0 0 1</diffuse> 
+                                        <specular>0.5 0.5 0.5 1</specular> 
+                                    </material>
+                                </visual>
+                            <collision name="collision"><geometry><box><size>0.3679003783143384 0.3495749723520408 1.2527815168082577</size></box></geometry><gazebo><collision_bitmask>0x1</collision_bitmask><collision_mask>0x2</collision_mask></gazebo></collision></link>
+                            <plugin name="obstacle_motion" filename="libobstaclePathPlugin.so">
+                                <orientation>false</orientation>
+                                <loop>0</loop>
+                                <velocity>0.7692682783408609</velocity>
+                                <path>
+                                <waypoint>-1.0875972310569892 2.930229933934317 2.459191218638721</waypoint>
+                                <waypoint>7.37079274514134 3.0503978667121583 2.3430097517799737</waypoint>
+                                </path>
+                            </plugin>
+                            </model> 
+                            
+                            </world>
+            </sdf>

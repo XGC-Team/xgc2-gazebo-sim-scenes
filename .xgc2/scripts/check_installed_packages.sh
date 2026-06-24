@@ -12,11 +12,19 @@ test "$(rospack find gazebo_sim_worlds)" = "/opt/ros/${ROS_DISTRO}/share/gazebo_
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/empty.world"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/weston_robot_empty/weston_robot_empty.world"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world"
+test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world"
+test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/corridor/model.sdf"
+test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/person/model.sdf"
+test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/jersey_barrier/model.sdf"
 
-xmllint --noout \
-  "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/package.xml" \
-  "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/empty.world" \
-  "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/weston_robot_empty/weston_robot_empty.world" \
-  "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world"
+xmllint --noout "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/package.xml"
+while IFS= read -r xml_file; do
+  xmllint --noout "${xml_file}"
+done < <(
+  {
+    find "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds" -type f -name '*.world'
+    find "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models" -type f \( -name 'model.config' -o -name 'model.sdf' \)
+  } | sort
+)
 
 echo "Installed package check passed"

@@ -5,6 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
 
 cd "${repo_root}"
+export GAZEBO_MODEL_PATH="${repo_root}/models:${GAZEBO_MODEL_PATH:-}"
 
 bash -n .xgc2/scripts/*.sh
 
@@ -43,6 +44,13 @@ required_files=(
   worlds/empty/empty.world
   worlds/weston_robot_empty/weston_robot_empty.world
   worlds/clearpath_playpen/clearpath_playpen.world
+  worlds/corridor_dynamic_9/corridor_dynamic_9.world
+  models/corridor/model.config
+  models/corridor/model.sdf
+  models/person/model.config
+  models/person/model.sdf
+  models/jersey_barrier/model.config
+  models/jersey_barrier/model.sdf
 )
 
 for file in "${required_files[@]}"; do
@@ -52,11 +60,16 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-xmllint --noout \
-  package.xml \
-  worlds/empty/empty.world \
-  worlds/weston_robot_empty/weston_robot_empty.world \
-  worlds/clearpath_playpen/clearpath_playpen.world
+xmllint --noout package.xml
+
+while IFS= read -r xml_file; do
+  xmllint --noout "${xml_file}"
+done < <(
+  {
+    find worlds -type f -name '*.world'
+    find models -type f \( -name 'model.config' -o -name 'model.sdf' \)
+  } | sort
+)
 
 while IFS= read -r scene_dir; do
   scene_name="$(basename "${scene_dir}")"
@@ -72,6 +85,50 @@ while IFS= read -r world; do
     exit 1
   fi
 done < <(find worlds -type f -name '*.world' | sort)
+
+while IFS= read -r sdf_file; do
+  if ! gz sdf -k "${sdf_file}" >/tmp/xgc2-gazebo-sim-worlds-sdf-check.log 2>&1; then
+    echo "Gazebo SDF validation failed: ${sdf_file}" >&2
+    cat /tmp/xgc2-gazebo-sim-worlds-sdf-check.log >&2
+    exit 1
+  fi
+done < <(
+  {
+    find worlds -type f -name '*.world'
+    find models -type f -name 'model.sdf'
+  } | sort
+)
+
+while IFS= read -r model_dir; do
+  if [[ ! -f "${model_dir}/model.config" ]]; then
+    echo "Model directory missing model.config: ${model_dir}" >&2
+    exit 1
+  fi
+  if [[ ! -f "${model_dir}/model.sdf" ]]; then
+    echo "Model directory missing model.sdf: ${model_dir}" >&2
+    exit 1
+  fi
+done < <(find models -mindepth 1 -maxdepth 1 -type d | sort)
+
+missing_models="$(
+  {
+    rg -o 'model://[A-Za-z0-9_.-]+' worlds models -S | sed 's#.*model://##'
+  } | sort -u | while IFS= read -r model_name; do
+    case "${model_name}" in
+      ''|ground_plane|sun)
+        continue
+        ;;
+    esac
+    if [[ ! -d "models/${model_name}" ]]; then
+      printf '%s\n' "${model_name}"
+    fi
+  done
+)"
+if [[ -n "${missing_models}" ]]; then
+  echo "World/model asset references are missing shared models:" >&2
+  echo "${missing_models}" >&2
+  exit 1
+fi
 
 if rg -n '<node|<include file=' worlds >/dev/null; then
   echo "gazebo_sim_worlds must remain a pure world asset package." >&2
