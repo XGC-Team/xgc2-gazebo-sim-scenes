@@ -1,0 +1,33 @@
+schema: xgc2.product.v1
+id: xgc2-gazebo-sim-worlds
+name: XGC2 Gazebo Sim Worlds
+version: 1.0.19-1
+kind: ros1-apt
+summary: Shared Gazebo Classic world assets for ROS Noetic simulation products.
+
+ros:
+  distro: noetic
+  packages:
+    - gazebo_sim_worlds
+
+apt:
+  distribution: focal
+  install:
+    - ros-noetic-xgc2-gazebo-sim-worlds
+  packages:
+    - ros-noetic-xgc2-gazebo-sim-worlds
+  depends: []
+
+usage:
+  install: |
+    sudo apt update
+    sudo apt install ros-noetic-xgc2-gazebo-sim-worlds
+  smoke_test: |
+    rospack find gazebo_sim_worlds
+    test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/ugv/weston_robot_empty.world
+  notes: |
+    This product owns reusable world assets only. Scenario launch files remain in gazebo_sim_examples.
+
+ownership:
+  paths:
+    - /opt/ros/noetic/share/gazebo_sim_worlds

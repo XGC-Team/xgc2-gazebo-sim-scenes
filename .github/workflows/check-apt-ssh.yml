@@ -1,0 +1,22 @@
+name: check-apt-ssh
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      APT_REPO_HOST: ${{ secrets.APT_REPO_HOST }}
+      APT_REPO_PORT: ${{ secrets.APT_REPO_PORT }}
+      APT_REPO_USER: ${{ secrets.APT_REPO_USER }}
+      APT_REPO_SSH_KEY: ${{ secrets.APT_REPO_SSH_KEY }}
+      APT_REPO_KNOWN_HOSTS: ${{ secrets.APT_REPO_KNOWN_HOSTS }}
+    steps:
+      - name: Check APT SSH secrets
+        run: |
+          set -euo pipefail
+          test -n "${APT_REPO_HOST}"
+          test -n "${APT_REPO_PORT}"
+          test -n "${APT_REPO_SSH_KEY}"
+          test -n "${APT_REPO_KNOWN_HOSTS}"

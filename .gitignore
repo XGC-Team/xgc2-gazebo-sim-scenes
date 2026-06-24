@@ -1,0 +1,7 @@
+.work/
+debs/
+build/
+devel/
+install/
+*.pyc
+__pycache__/
