@@ -24,7 +24,6 @@ jobs:
           bash -n .xgc2/scripts/*.sh
 
   build-debs:
-    needs: compliance
     strategy:
       fail-fast: false
       matrix:
