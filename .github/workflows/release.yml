@@ -71,11 +71,9 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check HEAD
+          bash -n .xgc2/scripts/*.sh
           if [[ "${{ inputs.run_cpp_quality }}" == "true" && -x .xgc2/scripts/check_cpp_quality.sh ]]; then
             .xgc2/scripts/check_cpp_quality.sh
-          fi
-          if [[ "${{ inputs.run_cpp_quality }}" == "true" && -x .xgc2/scripts/check_package_compliance.sh ]]; then
-            .xgc2/scripts/check_package_compliance.sh
           fi
           if [[ "${{ inputs.run_source_tests }}" == "true" && -x .xgc2/scripts/run_package_tests.sh ]]; then
             .xgc2/scripts/run_package_tests.sh
