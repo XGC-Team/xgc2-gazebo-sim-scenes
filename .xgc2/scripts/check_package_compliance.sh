@@ -6,6 +6,7 @@ repo_root="$(cd "${script_dir}/../.." && pwd)"
 
 cd "${repo_root}"
 export GAZEBO_MODEL_PATH="${repo_root}/models:${GAZEBO_MODEL_PATH:-}"
+export GAZEBO_MODEL_DATABASE_URI="${GAZEBO_MODEL_DATABASE_URI:-}"
 
 bash -n .xgc2/scripts/*.sh
 
@@ -24,7 +25,8 @@ if [[ -n "${nested_git}" ]]; then
   exit 1
 fi
 
-if git ls-files | grep -E '(^|/)(build|devel|install|\.catkin_tools|\.ci|\.work|debs)(/|$)' >/dev/null; then
+if command -v git >/dev/null && git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+  && git ls-files | grep -E '(^|/)(build|devel|install|\.catkin_tools|\.ci|\.work|debs)(/|$)' >/dev/null; then
   echo "Generated build artifacts are tracked." >&2
   git ls-files | grep -E '(^|/)(build|devel|install|\.catkin_tools|\.ci|\.work|debs)(/|$)' >&2
   exit 1
@@ -42,8 +44,9 @@ required_files=(
   .xgc2/scripts/publish_apt_repo.sh
   CMakeLists.txt
   package.xml
+  include/gazebo_sim_worlds/obstaclePathPlugin.hh
+  src/obstaclePathPlugin.cc
   worlds/empty/empty.world
-  worlds/weston_robot_empty/weston_robot_empty.world
   worlds/clearpath_playpen/clearpath_playpen.world
   worlds/corridor_dynamic_9/corridor_dynamic_9.world
   models/corridor/model.config
@@ -88,7 +91,8 @@ while IFS= read -r world; do
 done < <(find worlds -type f -name '*.world' | sort)
 
 while IFS= read -r sdf_file; do
-  if ! gz sdf -k "${sdf_file}" >/tmp/xgc2-gazebo-sim-worlds-sdf-check.log 2>&1; then
+  echo "Validating SDF: ${sdf_file}"
+  if ! timeout 60s gz sdf -k "${sdf_file}" >/tmp/xgc2-gazebo-sim-worlds-sdf-check.log 2>&1; then
     echo "Gazebo SDF validation failed: ${sdf_file}" >&2
     cat /tmp/xgc2-gazebo-sim-worlds-sdf-check.log >&2
     exit 1

@@ -10,7 +10,7 @@ dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-sim-worlds" >/dev/null
 test "$(rospack find gazebo_sim_worlds)" = "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds"
 
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/empty.world"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/weston_robot_empty/weston_robot_empty.world"
+test -f "/opt/ros/${ROS_DISTRO}/lib/libobstaclePathPlugin.so"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/corridor/model.sdf"
