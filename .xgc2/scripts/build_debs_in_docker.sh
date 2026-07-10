@@ -43,6 +43,7 @@ mkdir -p "${WORK_DIR}" "${OUTPUT_DIR}"
 
 docker pull "${DOCKER_IMAGE}"
 docker run --rm \
+  -e XGC2_APT_OVERLAY_URL="${XGC2_APT_OVERLAY_URL:-}" \
   --network "${DOCKER_NETWORK}" \
   -e DEBIAN_FRONTEND=noninteractive \
   -e INSTALL_CHECK="${INSTALL_CHECK}" \
