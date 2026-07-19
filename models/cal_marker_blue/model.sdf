@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="cal_marker_blue">
+    <static>true</static>
+    <link name="marker">
+      <visual name="visual">
+        <geometry><sphere><radius>0.14</radius></sphere></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/Blue</name></script></material>
+      </visual>
+      <collision name="collision">
+        <geometry><sphere><radius>0.14</radius></sphere></geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
