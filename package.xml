@@ -15,5 +15,6 @@
 
   <export>
     <build_type>catkin</build_type>
+    <gazebo_ros gazebo_model_path="${prefix}/models"/>
   </export>
 </package>
