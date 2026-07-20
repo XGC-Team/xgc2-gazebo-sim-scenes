@@ -48,6 +48,9 @@ required_files=(
   worlds/empty/empty.world
   worlds/clearpath_playpen/clearpath_playpen.world
   worlds/corridor_dynamic_9/corridor_dynamic_9.world
+  worlds/catalog/empty.world
+  worlds/catalog/empty.md
+  worlds/catalog/empty.png
   models/corridor/model.config
   models/corridor/model.sdf
   models/person/model.config
@@ -98,7 +101,24 @@ while IFS= read -r scene_dir; do
       exit 1
     fi
   fi
-done < <(find worlds -mindepth 1 -maxdepth 1 -type d | sort)
+  catalog_world="worlds/catalog/${scene_name}.world"
+  catalog_markdown="worlds/catalog/${scene_name}.md"
+  if [[ ! -e "${catalog_world}" || ! -e "${catalog_markdown}" ]]; then
+    echo "Flat catalog must include world and markdown companions for ${scene_name}" >&2
+    exit 1
+  fi
+  if [[ -f "${scene_dir}/preview.png" && ! -e "worlds/catalog/${scene_name}.png" ]]; then
+    echo "Flat catalog is missing preview for ${scene_name}" >&2
+    exit 1
+  fi
+done < <(find worlds -mindepth 1 -maxdepth 1 -type d ! -name catalog | sort)
+
+catalog_world_count="$(find worlds/catalog -maxdepth 1 -type l -name '*.world' | wc -l)"
+scene_world_count="$(find worlds -mindepth 2 -maxdepth 2 -type f -name '*.world' | wc -l)"
+if [[ "${catalog_world_count}" -ne "${scene_world_count}" ]]; then
+  echo "Flat catalog world count ${catalog_world_count} does not match scene count ${scene_world_count}" >&2
+  exit 1
+fi
 
 while IFS= read -r world; do
   if [[ "$(head -n 1 "${world}")" != '<?xml version="1.0"?>' ]]; then

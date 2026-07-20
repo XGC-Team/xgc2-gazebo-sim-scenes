@@ -1,0 +1,1 @@
+../room_static/README.md

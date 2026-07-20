@@ -23,6 +23,9 @@ sudo apt install ros-noetic-xgc2-gazebo-sim-worlds
 - `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world`
 - `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/<scene>/README.md`
 - `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/<scene>/preview.png`（有截图的场景）
+- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/<scene>.world`（供文件选择器连续浏览的扁平索引）
+- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/<scene>.md`
+- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/<scene>.png`（有截图的场景）
 - `/opt/ros/noetic/share/gazebo_sim_worlds/models/corridor/model.sdf`
 - `/opt/ros/noetic/share/gazebo_sim_worlds/models/jersey_barrier/model.sdf`
 
@@ -34,7 +37,9 @@ The package compliance check validates every world XML file, every shared model 
 
 ## World Catalog
 
-每个场景由 world 同目录下的伴随文件自描述：`README.md` 提供摘要，`preview.png` 提供可选预览图。工具应相对 `.world` 文件自动解析这些文件；伴随文件缺失不影响 world 加载或选择。
+每个场景由 world 同目录下的伴随文件自描述：标准场景目录使用 `README.md` 和可选的 `preview.png`；扁平 `worlds/catalog` 索引使用与 world 同名的 `<scene>.md` 和可选的 `<scene>.png`。工具应相对 `.world` 文件自动解析这些文件；伴随文件缺失不影响 world 加载或选择。
+
+GUI 文件选择器应进入 `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog`，即可在同一列表中连续选择和预览全部场景。原有 `worlds/<scene>/<scene>.world` 路径继续保留，兼容已有 launch 和脚本。
 
 | Scene | Summary | Preview |
 | --- | --- | --- |

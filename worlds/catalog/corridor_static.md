@@ -1,0 +1,1 @@
+../corridor_static/README.md

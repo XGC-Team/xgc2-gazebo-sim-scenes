@@ -16,6 +16,9 @@ test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/corridor_dynamic_
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/README.md"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/README.md"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/preview.png"
+test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog/empty.world"
+test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog/empty.md"
+test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog/empty.png"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/corridor/model.sdf"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/person/model.sdf"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/jersey_barrier/model.sdf"
@@ -33,6 +36,11 @@ done < <(
 while IFS= read -r world; do
   scene_dir="$(dirname "${world}")"
   test -f "${scene_dir}/README.md"
-done < <(find "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds" -type f -name '*.world' | sort)
+done < <(find "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds" -path '*/catalog' -prune -o -type f -name '*.world' -print | sort)
+
+catalog_root="/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog"
+test "$(find "${catalog_root}" -maxdepth 1 -type l -name '*.world' | wc -l)" -eq 62
+test "$(find "${catalog_root}" -maxdepth 1 -type l -name '*.md' | wc -l)" -eq 62
+test "$(find "${catalog_root}" -maxdepth 1 -type l -name '*.png' | wc -l)" -eq 60
 
 echo "Installed package check passed"

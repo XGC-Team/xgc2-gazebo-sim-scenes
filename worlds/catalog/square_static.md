@@ -1,0 +1,1 @@
+../square_static/README.md

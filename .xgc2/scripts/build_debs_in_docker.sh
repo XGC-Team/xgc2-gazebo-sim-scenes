@@ -90,6 +90,8 @@ docker run --rm \
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
       | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/empty/empty.world >/dev/null
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
+      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/empty.world >/dev/null
+    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
       | grep -F /opt/ros/noetic/lib/libobstaclePathPlugin.so >/dev/null
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
       | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world >/dev/null
