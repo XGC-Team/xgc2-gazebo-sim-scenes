@@ -1,0 +1,13 @@
+# floorplan3_dynamic_8
+
+室内楼层平面场景，包含动态障碍物，运动由本包发布的 `libobstaclePathPlugin.so` 驱动。
+
+World: [`floorplan3_dynamic_8.world`](floorplan3_dynamic_8.world)
+
+![floorplan3_dynamic_8 scene preview](preview.png)
+
+## Launch
+
+```bash
+roslaunch gazebo_ros empty_world.launch world_name:="$(rospack find gazebo_sim_worlds)/worlds/floorplan3_dynamic_8/floorplan3_dynamic_8.world" gui:=true paused:=true
+```

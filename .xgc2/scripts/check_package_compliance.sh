@@ -80,6 +80,24 @@ while IFS= read -r scene_dir; do
     echo "Scene directory must include same-name world file: ${scene_dir}/${scene_name}.world" >&2
     exit 1
   fi
+  if [[ ! -f "${scene_dir}/README.md" ]]; then
+    echo "Scene directory must include README.md: ${scene_dir}/README.md" >&2
+    exit 1
+  fi
+  if ! grep -Fq "[\`${scene_name}\`](worlds/${scene_name}/README.md)" README.md; then
+    echo "Root README catalog does not reference scene README: ${scene_name}" >&2
+    exit 1
+  fi
+  if [[ -f "${scene_dir}/preview.png" ]]; then
+    if [[ "$(od -An -tx1 -N8 "${scene_dir}/preview.png" | tr -d ' \n')" != "89504e470d0a1a0a" ]]; then
+      echo "Scene preview is not a PNG: ${scene_dir}/preview.png" >&2
+      exit 1
+    fi
+    if ! grep -Fq '](preview.png)' "${scene_dir}/README.md"; then
+      echo "Scene README does not embed its companion preview: ${scene_dir}/README.md" >&2
+      exit 1
+    fi
+  fi
 done < <(find worlds -mindepth 1 -maxdepth 1 -type d | sort)
 
 while IFS= read -r world; do

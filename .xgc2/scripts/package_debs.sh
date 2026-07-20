@@ -71,6 +71,7 @@ if [[ -z "${plugin_library}" || ! -f "${plugin_library}" ]]; then
 fi
 
 cp -a "${REPO_ROOT}/package.xml" "${share_root}/package.xml"
+cp -a "${REPO_ROOT}/README.md" "${share_root}/README.md"
 cp -a "${REPO_ROOT}/worlds" "${share_root}/worlds"
 cp -a "${REPO_ROOT}/models" "${share_root}/models"
 cp -a "${plugin_library}" "${lib_root}/libobstaclePathPlugin.so"
