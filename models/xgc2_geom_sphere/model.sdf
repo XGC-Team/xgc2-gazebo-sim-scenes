@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="xgc2_geom_sphere">
+    <link name="body">
+      <kinematic>true</kinematic>
+      <gravity>false</gravity>
+      <collision name="sphere">
+        <pose>0 0 0.48 0 0 0</pose>
+        <geometry><sphere><radius>0.48</radius></sphere></geometry>
+      </collision>
+      <visual name="sphere">
+        <pose>0 0 0.48 0 0 0</pose>
+        <geometry><sphere><radius>0.48</radius></sphere></geometry>
+        <material><ambient>0.95 0.85 0.1 1</ambient><diffuse>0.95 0.85 0.1 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>

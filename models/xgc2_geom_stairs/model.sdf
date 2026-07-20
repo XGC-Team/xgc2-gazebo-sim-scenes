@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="xgc2_geom_stairs">
+    <link name="body">
+      <kinematic>true</kinematic>
+      <gravity>false</gravity>
+      <collision name="step_1">
+        <pose>-0.45 0 0.15 0 0 0</pose>
+        <geometry><box><size>0.45 0.8 0.3</size></box></geometry>
+      </collision>
+      <collision name="step_2">
+        <pose>0 0 0.3 0 0 0</pose>
+        <geometry><box><size>0.45 0.8 0.6</size></box></geometry>
+      </collision>
+      <collision name="step_3">
+        <pose>0.45 0 0.45 0 0 0</pose>
+        <geometry><box><size>0.45 0.8 0.9</size></box></geometry>
+      </collision>
+      <visual name="step_1">
+        <pose>-0.45 0 0.15 0 0 0</pose>
+        <geometry><box><size>0.45 0.8 0.3</size></box></geometry>
+        <material><ambient>0.55 0.6 0.65 1</ambient><diffuse>0.55 0.6 0.65 1</diffuse></material>
+      </visual>
+      <visual name="step_2">
+        <pose>0 0 0.3 0 0 0</pose>
+        <geometry><box><size>0.45 0.8 0.6</size></box></geometry>
+        <material><ambient>0.55 0.6 0.65 1</ambient><diffuse>0.55 0.6 0.65 1</diffuse></material>
+      </visual>
+      <visual name="step_3">
+        <pose>0.45 0 0.45 0 0 0</pose>
+        <geometry><box><size>0.45 0.8 0.9</size></box></geometry>
+        <material><ambient>0.55 0.6 0.65 1</ambient><diffuse>0.55 0.6 0.65 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>

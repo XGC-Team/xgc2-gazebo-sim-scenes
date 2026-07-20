@@ -22,6 +22,20 @@ test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog/empty.png
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/corridor/model.sdf"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/person/model.sdf"
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/jersey_barrier/model.sdf"
+for model_name in \
+  xgc2_geom_arch \
+  xgc2_geom_capped_pillar \
+  xgc2_geom_cube \
+  xgc2_geom_cuboid \
+  xgc2_geom_cylinder \
+  xgc2_geom_dumbbell \
+  xgc2_geom_l_block \
+  xgc2_geom_sphere \
+  xgc2_geom_stairs \
+  xgc2_geom_t_block; do
+  test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/${model_name}/model.config"
+  test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/${model_name}/model.sdf"
+done
 
 xmllint --noout "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/package.xml"
 while IFS= read -r xml_file; do

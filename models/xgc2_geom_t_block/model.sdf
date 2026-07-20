@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="xgc2_geom_t_block">
+    <link name="body">
+      <kinematic>true</kinematic>
+      <gravity>false</gravity>
+      <collision name="stem">
+        <pose>0 0 0.6 0 0 0</pose>
+        <geometry><box><size>0.35 0.55 1.2</size></box></geometry>
+      </collision>
+      <collision name="top">
+        <pose>0 0 1.2 0 0 0</pose>
+        <geometry><box><size>1.25 0.55 0.3</size></box></geometry>
+      </collision>
+      <visual name="stem">
+        <pose>0 0 0.6 0 0 0</pose>
+        <geometry><box><size>0.35 0.55 1.2</size></box></geometry>
+        <material><ambient>0.45 0.2 0.85 1</ambient><diffuse>0.45 0.2 0.85 1</diffuse></material>
+      </visual>
+      <visual name="top">
+        <pose>0 0 1.2 0 0 0</pose>
+        <geometry><box><size>1.25 0.55 0.3</size></box></geometry>
+        <material><ambient>0.45 0.2 0.85 1</ambient><diffuse>0.45 0.2 0.85 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>

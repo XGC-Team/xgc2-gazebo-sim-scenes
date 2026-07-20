@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-worlds
 name: XGC2 Gazebo Sim Worlds
-version: 1.1.0-13
+version: 1.1.0-14
 kind: ros1-apt
 summary: Shared Gazebo Classic world assets for ROS Noetic simulation products.
 ros:
@@ -32,6 +32,8 @@ usage:
     test -f /opt/ros/noetic/lib/libobstaclePathPlugin.so
 
     test -f /opt/ros/noetic/share/gazebo_sim_worlds/models/corridor/model.sdf
+
+    test -f /opt/ros/noetic/share/gazebo_sim_worlds/models/xgc2_geom_arch/model.sdf
 
     '
   notes: 'This product owns reusable world and model assets only. Scenario launch

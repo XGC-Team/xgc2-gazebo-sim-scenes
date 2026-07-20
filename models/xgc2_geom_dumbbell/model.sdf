@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="xgc2_geom_dumbbell">
+    <link name="body">
+      <kinematic>true</kinematic>
+      <gravity>false</gravity>
+      <collision name="left_weight">
+        <pose>-0.62 0 0.42 0 0 0</pose>
+        <geometry><sphere><radius>0.34</radius></sphere></geometry>
+      </collision>
+      <collision name="bar">
+        <pose>0 0 0.42 0 1.57079632679 0</pose>
+        <geometry><cylinder><radius>0.14</radius><length>1.24</length></cylinder></geometry>
+      </collision>
+      <collision name="right_weight">
+        <pose>0.62 0 0.42 0 0 0</pose>
+        <geometry><sphere><radius>0.34</radius></sphere></geometry>
+      </collision>
+      <visual name="left_weight">
+        <pose>-0.62 0 0.42 0 0 0</pose>
+        <geometry><sphere><radius>0.34</radius></sphere></geometry>
+        <material><ambient>0.55 0.3 0.12 1</ambient><diffuse>0.55 0.3 0.12 1</diffuse></material>
+      </visual>
+      <visual name="bar">
+        <pose>0 0 0.42 0 1.57079632679 0</pose>
+        <geometry><cylinder><radius>0.14</radius><length>1.24</length></cylinder></geometry>
+        <material><ambient>0.55 0.3 0.12 1</ambient><diffuse>0.55 0.3 0.12 1</diffuse></material>
+      </visual>
+      <visual name="right_weight">
+        <pose>0.62 0 0.42 0 0 0</pose>
+        <geometry><sphere><radius>0.34</radius></sphere></geometry>
+        <material><ambient>0.55 0.3 0.12 1</ambient><diffuse>0.55 0.3 0.12 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>
