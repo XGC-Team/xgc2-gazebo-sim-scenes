@@ -6,17 +6,19 @@ repo_root="$(cd "${script_dir}/../.." && pwd)"
 ros_distro="${ROS_DISTRO:-noetic}"
 workspace="${CPP_QUALITY_WORK_DIR:-${repo_root}/.ci/cpp-quality}"
 
+if [[ ! -f "/opt/ros/${ros_distro}/setup.bash" ]]; then
+  echo "Missing ROS setup: /opt/ros/${ros_distro}/setup.bash" >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "/opt/ros/${ros_distro}/setup.bash"
+
 for tool in catkin_make clang-format clang-tidy rsync; do
   if ! command -v "${tool}" >/dev/null 2>&1; then
     echo "Missing required C++ quality tool: ${tool}" >&2
     exit 1
   fi
 done
-
-if [[ ! -f "/opt/ros/${ros_distro}/setup.bash" ]]; then
-  echo "Missing ROS setup: /opt/ros/${ros_distro}/setup.bash" >&2
-  exit 1
-fi
 
 mapfile -t cpp_files < <(
   find "${repo_root}/xgc2_gazebo_scene" -type f \
@@ -37,8 +39,6 @@ rsync -a --delete \
   "${workspace}/src/xgc2_gazebo_scene/"
 cp "${repo_root}/.clang-tidy" "${workspace}/src/.clang-tidy"
 
-# shellcheck source=/dev/null
-source "/opt/ros/${ros_distro}/setup.bash"
 catkin_make -C "${workspace}" \
   -DCATKIN_ENABLE_TESTING=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
