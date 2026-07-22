@@ -11,7 +11,9 @@ if [[ ! -f "/opt/ros/${ros_distro}/setup.bash" ]]; then
   exit 1
 fi
 # shellcheck source=/dev/null
+set +u
 source "/opt/ros/${ros_distro}/setup.bash"
+set -u
 
 for tool in catkin_make clang-format clang-tidy rsync; do
   if ! command -v "${tool}" >/dev/null 2>&1; then
