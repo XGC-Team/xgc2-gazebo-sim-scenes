@@ -23,6 +23,34 @@ jobs:
           git diff --check HEAD
           bash -n .xgc2/scripts/*.sh
 
+  cpp-quality:
+    runs-on: ubuntu-latest
+    container: ros:noetic-ros-base-focal
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install C++ quality dependencies
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            clang-format \
+            clang-tidy \
+            libeigen3-dev \
+            libgazebo11-dev \
+            rsync \
+            ros-noetic-catkin \
+            ros-noetic-gazebo-ros \
+            ros-noetic-geometry-msgs \
+            ros-noetic-message-generation \
+            ros-noetic-roscpp \
+            ros-noetic-std-msgs
+
+      - name: Run C++ quality gate
+        run: .xgc2/scripts/check_cpp_quality.sh
+
   build-debs:
     strategy:
       fail-fast: false

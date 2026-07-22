@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.2.0-1
+version: 1.2.0-2
 kind: ros1-apt
 summary: Reusable Gazebo Classic worlds and the XGC2 scene director.
 ros:
