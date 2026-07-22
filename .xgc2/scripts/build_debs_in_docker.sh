@@ -43,11 +43,10 @@ mkdir -p "${WORK_DIR}" "${OUTPUT_DIR}"
 
 docker pull "${DOCKER_IMAGE}"
 docker run --rm \
-  -e XGC2_APT_OVERLAY_URL="${XGC2_APT_OVERLAY_URL:-}" \
   --network "${DOCKER_NETWORK}" \
   -e DEBIAN_FRONTEND=noninteractive \
   -e INSTALL_CHECK="${INSTALL_CHECK}" \
-  -v "${REPO_ROOT}:/workspace/gazebo-sim-worlds:ro" \
+  -v "${REPO_ROOT}:/workspace/gazebo-sim-scenes:ro" \
   -v "${WORK_DIR}:/workspace/work" \
   -v "${OUTPUT_DIR}:/workspace/out" \
   "${DOCKER_IMAGE}" \
@@ -64,49 +63,79 @@ docker run --rm \
       fakeroot \
       file \
       gazebo11 \
+      git \
       libeigen3-dev \
+      libgazebo11-dev \
       libxml2-utils \
+      netbase \
       ripgrep \
+      rsync \
       ros-noetic-catkin \
+      ros-noetic-gazebo-msgs \
       ros-noetic-gazebo-ros \
-      ros-noetic-rospack
+      ros-noetic-geometry-msgs \
+      ros-noetic-message-generation \
+      ros-noetic-roscpp \
+      ros-noetic-roslaunch \
+      ros-noetic-rospack \
+      ros-noetic-rostest \
+      ros-noetic-rosunit \
+      ros-noetic-std-msgs \
+      ros-noetic-std-srvs \
+      ros-noetic-tf2 \
+      ros-noetic-tf2-ros
 
-    cd /workspace/gazebo-sim-worlds
+    cd /workspace/gazebo-sim-scenes
     .xgc2/scripts/check_package_compliance.sh
 
-    source /opt/ros/noetic/setup.bash
-    rm -rf /workspace/work/catkin_ws
-    mkdir -p /workspace/work/catkin_ws/src
-    ln -s /workspace/gazebo-sim-worlds /workspace/work/catkin_ws/src/gazebo_sim_worlds
-    catkin_init_workspace /workspace/work/catkin_ws/src
-    cd /workspace/work/catkin_ws
-    catkin_make --pkg gazebo_sim_worlds
-    plugin_library="$(find /workspace/work/catkin_ws/devel -type f -name libobstaclePathPlugin.so | head -n1)"
-    test -f "${plugin_library}"
+    rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
+    mkdir -p /workspace/work/src/xgc2_gazebo_sim_scenes
+    rsync -a --delete /workspace/gazebo-sim-scenes/ /workspace/work/src/xgc2_gazebo_sim_scenes/
 
-    cd /workspace/gazebo-sim-worlds
-    OBSTACLE_PATH_PLUGIN_LIBRARY="${plugin_library}" .xgc2/scripts/package_debs.sh --output-dir /workspace/out
+    cd /workspace/work
+    source /opt/ros/noetic/setup.bash
+    DESTDIR=/workspace/work/install-root catkin_make install \
+      -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
+      -DCATKIN_ENABLE_TESTING=OFF
+
+    /workspace/gazebo-sim-scenes/.xgc2/scripts/package_debs.sh \
+      --install-root /workspace/work/install-root \
+      --output-dir /workspace/out
 
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
       | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/empty/empty.world >/dev/null
     dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/empty.world >/dev/null
-    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/lib/libobstaclePathPlugin.so >/dev/null
-    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world >/dev/null
-    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world >/dev/null
-    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
       | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/models/corridor/model.sdf >/dev/null
-    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
-      | grep -F /opt/ros/noetic/share/gazebo_sim_worlds/models/jersey_barrier/model.sdf >/dev/null
+    if dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-sim-worlds_*.deb \
+        | grep -F /opt/ros/noetic/lib/libobstaclePathPlugin.so; then
+      echo "World assets package must not own model-control libraries" >&2
+      exit 1
+    fi
+
+    for library in \
+        libobstaclePathPlugin.so \
+        libxgc2_gazebo_scene_motion.so \
+        libxgc2_gazebo_scene_system.so; do
+      dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-scene_*.deb \
+        | grep -F "/opt/ros/noetic/lib/${library}" >/dev/null
+    done
+    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-scene_*.deb \
+      | grep -F /opt/ros/noetic/share/xgc2_gazebo_scene/msg/ObstacleDefinition.msg >/dev/null
+    dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-scene_*.deb \
+      | grep -F /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene/msg/_ObstacleDefinition.py >/dev/null
+    dpkg-deb -f /workspace/out/ros-noetic-xgc2-gazebo-scene_*.deb Depends \
+      | grep -E "(^|, )libgazebo11( |\\()" >/dev/null
+    if dpkg-deb -f /workspace/out/ros-noetic-xgc2-gazebo-scene_*.deb Depends \
+        | grep -E "(^|, )(cmake|gazebo-dev|libgazebo11-dev|libeigen3-dev|ros-noetic-message-generation)( |\\(|,|$)"; then
+      echo "Scene package leaked a build-only dependency" >&2
+      exit 1
+    fi
 
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
-      apt-get install -y /workspace/out/*.deb
-      /workspace/gazebo-sim-worlds/.xgc2/scripts/check_installed_packages.sh
+      apt-get install -y --no-install-recommends /workspace/out/*.deb
+      /workspace/gazebo-sim-scenes/.xgc2/scripts/check_installed_packages.sh
     fi
   '
 
 echo "Debian package output:"
-find "${OUTPUT_DIR}" -maxdepth 1 -type f -name "*.deb" -print | sort
+find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.deb' -print | sort

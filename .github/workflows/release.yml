@@ -145,7 +145,7 @@ jobs:
       - name: Build and install-check deb packages
         run: |
           .xgc2/scripts/build_debs_in_docker.sh \
-            --work-dir "$RUNNER_TEMP/xgc2-gazebo-sim-worlds-${{ matrix.arch }}" \
+            --work-dir "$RUNNER_TEMP/xgc2-gazebo-sim-scenes-${{ matrix.arch }}" \
             --output-dir "$GITHUB_WORKSPACE/debs"
 
       - name: Create release-train build manifest
@@ -153,7 +153,7 @@ jobs:
           python3 .xgc2/scripts/xgc2_artifact_manifest.py build \
             --deb-dir debs \
             --output-dir .ci/build-manifests \
-            --product xgc2-gazebo-sim-worlds \
+            --product xgc2-gazebo-sim-scenes \
             --product-version "${{ inputs.expected_version }}" \
             --distribution focal \
             --architecture "${{ matrix.arch }}" \
@@ -166,7 +166,7 @@ jobs:
         if: ${{ inputs.prepare_action == 'release' }}
         uses: actions/upload-artifact@v4
         with:
-          name: xgc2-gazebo-sim-worlds-release-debs-${{ matrix.arch }}
+          name: xgc2-gazebo-sim-scenes-release-debs-${{ matrix.arch }}
           path: |
             debs/*.deb
             .ci/build-manifests/*.json

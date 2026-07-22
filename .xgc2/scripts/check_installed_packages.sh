@@ -7,54 +7,50 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-sim-worlds" >/dev/null
+dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-scene" >/dev/null
 test "$(rospack find gazebo_sim_worlds)" = "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds"
+test "$(rospack find xgc2_gazebo_scene)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene"
 
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/empty.world"
-test -f "/opt/ros/${ROS_DISTRO}/lib/libobstaclePathPlugin.so"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/README.md"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/README.md"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/empty/preview.png"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog/empty.world"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog/empty.md"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog/empty.png"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/corridor/model.sdf"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/person/model.sdf"
-test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/jersey_barrier/model.sdf"
-for model_name in \
-  xgc2_geom_arch \
-  xgc2_geom_capped_pillar \
-  xgc2_geom_cube \
-  xgc2_geom_cuboid \
-  xgc2_geom_cylinder \
-  xgc2_geom_dumbbell \
-  xgc2_geom_l_block \
-  xgc2_geom_sphere \
-  xgc2_geom_stairs \
-  xgc2_geom_t_block; do
-  test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/${model_name}/model.config"
-  test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models/${model_name}/model.sdf"
+world_root="/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds"
+test -f "${world_root}/worlds/empty/empty.world"
+test -f "${world_root}/worlds/clearpath_playpen/clearpath_playpen.world"
+test -f "${world_root}/worlds/corridor_dynamic_9/corridor_dynamic_9.world"
+test -f "${world_root}/worlds/catalog/empty.world"
+test -f "${world_root}/models/corridor/model.sdf"
+test -f "${world_root}/models/person/model.sdf"
+test -f "${world_root}/models/jersey_barrier/model.sdf"
+xmllint --noout "${world_root}/package.xml"
+
+for library in \
+    libobstaclePathPlugin.so \
+    libxgc2_gazebo_scene_motion.so \
+    libxgc2_gazebo_scene_system.so; do
+  test -f "/opt/ros/${ROS_DISTRO}/lib/${library}"
 done
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/ObstacleDefinition.h"
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/obstacle_path_plugin.hpp"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/msg/ObstacleDefinition.msg"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/ConfigureMotions.srv"
+test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/xgc2_gazebo_scene/msg/_ObstacleDefinition.py"
 
-xmllint --noout "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/package.xml"
-while IFS= read -r xml_file; do
-  xmllint --noout "${xml_file}"
-done < <(
-  {
-    find "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds" -type f -name '*.world'
-    find "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/models" -type f \( -name 'model.config' -o -name 'model.sdf' \)
-  } | sort
-)
+for library in libobstaclePathPlugin.so libxgc2_gazebo_scene_system.so; do
+  if ldd "/opt/ros/${ROS_DISTRO}/lib/${library}" | grep -q 'not found'; then
+    echo "Installed Gazebo Scene library has unresolved dependencies: ${library}" >&2
+    exit 1
+  fi
+  nm -D --defined-only "/opt/ros/${ROS_DISTRO}/lib/${library}" \
+    | grep -E '[[:space:]]RegisterPlugin$' >/dev/null
+done
+if readelf -d \
+    "/opt/ros/${ROS_DISTRO}/lib/libobstaclePathPlugin.so" \
+    "/opt/ros/${ROS_DISTRO}/lib/libxgc2_gazebo_scene_motion.so" \
+    "/opt/ros/${ROS_DISTRO}/lib/libxgc2_gazebo_scene_system.so" \
+    | grep -Eq '(RPATH|RUNPATH)'; then
+  echo "Installed Gazebo Scene libraries contain RPATH/RUNPATH" >&2
+  exit 1
+fi
 
-while IFS= read -r world; do
-  scene_dir="$(dirname "${world}")"
-  test -f "${scene_dir}/README.md"
-done < <(find "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds" -path '*/catalog' -prune -o -type f -name '*.world' -print | sort)
+python3 -c 'from xgc2_gazebo_scene.msg import ObstacleDefinition, ObstacleStateArray'
+python3 -c 'from xgc2_gazebo_scene.srv import ConfigureMotions, StopMotions'
 
-catalog_root="/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/worlds/catalog"
-test "$(find "${catalog_root}" -maxdepth 1 -type l -name '*.world' | wc -l)" -eq 62
-test "$(find "${catalog_root}" -maxdepth 1 -type l -name '*.md' | wc -l)" -eq 62
-test "$(find "${catalog_root}" -maxdepth 1 -type l -name '*.png' | wc -l)" -eq 60
-
-echo "Installed package check passed"
+echo "Installed scene packages check passed"

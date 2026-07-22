@@ -1,0 +1,10 @@
+string command_id
+uint64 expected_scene_revision
+
+# Empty stops every managed obstacle. Names omit the xgc2_obstacle_ prefix.
+string[] names
+---
+bool success
+string message
+uint64 scene_revision
+uint64[] motion_revisions

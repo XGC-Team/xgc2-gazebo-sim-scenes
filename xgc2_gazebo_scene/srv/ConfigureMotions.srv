@@ -1,0 +1,13 @@
+# Unique stable identity supplied by the caller. Successful command identities
+# are replayed idempotently for the lifetime of this gzserver process.
+string command_id
+
+# Zero accepts the latest scene. A non-zero value provides optimistic
+# concurrency against ObstacleStateArray.scene_revision.
+uint64 expected_scene_revision
+MotionSpec[] motions
+---
+bool success
+string message
+uint64 scene_revision
+uint64[] motion_revisions

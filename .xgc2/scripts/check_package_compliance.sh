@@ -5,7 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
 
 cd "${repo_root}"
-export GAZEBO_MODEL_PATH="${repo_root}/models:${GAZEBO_MODEL_PATH:-}"
+export GAZEBO_MODEL_PATH="${repo_root}/gazebo_sim_worlds/models:${GAZEBO_MODEL_PATH:-}"
 export GAZEBO_MODEL_DATABASE_URI="${GAZEBO_MODEL_DATABASE_URI:-}"
 
 bash -n .xgc2/scripts/*.sh
@@ -37,26 +37,34 @@ required_files=(
   .github/workflows/release.yml
   .xgc2/product.yml
   .xgc2/scripts/build_debs_in_docker.sh
+  .xgc2/scripts/check_cpp_quality.sh
   .xgc2/scripts/check_installed_packages.sh
   .xgc2/scripts/check_package_compliance.sh
   .xgc2/scripts/check_version_bump.sh
   .xgc2/scripts/package_debs.sh
-  CMakeLists.txt
-  package.xml
-  include/gazebo_sim_worlds/obstaclePathPlugin.hh
-  src/obstaclePathPlugin.cc
-  worlds/empty/empty.world
-  worlds/clearpath_playpen/clearpath_playpen.world
-  worlds/corridor_dynamic_9/corridor_dynamic_9.world
-  worlds/catalog/empty.world
-  worlds/catalog/empty.md
-  worlds/catalog/empty.png
-  models/corridor/model.config
-  models/corridor/model.sdf
-  models/person/model.config
-  models/person/model.sdf
-  models/jersey_barrier/model.config
-  models/jersey_barrier/model.sdf
+  .xgc2/scripts/run_package_tests.sh
+  README.md
+  gazebo_sim_worlds/CMakeLists.txt
+  gazebo_sim_worlds/package.xml
+  gazebo_sim_worlds/worlds/empty/empty.world
+  gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world
+  gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world
+  gazebo_sim_worlds/worlds/catalog/empty.world
+  gazebo_sim_worlds/worlds/catalog/empty.md
+  gazebo_sim_worlds/worlds/catalog/empty.png
+  gazebo_sim_worlds/models/corridor/model.config
+  gazebo_sim_worlds/models/corridor/model.sdf
+  gazebo_sim_worlds/models/person/model.config
+  gazebo_sim_worlds/models/person/model.sdf
+  gazebo_sim_worlds/models/jersey_barrier/model.config
+  gazebo_sim_worlds/models/jersey_barrier/model.sdf
+  xgc2_gazebo_scene/CMakeLists.txt
+  xgc2_gazebo_scene/package.xml
+  xgc2_gazebo_scene/include/xgc2_gazebo_scene/motion_controller.hpp
+  xgc2_gazebo_scene/include/xgc2_gazebo_scene/obstacle_path_plugin.hpp
+  xgc2_gazebo_scene/src/gazebo_scene_system_plugin.cpp
+  xgc2_gazebo_scene/src/motion_controller.cpp
+  xgc2_gazebo_scene/src/obstacle_path_plugin.cpp
 )
 
 for file in "${required_files[@]}"; do
@@ -66,14 +74,14 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-xmllint --noout package.xml
+xmllint --noout gazebo_sim_worlds/package.xml xgc2_gazebo_scene/package.xml
 
 while IFS= read -r xml_file; do
   xmllint --noout "${xml_file}"
 done < <(
   {
-    find worlds -type f -name '*.world'
-    find models -type f \( -name 'model.config' -o -name 'model.sdf' \)
+    find gazebo_sim_worlds/worlds -type f -name '*.world'
+    find gazebo_sim_worlds/models -type f \( -name 'model.config' -o -name 'model.sdf' \)
   } | sort
 )
 
@@ -87,7 +95,7 @@ while IFS= read -r scene_dir; do
     echo "Scene directory must include README.md: ${scene_dir}/README.md" >&2
     exit 1
   fi
-  if ! grep -Fq "[\`${scene_name}\`](worlds/${scene_name}/README.md)" README.md; then
+  if ! grep -Fq "[\`${scene_name}\`](worlds/${scene_name}/README.md)" gazebo_sim_worlds/README.md; then
     echo "Root README catalog does not reference scene README: ${scene_name}" >&2
     exit 1
   fi
@@ -101,20 +109,20 @@ while IFS= read -r scene_dir; do
       exit 1
     fi
   fi
-  catalog_world="worlds/catalog/${scene_name}.world"
-  catalog_markdown="worlds/catalog/${scene_name}.md"
+  catalog_world="gazebo_sim_worlds/worlds/catalog/${scene_name}.world"
+  catalog_markdown="gazebo_sim_worlds/worlds/catalog/${scene_name}.md"
   if [[ ! -e "${catalog_world}" || ! -e "${catalog_markdown}" ]]; then
     echo "Flat catalog must include world and markdown companions for ${scene_name}" >&2
     exit 1
   fi
-  if [[ -f "${scene_dir}/preview.png" && ! -e "worlds/catalog/${scene_name}.png" ]]; then
+  if [[ -f "${scene_dir}/preview.png" && ! -e "gazebo_sim_worlds/worlds/catalog/${scene_name}.png" ]]; then
     echo "Flat catalog is missing preview for ${scene_name}" >&2
     exit 1
   fi
-done < <(find worlds -mindepth 1 -maxdepth 1 -type d ! -name catalog | sort)
+done < <(find gazebo_sim_worlds/worlds -mindepth 1 -maxdepth 1 -type d ! -name catalog | sort)
 
-catalog_world_count="$(find worlds/catalog -maxdepth 1 -type l -name '*.world' | wc -l)"
-scene_world_count="$(find worlds -mindepth 2 -maxdepth 2 -type f -name '*.world' | wc -l)"
+catalog_world_count="$(find gazebo_sim_worlds/worlds/catalog -maxdepth 1 -type l -name '*.world' | wc -l)"
+scene_world_count="$(find gazebo_sim_worlds/worlds -mindepth 2 -maxdepth 2 -type f -name '*.world' | wc -l)"
 if [[ "${catalog_world_count}" -ne "${scene_world_count}" ]]; then
   echo "Flat catalog world count ${catalog_world_count} does not match scene count ${scene_world_count}" >&2
   exit 1
@@ -125,19 +133,19 @@ while IFS= read -r world; do
     echo "World file must start with XML declaration: ${world}" >&2
     exit 1
   fi
-done < <(find worlds -type f -name '*.world' | sort)
+done < <(find gazebo_sim_worlds/worlds -type f -name '*.world' | sort)
 
 while IFS= read -r sdf_file; do
   echo "Validating SDF: ${sdf_file}"
-  if ! timeout 60s gz sdf -k "${sdf_file}" >/tmp/xgc2-gazebo-sim-worlds-sdf-check.log 2>&1; then
+  if ! timeout 60s gz sdf -k "${sdf_file}" >/tmp/xgc2-gazebo-sim-scenes-sdf-check.log 2>&1; then
     echo "Gazebo SDF validation failed: ${sdf_file}" >&2
-    cat /tmp/xgc2-gazebo-sim-worlds-sdf-check.log >&2
+    cat /tmp/xgc2-gazebo-sim-scenes-sdf-check.log >&2
     exit 1
   fi
 done < <(
   {
-    find worlds -type f -name '*.world'
-    find models -type f -name 'model.sdf'
+    find gazebo_sim_worlds/worlds -type f -name '*.world'
+    find gazebo_sim_worlds/models -type f -name 'model.sdf'
   } | sort
 )
 
@@ -150,18 +158,18 @@ while IFS= read -r model_dir; do
     echo "Model directory missing model.sdf: ${model_dir}" >&2
     exit 1
   fi
-done < <(find models -mindepth 1 -maxdepth 1 -type d | sort)
+done < <(find gazebo_sim_worlds/models -mindepth 1 -maxdepth 1 -type d | sort)
 
 missing_models="$(
   {
-    rg -o 'model://[A-Za-z0-9_.-]+' worlds models -S | sed 's#.*model://##'
+    rg -o 'model://[A-Za-z0-9_.-]+' gazebo_sim_worlds/worlds gazebo_sim_worlds/models -S | sed 's#.*model://##'
   } | sort -u | while IFS= read -r model_name; do
     case "${model_name}" in
       ''|ground_plane|sun)
         continue
         ;;
     esac
-    if [[ ! -d "models/${model_name}" ]]; then
+    if [[ ! -d "gazebo_sim_worlds/models/${model_name}" ]]; then
       printf '%s\n' "${model_name}"
     fi
   done
@@ -172,9 +180,18 @@ if [[ -n "${missing_models}" ]]; then
   exit 1
 fi
 
-if rg -n '<node|<include file=' worlds >/dev/null; then
+if rg -n '<node|<include file=' gazebo_sim_worlds/worlds >/dev/null; then
   echo "gazebo_sim_worlds must remain a pure world asset package." >&2
   exit 1
 fi
+
+if find gazebo_sim_worlds -type f \( -name '*.cc' -o -name '*.cpp' -o -name '*.hpp' -o -name '*.hh' \) \
+    | grep -q .; then
+  echo "gazebo_sim_worlds must contain reusable assets only; control code belongs to xgc2_gazebo_scene." >&2
+  exit 1
+fi
+
+grep -q 'add_library(obstaclePathPlugin SHARED' xgc2_gazebo_scene/CMakeLists.txt
+grep -q 'add_library(xgc2_gazebo_scene_system SHARED' xgc2_gazebo_scene/CMakeLists.txt
 
 echo "Package compliance checks passed."
