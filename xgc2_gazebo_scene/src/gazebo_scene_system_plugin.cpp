@@ -343,9 +343,12 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             }
             if (obstacle.controlled) {
                 const MotionSample sample = obstacle.controller.Sample(simulation_time);
+                // Drive pose kinematically each step. Zero residual twist so Gazebo
+                // does not integrate past the commanded pose between updates and
+                // falsely trip the external-control detector.
                 obstacle.model->SetWorldPose(sample.pose);
-                obstacle.model->SetWorldTwist(sample.linear_velocity, sample.angular_velocity);
-                obstacle.commanded_pose = sample.pose;
+                obstacle.model->SetWorldTwist(ignition::math::Vector3d::Zero, ignition::math::Vector3d::Zero);
+                obstacle.commanded_pose = obstacle.model->WorldPose();
                 obstacle.has_commanded_pose = true;
             }
             obstacle.observed_pose = obstacle.model->WorldPose();

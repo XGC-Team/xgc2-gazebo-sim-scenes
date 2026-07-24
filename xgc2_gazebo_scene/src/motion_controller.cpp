@@ -26,6 +26,10 @@ bool ParseMotionMode(const std::string& value, MotionMode* mode) {
         *mode = MotionMode::kPingPong;
         return true;
     }
+    if (value == "circle") {
+        *mode = MotionMode::kCircle;
+        return true;
+    }
     return false;
 }
 
@@ -37,6 +41,8 @@ std::string MotionModeName(MotionMode mode) {
         return "constant_twist";
     case MotionMode::kPingPong:
         return "ping_pong";
+    case MotionMode::kCircle:
+        return "circle";
     }
     return "hold";
 }
@@ -67,6 +73,23 @@ bool MotionController::Configure(const MotionConfiguration& configuration, const
             return false;
         }
     }
+    if (configuration.mode == MotionMode::kCircle) {
+        if (configuration.waypoints.size() != 1) {
+            *error = "circle requires exactly one center waypoint";
+            return false;
+        }
+        if (!FiniteVector(configuration.waypoints[0]) || !std::isfinite(configuration.speed) ||
+            std::abs(configuration.speed) <= std::numeric_limits<double>::epsilon()) {
+            *error = "circle center must be finite and angular speed must be non-zero";
+            return false;
+        }
+        const ignition::math::Vector3d radius = observed_pose.Pos() - configuration.waypoints[0];
+        const double horizontal = std::hypot(radius.X(), radius.Y());
+        if (horizontal <= std::numeric_limits<double>::epsilon()) {
+            *error = "circle radius must be positive in the XY plane";
+            return false;
+        }
+    }
 
     configuration_ = configuration;
     origin_pose_ = observed_pose;
@@ -94,6 +117,23 @@ MotionSample MotionController::Sample(double simulation_time) const {
         }
         sample.linear_velocity = configuration_.linear_velocity;
         sample.angular_velocity = configuration_.angular_velocity;
+        return sample;
+    }
+    if (configuration_.mode == MotionMode::kCircle) {
+        const ignition::math::Vector3d center = configuration_.waypoints[0];
+        const ignition::math::Vector3d radius0 = origin_pose_.Pos() - center;
+        const double angle = configuration_.speed * elapsed;
+        const double cos_a = std::cos(angle);
+        const double sin_a = std::sin(angle);
+        const double rx = radius0.X() * cos_a - radius0.Y() * sin_a;
+        const double ry = radius0.X() * sin_a + radius0.Y() * cos_a;
+        sample.pose.Pos().Set(center.X() + rx, center.Y() + ry, origin_pose_.Pos().Z());
+        const ignition::math::Quaterniond delta(ignition::math::Vector3d::UnitZ, angle);
+        sample.pose.Rot() = delta * origin_pose_.Rot();
+        sample.pose.Rot().Normalize();
+        // Tangential velocity for horizontal circular motion about +Z.
+        sample.linear_velocity.Set(-configuration_.speed * ry, configuration_.speed * rx, 0.0);
+        sample.angular_velocity.Set(0.0, 0.0, configuration_.speed);
         return sample;
     }
 

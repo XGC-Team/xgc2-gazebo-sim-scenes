@@ -10,7 +10,7 @@
 
 namespace xgc2_gazebo_scene {
 
-enum class MotionMode { kHold, kConstantTwist, kPingPong };
+enum class MotionMode { kHold, kConstantTwist, kPingPong, kCircle };
 
 struct MotionConfiguration {
     MotionMode mode = MotionMode::kHold;
