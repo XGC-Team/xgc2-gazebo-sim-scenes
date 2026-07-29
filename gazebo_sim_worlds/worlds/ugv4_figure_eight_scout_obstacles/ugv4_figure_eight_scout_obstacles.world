@@ -1,0 +1,265 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.6">
+  <world name="ugv4_figure_eight_scout_obstacles">
+    <physics name="ode" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+    <model name="xgc2_obstacle_w_post_a">
+      <static>true</static>
+      <pose relative_to="world">2.282343 5.314121 1.1 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.45</radius>
+              <length>2.2</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.45</radius>
+              <length>2.2</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_slab_b">
+      <static>true</static>
+      <pose relative_to="world">8.518353 3.464294 0.75 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.0 0.7 1.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.0 0.7 1.5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_hex_c">
+      <static>true</static>
+      <pose relative_to="world">8.88982 -2.09948 0.8 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <mesh>
+              <uri>model://xgc2_convex_ugv_hexagon_1/meshes/ugv_hexagon_1.obj</uri>
+              <scale>0.9 0.9 1.6</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <mesh>
+              <uri>model://xgc2_convex_ugv_hexagon_1/meshes/ugv_hexagon_1.obj</uri>
+              <scale>0.9 0.9 1.6</scale>
+            </mesh>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_ball_d">
+      <static>true</static>
+      <pose relative_to="world">2.506088 -5.940403 0.6 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <sphere>
+              <radius>0.6</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <sphere>
+              <radius>0.6</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_post_e">
+      <static>true</static>
+      <pose relative_to="world">-7.037301 -4.765353 1.2 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.5</radius>
+              <length>2.4</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.5</radius>
+              <length>2.4</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_hex_f">
+      <static>true</static>
+      <pose relative_to="world">-8.814214 2.931122 0.85 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <mesh>
+              <uri>model://xgc2_convex_ugv_hexagon_1/meshes/ugv_hexagon_1.obj</uri>
+              <scale>1.0 1.0 1.7</scale>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <mesh>
+              <uri>model://xgc2_convex_ugv_hexagon_1/meshes/ugv_hexagon_1.obj</uri>
+              <scale>1.0 1.0 1.7</scale>
+            </mesh>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_slab_g">
+      <static>true</static>
+      <pose relative_to="world">-9.215057 -1.76503 0.7 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.9 0.9 1.4</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.9 0.9 1.4</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_ball_h">
+      <static>true</static>
+      <pose relative_to="world">-2.939313 -6.178353 0.7 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <sphere>
+              <radius>0.7</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <sphere>
+              <radius>0.7</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_tip_r">
+      <static>true</static>
+      <pose relative_to="world">10.64787 0.212986 0.45 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <sphere>
+              <radius>0.45</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <sphere>
+              <radius>0.45</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="xgc2_obstacle_w_tip_l">
+      <static>true</static>
+      <pose relative_to="world">-7.595459 5.537961 1.0 0.0 0.0 0.0</pose>
+      <link name="body">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>2.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.4</radius>
+              <length>2.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

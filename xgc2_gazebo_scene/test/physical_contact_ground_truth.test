@@ -1,0 +1,22 @@
+<launch>
+  <env name="GAZEBO_MASTER_URI" value="http://127.0.0.1:11459"/>
+
+  <rosparam param="/xgc2_gazebo_scene/physical_contacts/tracked_model_prefixes">
+    [test_robot_]
+  </rosparam>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name"
+         value="$(find xgc2_gazebo_scene)/test/physical_contact_ground_truth.world"/>
+    <arg name="gui" value="false"/>
+    <arg name="verbose" value="false"/>
+    <arg name="extra_gazebo_args" value="-s libxgc2_gazebo_scene_system.so"/>
+  </include>
+
+  <test test-name="physical_contact_ground_truth"
+        pkg="xgc2_gazebo_scene"
+        type="physical_contact_ground_truth_test.py"
+        time-limit="60">
+    <param name="timeout" value="20"/>
+  </test>
+</launch>

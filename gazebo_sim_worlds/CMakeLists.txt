@@ -11,3 +11,10 @@ install(DIRECTORY worlds models
 install(FILES README.md
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
+
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(
+    test/verify_formation_scenes.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+endif()

@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.2.0-9
+version: 1.2.0-10
 kind: ros1-apt
 summary: Reusable Gazebo Classic worlds and the XGC2 scene director.
 ros:
@@ -27,6 +27,7 @@ apt:
   - ros-noetic-roscpp-serialization
   - ros-noetic-rostime
   - ros-noetic-std-msgs
+  - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-10)
 usage:
   install: 'sudo apt update
 
@@ -41,7 +42,13 @@ usage:
 
     test -f /opt/ros/noetic/share/gazebo_sim_worlds/models/corridor/model.sdf
 
+    test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/uav6_knot_obstacles.world
+
+    test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/ugv4_figure_eight_obstacles.world
+
     test -f /opt/ros/noetic/lib/libobstaclePathPlugin.so
+
+    test -f /opt/ros/noetic/lib/libxgc2_gazebo_scene_geometry.so
 
     test -f /opt/ros/noetic/lib/libxgc2_gazebo_scene_system.so
 
@@ -50,9 +57,9 @@ usage:
 
     owns reusable world and model assets only. xgc2_gazebo_scene is the scene
 
-    director and temporarily retains both the legacy per-model path animator
+    director, retains the legacy per-model path animator, and provides the
 
-    and the XGC2-managed global SystemPlugin without changing their behavior.
+    XGC2-managed global SystemPlugin with native and xgc2_geometry_msgs truth.
 
     '
 ownership:
@@ -61,6 +68,7 @@ ownership:
   - /opt/ros/noetic/share/xgc2_gazebo_scene
   - /opt/ros/noetic/include/xgc2_gazebo_scene
   - /opt/ros/noetic/lib/libobstaclePathPlugin.so
+  - /opt/ros/noetic/lib/libxgc2_gazebo_scene_geometry.so
   - /opt/ros/noetic/lib/libxgc2_gazebo_scene_motion.so
   - /opt/ros/noetic/lib/libxgc2_gazebo_scene_system.so
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
@@ -71,4 +79,4 @@ ownership:
 release:
   dependency_policy: {}
   apt_versions:
-    focal: 1.2.0-9
+    focal: 1.2.0-10

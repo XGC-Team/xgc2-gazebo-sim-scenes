@@ -6,6 +6,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   roscpp
   std_msgs
+  xgc2_geometry_msgs
 )
 find_package(gazebo REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -26,9 +27,31 @@ generate_messages(DEPENDENCIES geometry_msgs std_msgs)
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES obstaclePathPlugin xgc2_gazebo_scene_motion xgc2_gazebo_scene_system
-  CATKIN_DEPENDS geometry_msgs message_runtime roscpp std_msgs
+  LIBRARIES
+    obstaclePathPlugin
+    xgc2_gazebo_scene_contact
+    xgc2_gazebo_scene_geometry
+    xgc2_gazebo_scene_motion
+    xgc2_gazebo_scene_system
+  CATKIN_DEPENDS geometry_msgs message_runtime roscpp std_msgs xgc2_geometry_msgs
 )
+
+add_library(xgc2_gazebo_scene_contact
+  src/physical_contact_filter.cpp
+)
+target_compile_features(xgc2_gazebo_scene_contact PUBLIC cxx_std_17)
+target_compile_options(xgc2_gazebo_scene_contact PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_include_directories(xgc2_gazebo_scene_contact PUBLIC include)
+
+add_library(xgc2_gazebo_scene_geometry
+  src/convex_mesh_geometry.cpp
+)
+target_compile_features(xgc2_gazebo_scene_geometry PUBLIC cxx_std_17)
+target_compile_options(xgc2_gazebo_scene_geometry PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_include_directories(xgc2_gazebo_scene_geometry
+  PUBLIC include ${GAZEBO_INCLUDE_DIRS}
+)
+target_link_libraries(xgc2_gazebo_scene_geometry PUBLIC ${GAZEBO_LIBRARIES})
 
 add_library(xgc2_gazebo_scene_motion
   src/motion_controller.cpp
@@ -59,10 +82,20 @@ target_include_directories(xgc2_gazebo_scene_system
 )
 add_dependencies(xgc2_gazebo_scene_system ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(xgc2_gazebo_scene_system
-  PRIVATE xgc2_gazebo_scene_motion ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES}
+  PRIVATE
+    xgc2_gazebo_scene_contact
+    xgc2_gazebo_scene_geometry
+    xgc2_gazebo_scene_motion
+    ${catkin_LIBRARIES}
+    ${GAZEBO_LIBRARIES}
 )
 
-install(TARGETS obstaclePathPlugin xgc2_gazebo_scene_motion xgc2_gazebo_scene_system
+install(TARGETS
+  obstaclePathPlugin
+  xgc2_gazebo_scene_contact
+  xgc2_gazebo_scene_geometry
+  xgc2_gazebo_scene_motion
+  xgc2_gazebo_scene_system
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -73,6 +106,35 @@ install(DIRECTORY include/${PROJECT_NAME}/
 install(FILES README.md DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 if(CATKIN_ENABLE_TESTING)
+  find_package(rostest REQUIRED)
+  catkin_install_python(PROGRAMS
+    test/physical_contact_ground_truth_test.py
+    test/scene_ground_truth_test.py
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  )
+  add_rostest(test/physical_contact_ground_truth.test)
+  add_rostest(test/uav6_knot_ground_truth.test)
+  add_rostest(test/ugv4_figure_eight_ground_truth.test)
+
+  catkin_add_gtest(xgc2_gazebo_scene_contact_test test/physical_contact_filter_test.cpp)
+  if(TARGET xgc2_gazebo_scene_contact_test)
+    target_compile_features(xgc2_gazebo_scene_contact_test PUBLIC cxx_std_17)
+    target_compile_options(xgc2_gazebo_scene_contact_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_include_directories(xgc2_gazebo_scene_contact_test PRIVATE include)
+    target_link_libraries(xgc2_gazebo_scene_contact_test xgc2_gazebo_scene_contact)
+  endif()
+
+  catkin_add_gtest(xgc2_gazebo_scene_geometry_test test/convex_mesh_geometry_test.cpp)
+  if(TARGET xgc2_gazebo_scene_geometry_test)
+    target_compile_features(xgc2_gazebo_scene_geometry_test PUBLIC cxx_std_17)
+    target_compile_options(xgc2_gazebo_scene_geometry_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_definitions(xgc2_gazebo_scene_geometry_test
+      PRIVATE XGC2_SCENE_TEST_MODEL_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../gazebo_sim_worlds/models"
+    )
+    target_include_directories(xgc2_gazebo_scene_geometry_test PRIVATE include ${GAZEBO_INCLUDE_DIRS})
+    target_link_libraries(xgc2_gazebo_scene_geometry_test xgc2_gazebo_scene_geometry)
+  endif()
+
   catkin_add_gtest(xgc2_gazebo_scene_motion_test test/motion_controller_test.cpp)
   if(TARGET xgc2_gazebo_scene_motion_test)
     target_compile_features(xgc2_gazebo_scene_motion_test PUBLIC cxx_std_17)

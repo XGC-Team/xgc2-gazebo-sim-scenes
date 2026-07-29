@@ -1,0 +1,35 @@
+# Exact convex collision mesh for paper-leader template icosahedron_1.
+# Vertices remain unscaled; each world collision applies the source scale.
+o icosahedron_1
+v 0.0 0.38 0.615
+v 0.0 -0.38 0.615
+v 0.0 0.38 -0.615
+v 0.0 -0.38 -0.615
+v 0.38 0.615 0.0
+v -0.38 0.615 0.0
+v 0.38 -0.615 0.0
+v -0.38 -0.615 0.0
+v 0.615 0.0 0.38
+v 0.615 0.0 -0.38
+v -0.615 0.0 0.38
+v -0.615 0.0 -0.38
+f 1 2 9
+f 1 5 6
+f 1 6 11
+f 1 9 5
+f 1 11 2
+f 2 7 9
+f 4 3 10
+f 4 7 8
+f 4 8 12
+f 4 10 7
+f 4 12 3
+f 6 5 3
+f 8 2 11
+f 8 7 2
+f 10 3 5
+f 10 5 9
+f 10 9 7
+f 12 6 3
+f 12 8 11
+f 12 11 6

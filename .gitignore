@@ -3,5 +3,6 @@ debs/
 build/
 devel/
 install/
+Testing/
 *.pyc
 __pycache__/

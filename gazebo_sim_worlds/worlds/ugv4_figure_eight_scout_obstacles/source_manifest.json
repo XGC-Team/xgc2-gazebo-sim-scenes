@@ -1,0 +1,394 @@
+{
+  "schema": "xgc2.gazebo.formation_scene.v1",
+  "scene": "ugv4_figure_eight_scout_obstacles",
+  "description": "Four-UGV figure-eight obstacle field, Scout Mini profile: re-anchored to the SHRUNK Gerono eight (A=6, B/2=3, w=0.05 -- 2026-07-30 one-third shrink of the A=9/B/2=4.5 field at unchanged w, so the 125.66 s lap and the leader heading rate are unchanged) and cleared against the routed x1.5 formation schedule slot sweep (strong bites 0.45-0.60 m, medium 0.75-0.95 m, lobe-extreme markers >=0.90 m min slot clearance; required car center-to-surface 0.751 m; bands calibrated for the real NMPC inner loop, ~0.25 m deformation demand). After the shrink the 2.7 m formation half-span plus the 0.02 rad/s spin sweeps the lobe interiors solid, so every body -- including w_tip_r/w_tip_l, which previously sat inside the lobe holes at |x|=5.9 -- now sits in the thin annulus just outside the swept band.",
+  "source": {
+    "derivation": "regenerated 2026-07-30 by slot-sweep placement (gen_scout_field_v3.py) at the retuned cosine 26 s morph ramp and 0.02 rad/s formation spin against config/scenarios/ugv4_figure_eight_scout + scout_mini_planning_geometry overlay",
+    "paper_scale_sibling": "worlds/ugv4_figure_eight_obstacles (mecanum/paper profile)",
+    "world_frame_id": "map"
+  },
+  "gazebo_frame_id": "world",
+  "templates": {
+    "ugv_hexagon_1": {
+      "mesh_uri": "model://xgc2_convex_ugv_hexagon_1/meshes/ugv_hexagon_1.obj",
+      "vertices": [
+        [
+          0.233827,
+          0.135,
+          -0.3
+        ],
+        [
+          0.0,
+          0.27,
+          -0.3
+        ],
+        [
+          -0.233827,
+          0.135,
+          -0.3
+        ],
+        [
+          -0.233827,
+          -0.135,
+          -0.3
+        ],
+        [
+          0.0,
+          -0.27,
+          -0.3
+        ],
+        [
+          0.233827,
+          -0.135,
+          -0.3
+        ],
+        [
+          0.233827,
+          0.135,
+          0.3
+        ],
+        [
+          0.0,
+          0.27,
+          0.3
+        ],
+        [
+          -0.233827,
+          0.135,
+          0.3
+        ],
+        [
+          -0.233827,
+          -0.135,
+          0.3
+        ],
+        [
+          0.0,
+          -0.27,
+          0.3
+        ],
+        [
+          0.233827,
+          -0.135,
+          0.3
+        ]
+      ],
+      "triangles": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          0,
+          3,
+          2
+        ],
+        [
+          0,
+          4,
+          3
+        ],
+        [
+          0,
+          5,
+          4
+        ],
+        [
+          6,
+          7,
+          8
+        ],
+        [
+          6,
+          8,
+          9
+        ],
+        [
+          6,
+          9,
+          10
+        ],
+        [
+          6,
+          10,
+          11
+        ],
+        [
+          0,
+          1,
+          7
+        ],
+        [
+          0,
+          7,
+          6
+        ],
+        [
+          1,
+          2,
+          8
+        ],
+        [
+          1,
+          8,
+          7
+        ],
+        [
+          2,
+          3,
+          9
+        ],
+        [
+          2,
+          9,
+          8
+        ],
+        [
+          3,
+          4,
+          10
+        ],
+        [
+          3,
+          10,
+          9
+        ],
+        [
+          4,
+          5,
+          11
+        ],
+        [
+          4,
+          11,
+          10
+        ],
+        [
+          5,
+          0,
+          6
+        ],
+        [
+          5,
+          6,
+          11
+        ]
+      ]
+    }
+  },
+  "obstacles": [
+    {
+      "id": 1,
+      "name": "w_post_a",
+      "type": "cylinder",
+      "scale": [
+        0.45,
+        0.45,
+        2.2
+      ],
+      "position": [
+        2.282343,
+        5.314121,
+        1.1
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 2,
+      "name": "w_slab_b",
+      "type": "cube",
+      "scale": [
+        1.0,
+        0.7,
+        1.5
+      ],
+      "position": [
+        8.518353,
+        3.464294,
+        0.75
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 3,
+      "name": "w_hex_c",
+      "type": "v_polytope",
+      "v_polytope_type": "ugv_hexagon_1",
+      "scale": [
+        0.9,
+        0.9,
+        1.6
+      ],
+      "position": [
+        8.88982,
+        -2.09948,
+        0.8
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 4,
+      "name": "w_ball_d",
+      "type": "sphere",
+      "scale": [
+        0.6,
+        0.6,
+        0.6
+      ],
+      "position": [
+        2.506088,
+        -5.940403,
+        0.6
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 5,
+      "name": "w_post_e",
+      "type": "cylinder",
+      "scale": [
+        0.5,
+        0.5,
+        2.4
+      ],
+      "position": [
+        -7.037301,
+        -4.765353,
+        1.2
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 6,
+      "name": "w_hex_f",
+      "type": "v_polytope",
+      "v_polytope_type": "ugv_hexagon_1",
+      "scale": [
+        1.0,
+        1.0,
+        1.7
+      ],
+      "position": [
+        -8.814214,
+        2.931122,
+        0.85
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 7,
+      "name": "w_slab_g",
+      "type": "cube",
+      "scale": [
+        0.9,
+        0.9,
+        1.4
+      ],
+      "position": [
+        -9.215057,
+        -1.76503,
+        0.7
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 8,
+      "name": "w_ball_h",
+      "type": "sphere",
+      "scale": [
+        0.7,
+        0.7,
+        0.7
+      ],
+      "position": [
+        -2.939313,
+        -6.178353,
+        0.7
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 9,
+      "name": "w_tip_r",
+      "type": "sphere",
+      "scale": [
+        0.45,
+        0.45,
+        0.45
+      ],
+      "position": [
+        10.64787,
+        0.212986,
+        0.45
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": 10,
+      "name": "w_tip_l",
+      "type": "cylinder",
+      "scale": [
+        0.4,
+        0.4,
+        2.0
+      ],
+      "position": [
+        -7.595459,
+        5.537961,
+        1.0
+      ],
+      "orientation_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    }
+  ]
+}

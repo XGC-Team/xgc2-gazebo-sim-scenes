@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.6">
+  <model name="xgc2_convex_icosahedron_1">
+    <static>true</static>
+    <link name="body">
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://xgc2_convex_icosahedron_1/meshes/icosahedron_1.obj</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://xgc2_convex_icosahedron_1/meshes/icosahedron_1.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

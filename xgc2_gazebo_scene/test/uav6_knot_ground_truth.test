@@ -1,0 +1,20 @@
+<launch>
+  <env name="GAZEBO_MASTER_URI" value="http://127.0.0.1:11458"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name"
+         value="$(find gazebo_sim_worlds)/worlds/uav6_knot_obstacles/uav6_knot_obstacles.world"/>
+    <arg name="gui" value="false"/>
+    <arg name="verbose" value="false"/>
+    <arg name="extra_gazebo_args" value="-s libxgc2_gazebo_scene_system.so"/>
+  </include>
+
+  <test test-name="uav6_knot_ground_truth"
+        pkg="xgc2_gazebo_scene"
+        type="scene_ground_truth_test.py"
+        time-limit="60">
+    <param name="manifest"
+           value="$(find gazebo_sim_worlds)/worlds/uav6_knot_obstacles/source_manifest.json"/>
+    <param name="timeout" value="30"/>
+  </test>
+</launch>
