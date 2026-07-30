@@ -178,9 +178,7 @@ std::string StandardGeometryType(const ConvexPart& part) {
 }
 
 std::string VPolytopeGeometryTypeAlias(const ConvexPart& part) {
-    if (part.shape != ConvexPart::SHAPE_CONVEX_MESH ||
-        part.mesh_uri.empty() ||
-        !part.mesh_submesh.empty() ||
+    if (part.shape != ConvexPart::SHAPE_CONVEX_MESH || part.mesh_uri.empty() || !part.mesh_submesh.empty() ||
         part.mesh_center_submesh) {
         return "";
     }
@@ -361,8 +359,7 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         node_ = std::make_unique<ros::NodeHandle>("xgc2_gazebo_scene");
         node_->param<std::string>("managed_obstacle_prefix", managed_obstacle_prefix_, kDefaultManagedPrefix);
         if (managed_obstacle_prefix_.empty()) {
-            ROS_ERROR("XGC Gazebo Scene managed_obstacle_prefix must not be empty; using %s",
-                      kDefaultManagedPrefix);
+            ROS_ERROR("XGC Gazebo Scene managed_obstacle_prefix must not be empty; using %s", kDefaultManagedPrefix);
             managed_obstacle_prefix_ = kDefaultManagedPrefix;
         }
         node_->param("physical_contacts/enabled", physical_contact_monitor_enabled_, true);
@@ -384,10 +381,10 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             // high-volume raw wheel/ground stream.
             gazebo_transport_node_.reset(new gazebo::transport::Node());
             gazebo_transport_node_->Init(world_name);
-            contact_subscriber_ = gazebo_transport_node_->Subscribe(
-                "~/physics/contacts", &GazeboSceneSystemPlugin::OnContacts, this);
-            world_reset_connection_ = gazebo::event::Events::ConnectWorldReset(
-                std::bind(&GazeboSceneSystemPlugin::OnWorldReset, this));
+            contact_subscriber_ =
+                gazebo_transport_node_->Subscribe("~/physics/contacts", &GazeboSceneSystemPlugin::OnContacts, this);
+            world_reset_connection_ =
+                gazebo::event::Events::ConnectWorldReset(std::bind(&GazeboSceneSystemPlugin::OnWorldReset, this));
         }
         configure_service_ =
             node_->advertiseService(kConfigureService, &GazeboSceneSystemPlugin::ConfigureMotionsCallback, this);
@@ -443,12 +440,11 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
                 maximum_depth = std::max(maximum_depth, contact.depth(point));
             }
             std::ostringstream detail;
-            detail << "sim_time=" << contacts->time().sec() << "."
-                   << std::setfill('0') << std::setw(9)
-                   << contacts->time().nsec() << std::setfill(' ')
-                   << " model1=" << first.name << " collision1=" << contact.collision1()
-                   << " model2=" << second.name << " collision2=" << contact.collision2()
-                   << " points=" << contact.position_size() << " max_depth=" << maximum_depth;
+            detail << "sim_time=" << contacts->time().sec() << "." << std::setfill('0') << std::setw(9)
+                   << contacts->time().nsec() << std::setfill(' ') << " model1=" << first.name
+                   << " collision1=" << contact.collision1() << " model2=" << second.name
+                   << " collision2=" << contact.collision2() << " points=" << contact.position_size()
+                   << " max_depth=" << maximum_depth;
             physical_collision_detected_ = true;
             PublishPhysicalCollision(true, detail.str());
             ROS_ERROR("XGC Gazebo Scene detected forbidden physical contact: %s", detail.str().c_str());
@@ -462,8 +458,7 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             ContactModelDescriptor descriptor;
             descriptor.name = model->GetName();
             descriptor.is_static = model->IsStatic();
-            descriptor.is_managed_obstacle =
-                !LogicalName(descriptor.name, managed_obstacle_prefix_).empty();
+            descriptor.is_managed_obstacle = !LogicalName(descriptor.name, managed_obstacle_prefix_).empty();
             contact_models_.emplace(descriptor.name, std::move(descriptor));
         }
     }
@@ -656,30 +651,21 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             for (const auto& part : item.second.definition.parts) {
                 const std::string type = StandardGeometryType(part);
                 if (!type.empty()) {
-                    const xgc2_geometry_msgs::GeometryTemplate standard_template =
-                        StandardGeometryTemplate(part);
+                    const xgc2_geometry_msgs::GeometryTemplate standard_template = StandardGeometryTemplate(part);
                     templates.emplace(type, standard_template);
 
-                    const std::string v_polytope_alias =
-                        VPolytopeGeometryTypeAlias(part);
-                    if (!v_polytope_alias.empty() &&
-                        ambiguous_v_polytope_aliases.count(v_polytope_alias) == 0) {
-                        const auto alias_source =
-                            v_polytope_alias_sources.emplace(v_polytope_alias, type);
-                        if (!alias_source.second &&
-                            alias_source.first->second != type) {
+                    const std::string v_polytope_alias = VPolytopeGeometryTypeAlias(part);
+                    if (!v_polytope_alias.empty() && ambiguous_v_polytope_aliases.count(v_polytope_alias) == 0) {
+                        const auto alias_source = v_polytope_alias_sources.emplace(v_polytope_alias, type);
+                        if (!alias_source.second && alias_source.first->second != type) {
                             templates.erase(v_polytope_alias);
                             ambiguous_v_polytope_aliases.insert(v_polytope_alias);
-                            ROS_ERROR(
-                                "Not publishing ambiguous geometry alias '%s': "
-                                "both '%s' and '%s' use that mesh filename",
-                                v_polytope_alias.c_str(),
-                                alias_source.first->second.c_str(),
-                                type.c_str());
+                            ROS_ERROR("Not publishing ambiguous geometry alias '%s': "
+                                      "both '%s' and '%s' use that mesh filename",
+                                      v_polytope_alias.c_str(), alias_source.first->second.c_str(), type.c_str());
                             continue;
                         }
-                        xgc2_geometry_msgs::GeometryTemplate alias_template =
-                            standard_template;
+                        xgc2_geometry_msgs::GeometryTemplate alias_template = standard_template;
                         alias_template.type = v_polytope_alias;
                         templates.emplace(v_polytope_alias, std::move(alias_template));
                     }

@@ -7,8 +7,7 @@ namespace {
 
 bool IsTrackedDynamicActor(const ContactModelDescriptor& model,
                            const std::vector<std::string>& tracked_model_prefixes) {
-    return !model.is_static && !model.is_managed_obstacle &&
-           MatchesTrackedPrefix(model.name, tracked_model_prefixes);
+    return !model.is_static && !model.is_managed_obstacle && MatchesTrackedPrefix(model.name, tracked_model_prefixes);
 }
 
 } // namespace
