@@ -109,5 +109,6 @@ GUI 文件选择器应进入 `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/cat
 | [`tunnel_straight_static`](worlds/tunnel_straight_static/README.md) | 隧道场景，静态布景。 | [preview](worlds/tunnel_straight_static/preview.png) |
 | [`uav6_knot_obstacles`](worlds/uav6_knot_obstacles/README.md) | 六机绳结实验的 16 个精确静态障碍物，含闭合凸网格 collision。 | — |
 | [`ugv4_figure_eight_obstacles`](worlds/ugv4_figure_eight_obstacles/README.md) | 四车八字实验的 10 个精确静态障碍物，含闭合凸网格 collision。 | — |
+| [`ugv4_figure_eight_scout_obstacles`](worlds/ugv4_figure_eight_scout_obstacles/README.md) | 四台 Scout 的八字实验障碍物场景。 | — |
 
 <!-- WORLD_CATALOG_END -->

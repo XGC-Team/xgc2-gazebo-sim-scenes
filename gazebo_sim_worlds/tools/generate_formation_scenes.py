@@ -36,6 +36,10 @@ def indent_xml(element: ET.Element, level: int = 0) -> None:
         element.tail = indentation
 
 
+def serialize_xml(element: ET.Element) -> bytes:
+    return b'<?xml version="1.0"?>\n' + ET.tostring(element, encoding="utf-8") + b"\n"
+
+
 def number(value: float) -> str:
     # Python's shortest-round-trip representation keeps source decimals
     # readable without losing any binary64 information.
@@ -116,7 +120,7 @@ def world_xml(manifest: dict) -> bytes:
         ET.SubElement(material, "diffuse").text = MATERIAL
 
     indent_xml(sdf)
-    return ET.tostring(sdf, encoding="utf-8", xml_declaration=True) + b"\n"
+    return serialize_xml(sdf)
 
 
 def obj_text(template_name: str, template: dict) -> str:
@@ -141,7 +145,7 @@ def model_config(model_name: str) -> bytes:
     ET.SubElement(author, "email").text = "lxk36@users.noreply.github.com"
     ET.SubElement(root, "description").text = "Exact convex collision template for XGC2 scenes."
     indent_xml(root)
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
+    return serialize_xml(root)
 
 
 def model_sdf(model_name: str, mesh_uri: str) -> bytes:
@@ -155,7 +159,7 @@ def model_sdf(model_name: str, mesh_uri: str) -> bytes:
         mesh = ET.SubElement(geometry, "mesh")
         ET.SubElement(mesh, "uri").text = mesh_uri
     indent_xml(root)
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
+    return serialize_xml(root)
 
 
 def expected_assets(package_root: Path) -> dict[Path, bytes]:

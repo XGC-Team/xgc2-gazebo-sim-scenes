@@ -44,6 +44,7 @@ mkdir -p "${WORK_DIR}" "${OUTPUT_DIR}"
 docker pull "${DOCKER_IMAGE}"
 docker run --rm \
   --network "${DOCKER_NETWORK}" \
+  -e XGC2_APT_OVERLAY_URL="${XGC2_APT_OVERLAY_URL:-}" \
   -e DEBIAN_FRONTEND=noninteractive \
   -e INSTALL_CHECK="${INSTALL_CHECK}" \
   -v "${REPO_ROOT}:/workspace/gazebo-sim-scenes:ro" \
@@ -54,6 +55,19 @@ docker run --rm \
     set -euo pipefail
 
     export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends ca-certificates curl
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
+      -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
+    chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
+      > /etc/apt/sources.list.d/xgc2.list
+    if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
+      sed "s#${XGC2_APT_BASE_URL:-https://xgc2.apt.xiaokang.ink}#${XGC2_APT_OVERLAY_URL%/}#g" \
+        /etc/apt/sources.list.d/xgc2.list \
+        > /etc/apt/sources.list.d/00-xgc2-release-train.list
+    fi
     apt-get update
     apt-get install -y --no-install-recommends \
       build-essential \
@@ -83,7 +97,8 @@ docker run --rm \
       ros-noetic-std-msgs \
       ros-noetic-std-srvs \
       ros-noetic-tf2 \
-      ros-noetic-tf2-ros
+      ros-noetic-tf2-ros \
+      ros-noetic-xgc2-geometry-msgs
 
     cd /workspace/gazebo-sim-scenes
     .xgc2/scripts/check_package_compliance.sh
