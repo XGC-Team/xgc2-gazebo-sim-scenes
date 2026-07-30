@@ -1,0 +1,76 @@
+{
+  "schema": "xgc2.gazebo.formation_scene.v1",
+  "scene": "uav6_ugv4_crossing_obstacles",
+  "description": "Manuscript-2 mixed-fleet crossing field: four KNOWN CONSTANT-VELOCITY movers and no static body, copied exactly from paper-leader. Every model spawns SDF-static; the twists are attached at runtime by the simulation.gazebo-configure-obstacle-motion Jobs of the M2 arming workflow.",
+  "source": {
+    "launch": "planner/formation_generator/launch/scenarios/uav6_ugv4_crossing.launch",
+    "obstacles": "planner/formation_generator/config/scenarios/uav6_ugv4_crossing/obstacles.yaml",
+    "polytope_library": "sim/cluttered_environment/config/v_polytope_library.yaml",
+    "world_frame_id": "map"
+  },
+  "gazebo_frame_id": "world",
+  "templates": {},
+  "motion": {
+    "mode": "constant_twist",
+    "job_kind": "simulation.gazebo-configure-obstacle-motion",
+    "note": "MotionController binds BOTH its origin pose and its zero of time when the configure Job is SERVED, not at mission t=0. Each obstacle therefore spawns at position - linear_velocity * spawn_lead_seconds, where spawn_lead_seconds is the measured lag between serving that obstacle's Job and the first rolling SyncTrigger. It is 0.0 until the bring-up run measures it; see the M2 wiring plan in xgc2-formation-dmpc/docs."
+  },
+  "obstacles": [
+    {
+      "id": 20,
+      "name": "flank_ball",
+      "type": "sphere",
+      "scale": [0.45, 0.45, 0.45],
+      "position": [-4.472022, -0.092223, 3.000002],
+      "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+      "motion": {
+        "mode": "constant_twist",
+        "linear_velocity": [0.0, 0.3, 0.0],
+        "angular_velocity": [0.0, 0.0, 0.0],
+        "spawn_lead_seconds": 0.0
+      }
+    },
+    {
+      "id": 21,
+      "name": "flank_cylinder",
+      "type": "cylinder",
+      "scale": [0.42, 0.42, 1.4],
+      "position": [-0.572289, 4.569584, 3.000002],
+      "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+      "motion": {
+        "mode": "constant_twist",
+        "linear_velocity": [0.1, -0.3, 0.0],
+        "angular_velocity": [0.0, 0.0, 0.0],
+        "spawn_lead_seconds": 0.0
+      }
+    },
+    {
+      "id": 22,
+      "name": "ground_roller",
+      "type": "cylinder",
+      "scale": [1.6, 1.6, 0.6],
+      "position": [0.085125, 3.673977, 0.24],
+      "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+      "motion": {
+        "mode": "constant_twist",
+        "linear_velocity": [0.0, -0.3, 0.0],
+        "angular_velocity": [0.0, 0.0, 0.0],
+        "spawn_lead_seconds": 0.0
+      }
+    },
+    {
+      "id": 23,
+      "name": "climb_intruder",
+      "type": "cube",
+      "scale": [0.7, 0.7, 0.7],
+      "position": [10.590142, 2.772683, 1.115],
+      "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+      "motion": {
+        "mode": "constant_twist",
+        "linear_velocity": [0.0, 0.0, 0.0432],
+        "angular_velocity": [0.0, 0.0, 0.0],
+        "spawn_lead_seconds": 0.0
+      }
+    }
+  ]
+}

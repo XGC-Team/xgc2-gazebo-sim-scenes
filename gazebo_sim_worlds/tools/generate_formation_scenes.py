@@ -16,6 +16,7 @@ SCENES = (
     "uav6_knot_obstacles",
     "ugv4_figure_eight_obstacles",
     "ugv4_figure_eight_scout_obstacles",
+    "uav6_ugv4_crossing_obstacles",
 )
 MATERIAL = "0.5 0.5 0.5 1"
 
@@ -48,6 +49,40 @@ def number(value: float) -> str:
 
 def vector(values: list[float]) -> str:
     return " ".join(number(value) for value in values)
+
+
+def spawn_position(obstacle: dict) -> list[float]:
+    """SDF spawn position of one obstacle.
+
+    ``position`` is the source truth: the obstacle pose at MISSION t = 0.
+    Bodies that receive a runtime constant twist are a special case, because
+    the Gazebo scene plugin's MotionController binds both its origin pose and
+    its zero of time when the configure Job is SERVED, not at mission t = 0.
+    Such a body has therefore already been travelling for ``spawn_lead_seconds``
+    when the mission starts, so it must spawn that much EARLIER along its own
+    velocity:
+
+        P = position - linear_velocity * spawn_lead_seconds
+
+    Keeping the lead as a named manifest number rather than pre-biased
+    coordinates is what lets the upstream comparison keep checking ``position``
+    against the paper-leader source, and what makes a re-measured lead a
+    one-number edit.  A body with no ``motion`` block, or a lead of 0.0, spawns
+    exactly at ``position``.
+    """
+    motion = obstacle.get("motion")
+    if not motion:
+        return list(obstacle["position"])
+    lead = float(motion.get("spawn_lead_seconds", 0.0))
+    if not math.isfinite(lead) or lead < 0.0:
+        raise ValueError(f"{obstacle['name']}: spawn_lead_seconds must be finite and >= 0")
+    if lead == 0.0:
+        return list(obstacle["position"])
+    velocity = motion.get("linear_velocity") or [0.0, 0.0, 0.0]
+    return [
+        float(obstacle["position"][axis]) - float(velocity[axis]) * lead
+        for axis in range(3)
+    ]
 
 
 def quaternion_to_rpy(quaternion: list[float]) -> tuple[float, float, float]:
@@ -108,7 +143,7 @@ def world_xml(manifest: dict) -> bytes:
         model = ET.SubElement(world, "model", {"name": f"xgc2_obstacle_{obstacle['name']}"})
         ET.SubElement(model, "static").text = "true"
         roll, pitch, yaw = quaternion_to_rpy(obstacle["orientation_xyzw"])
-        pose = [*obstacle["position"], roll, pitch, yaw]
+        pose = [*spawn_position(obstacle), roll, pitch, yaw]
         ET.SubElement(model, "pose", {"relative_to": "world"}).text = vector(pose)
         link = ET.SubElement(model, "link", {"name": "body"})
         collision = ET.SubElement(link, "collision", {"name": "collision"})

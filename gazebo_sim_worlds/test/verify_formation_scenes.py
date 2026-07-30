@@ -19,6 +19,7 @@ SCENES = (
     "uav6_knot_obstacles",
     "ugv4_figure_eight_obstacles",
     "ugv4_figure_eight_scout_obstacles",
+    "uav6_ugv4_crossing_obstacles",
 )
 REFERENCE_SOURCE_ENV = "XGC2_FORMATION_REFERENCE_SRC"
 TOLERANCE = 1.0e-9
@@ -156,6 +157,31 @@ def geometry_equal(left: tuple[str, dict], right: tuple[str, dict]) -> bool:
     return True
 
 
+def spawn_position(obstacle: dict) -> list[float]:
+    """SDF spawn position: source pose, minus the runtime-motion spawn lead.
+
+    Mirrors tools/generate_formation_scenes.py. ``position`` stays the source
+    truth at mission t = 0 so the upstream comparison keeps checking it against
+    paper-leader; a body whose twist is attached at runtime spawns earlier
+    along its own velocity by ``spawn_lead_seconds``, because the scene
+    plugin's MotionController binds its origin and its zero of time when the
+    configure Job is served.
+    """
+    motion = obstacle.get("motion")
+    if not motion:
+        return list(obstacle["position"])
+    lead = float(motion.get("spawn_lead_seconds", 0.0))
+    if not math.isfinite(lead) or lead < 0.0:
+        raise AssertionError(f"{obstacle['name']}: spawn_lead_seconds must be finite and >= 0")
+    if lead == 0.0:
+        return list(obstacle["position"])
+    velocity = motion.get("linear_velocity") or [0.0, 0.0, 0.0]
+    return [
+        float(obstacle["position"][axis]) - float(velocity[axis]) * lead
+        for axis in range(3)
+    ]
+
+
 def quaternion_to_rpy(quaternion: list[float]) -> list[float]:
     x, y, z, w = quaternion
     norm = math.sqrt(sum(component * component for component in quaternion))
@@ -194,7 +220,7 @@ def verify_world(package_root: Path, scene_name: str) -> None:
         if model.findtext("static") != "true":
             raise AssertionError(f"{model_name}: obstacle must be static")
         pose = parse_vector(model.find("pose"))
-        expected_pose = [*obstacle["position"], *quaternion_to_rpy(obstacle["orientation_xyzw"])]
+        expected_pose = [*spawn_position(obstacle), *quaternion_to_rpy(obstacle["orientation_xyzw"])]
         if not vector_close(pose, expected_pose):
             raise AssertionError(f"{model_name}: pose differs: {pose} != {expected_pose}")
         collision = model.find("link/collision/geometry")
@@ -279,8 +305,17 @@ def verify_upstream(
     for scene_name in SCENES:
         scene_dir = package_root / "worlds" / scene_name
         manifest = json.loads((scene_dir / "source_manifest.json").read_text(encoding="utf-8"))
-        obstacle_path = paper_src / manifest["source"]["obstacles"]
-        library_path = paper_src / manifest["source"]["polytope_library"]
+        source = manifest["source"]
+        if "obstacles" not in source:
+            # A scene may be DERIVED rather than copied (ugv4_figure_eight_scout
+            # is placed by a slot sweep, not transcribed from an upstream
+            # obstacles.yaml). Such a manifest declares `derivation` instead and
+            # has no upstream file to compare against; its checked-in snapshot is
+            # still fully verified by verify_world above.
+            print(f"note: {scene_name} is derived, not transcribed; no upstream comparison")
+            continue
+        obstacle_path = paper_src / source["obstacles"]
+        library_path = paper_src / source["polytope_library"]
         missing.extend(path for path in (obstacle_path, library_path) if not path.exists())
         if not obstacle_path.exists() or not library_path.exists():
             continue
