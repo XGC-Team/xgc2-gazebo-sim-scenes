@@ -107,6 +107,8 @@ build_scene_deb() {
   local package="ros-${ROS_DISTRO}-xgc2-gazebo-scene"
   local pkg_root="${BUILD_DIR}/${package}"
   local path_plugin="${pkg_root}${PREFIX}/lib/libobstaclePathPlugin.so"
+  local contact_library="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_scene_contact.so"
+  local geometry_library="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_scene_geometry.so"
   local motion_library="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_scene_motion.so"
   local system_plugin="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_scene_system.so"
   local shlibdeps_output
@@ -118,6 +120,8 @@ build_scene_deb() {
   copy_path "${PREFIX_ROOT}/share/xgc2_gazebo_scene" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/include/xgc2_gazebo_scene" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/libobstaclePathPlugin.so" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_scene_contact.so" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_scene_geometry.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_scene_motion.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_scene_system.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/pkgconfig/xgc2_gazebo_scene.pc" "${pkg_root}"
@@ -134,6 +138,8 @@ build_scene_deb() {
   test -f "${pkg_root}${PREFIX}/lib/pkgconfig/xgc2_gazebo_scene.pc"
   test -f "${pkg_root}${PREFIX}/lib/python3/dist-packages/xgc2_gazebo_scene/msg/_ObstacleDefinition.py"
   test -f "${path_plugin}"
+  test -f "${contact_library}"
+  test -f "${geometry_library}"
   test -f "${motion_library}"
   test -f "${system_plugin}"
 
@@ -156,12 +162,14 @@ EOF
       -O \
       "-l${pkg_root}${PREFIX}/lib" \
       "-e${path_plugin}" \
+      "-e${contact_library}" \
+      "-e${geometry_library}" \
       "-e${motion_library}" \
       "-e${system_plugin}" \
       2>"${shlibdeps_stderr}"
   )"
   grep -Ev \
-    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_motion|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_contact|libxgc2_gazebo_scene_geometry|libxgc2_gazebo_scene_motion|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
     "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
   if [[ -s "${unexpected_stderr}" ]]; then
     echo "dpkg-shlibdeps emitted an unexpected warning:" >&2
@@ -191,7 +199,12 @@ EOF
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
 
-  if readelf -d "${path_plugin}" "${motion_library}" "${system_plugin}" | grep -Eq '(RPATH|RUNPATH)'; then
+  if readelf -d \
+      "${path_plugin}" \
+      "${contact_library}" \
+      "${geometry_library}" \
+      "${motion_library}" \
+      "${system_plugin}" | grep -Eq '(RPATH|RUNPATH)'; then
     echo "Scene libraries contain a build-time RPATH/RUNPATH" >&2
     exit 1
   fi

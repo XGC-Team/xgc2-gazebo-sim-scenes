@@ -129,6 +129,8 @@ docker run --rm \
 
     for library in \
         libobstaclePathPlugin.so \
+        libxgc2_gazebo_scene_contact.so \
+        libxgc2_gazebo_scene_geometry.so \
         libxgc2_gazebo_scene_motion.so \
         libxgc2_gazebo_scene_system.so; do
       dpkg-deb -c /workspace/out/ros-noetic-xgc2-gazebo-scene_*.deb \
