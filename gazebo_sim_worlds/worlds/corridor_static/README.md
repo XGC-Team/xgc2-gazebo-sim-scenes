@@ -1,6 +1,7 @@
 # corridor_static
 
-走廊场景，静态布景。
+结构化窄缝压力场景（structured-narrow stress）。保留原始几何，
+用于验证“通过可行窄缝或明确安全停车”，不作为基础功能调参场景。
 
 World: [`corridor_static.world`](corridor_static.world)
 
