@@ -46,8 +46,10 @@ jobs:
 
       - name: Run C++ quality gate
         run: |
+          install -d "$GITHUB_WORKSPACE/.ci"
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
+            -v "$GITHUB_WORKSPACE/.ci:/workspace/repo/.ci" \
             ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 \
             bash -lc '
               set -euo pipefail
