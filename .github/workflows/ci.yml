@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 2
   cpp-quality:
     runs-on: ubuntu-latest
-    container: ros:noetic-ros-base-focal
+    container: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0
     steps:
       - uses: actions/checkout@v4
   build-debs:
@@ -44,42 +44,25 @@ jobs:
           bash -n .xgc2/scripts/*.sh
 
 
-      - name: Install C++ quality dependencies
-        run: |
-          set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates \
-            curl
-          install -m 0755 -d /etc/apt/keyrings
-          curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
-            -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
-          chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
-            > /etc/apt/sources.list.d/xgc2.list
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            build-essential \
-            clang-format \
-            clang-tidy \
-            libeigen3-dev \
-            libgazebo11-dev \
-            rsync \
-            ros-noetic-catkin \
-            ros-noetic-gazebo-ros \
-            ros-noetic-geometry-msgs \
-            ros-noetic-message-generation \
-            ros-noetic-roscpp \
-            ros-noetic-std-msgs \
-            ros-noetic-xgc2-geometry-msgs
-
       - name: Run C++ quality gate
-        run: .xgc2/scripts/check_cpp_quality.sh
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
+            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 \
+            bash -lc '
+              set -euo pipefail
+              echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
+                >/etc/apt/sources.list.d/xgc2.list
+              apt-get update
+              apt-get install -y --no-install-recommends ros-noetic-xgc2-geometry-msgs
+              cd /workspace/repo
+              .xgc2/scripts/check_cpp_quality.sh
+            '
 
 
       - name: Build and install-check deb packages
         run: |
+          install -d "$GITHUB_WORKSPACE/.ci/build-manifests"
           .xgc2/scripts/build_debs_in_docker.sh \
             --work-dir "$RUNNER_TEMP/xgc2-gazebo-sim-scenes-${{ matrix.arch }}" \
             --output-dir "$GITHUB_WORKSPACE/debs"

@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-DOCKER_IMAGE="${DOCKER_IMAGE:-ros:noetic-ros-base-focal}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-bridge}"
 WORK_DIR="${WORK_DIR:-${REPO_ROOT}/.work/docker}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/debs}"
@@ -55,8 +55,6 @@ docker run --rm \
     set -euo pipefail
 
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends ca-certificates curl
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
       -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
@@ -70,34 +68,6 @@ docker run --rm \
     fi
     apt-get update
     apt-get install -y --no-install-recommends \
-      build-essential \
-      ca-certificates \
-      cmake \
-      dpkg-dev \
-      fakeroot \
-      file \
-      gazebo11 \
-      git \
-      libeigen3-dev \
-      libgazebo11-dev \
-      libxml2-utils \
-      netbase \
-      ripgrep \
-      rsync \
-      ros-noetic-catkin \
-      ros-noetic-gazebo-msgs \
-      ros-noetic-gazebo-ros \
-      ros-noetic-geometry-msgs \
-      ros-noetic-message-generation \
-      ros-noetic-roscpp \
-      ros-noetic-roslaunch \
-      ros-noetic-rospack \
-      ros-noetic-rostest \
-      ros-noetic-rosunit \
-      ros-noetic-std-msgs \
-      ros-noetic-std-srvs \
-      ros-noetic-tf2 \
-      ros-noetic-tf2-ros \
       ros-noetic-xgc2-geometry-msgs
 
     cd /workspace/gazebo-sim-scenes
