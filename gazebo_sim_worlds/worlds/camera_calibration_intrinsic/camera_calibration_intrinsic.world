@@ -15,7 +15,9 @@
     <include>
       <uri>model://checkerboard_8x6</uri>
       <name>intrinsic_checkerboard</name>
-      <pose>2 0 1.5 0 0 0</pose>
+      <!-- Keep the board comfortably above the ground so every automatic
+           calibration view can keep the movable camera at z >= 1.4 m. -->
+      <pose>2 0 2.2 0 0 0</pose>
     </include>
   </world>
 </sdf>
