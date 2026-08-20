@@ -49,7 +49,8 @@ GUI 文件选择器应进入 `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/cat
 | [`building_2f_static`](worlds/building_2f_static/README.md) | 建筑物场景，静态布景。 | [preview](worlds/building_2f_static/preview.png) |
 | [`building_4f_static`](worlds/building_4f_static/README.md) | 建筑物场景，静态布景。 | [preview](worlds/building_4f_static/preview.png) |
 | [`camera_calibration_extrinsic`](worlds/camera_calibration_extrinsic/README.md) | 相机外参标定场景，在三维空间布置六个彩色标记，用于验证相机位姿与世界坐标系之间的外参。 | — |
-| [`camera_calibration_intrinsic`](worlds/camera_calibration_intrinsic/README.md) | 相机内参标定场景，提供 8×6 棋盘格目标和稳定光照，用于采集 Gazebo 相机标定图像。 | — |
+| [`camera_calibration_intrinsic`](worlds/camera_calibration_intrinsic/README.md) | 传统相机内参标定场景，提供 8×6 黑白棋盘格和稳定光照。 | — |
+| [`camera_calibration_intrinsic_aprilgrid_6x6`](worlds/camera_calibration_intrinsic_aprilgrid_6x6/README.md) | 与现场一致的 6×6 tag36h11、88 mm、30% spacing Kalibr AprilGrid 和稳定光照。 | — |
 | [`clearpath_playpen`](worlds/clearpath_playpen/README.md) | Clearpath playpen 地面机器人场地，用于 Gazebo 场景加载和仿真验证。 | [preview](worlds/clearpath_playpen/preview.png) |
 | [`corridor_baseline`](worlds/corridor_baseline/README.md) | 走廊基准场景，用于可重复的基础导航与避障测试。 | — |
 | [`corridor_dynamic_9`](worlds/corridor_dynamic_9/README.md) | 走廊场景，包含动态障碍物，运动由场景导演包发布的 `libobstaclePathPlugin.so` 驱动。 | [preview](worlds/corridor_dynamic_9/preview.png) |

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "generator": {
+    "repository": "https://github.com/ethz-asl/kalibr",
+    "revision": "1f60227442d25e36365ef5f72cd80b9666d73467",
+    "path": "aslam_offline_calibration/kalibr/python/kalibr_create_target_pdf",
+    "sha256": "37b7a6c837faea2593652fc3df9979c1ef4eae6d19262a829fb6d77ccf6b76c5"
+  },
+  "command": [
+    "kalibr_create_target_pdf",
+    "aprilgrid_6x6_tag36h11_88mm_30pct",
+    "--type", "apriltag",
+    "--nx", "6",
+    "--ny", "6",
+    "--tsize", "0.088",
+    "--tspace", "0.3",
+    "--tfam", "t36h11"
+  ],
+  "target": {
+    "family": "tag36h11",
+    "columns": 6,
+    "rows": 6,
+    "startId": 0,
+    "endId": 35,
+    "tagSizeM": 0.088,
+    "tagSpacingRatio": 0.3,
+    "tagSpacingM": 0.0264,
+    "calibrationDatumM": [0.66, 0.66],
+    "renderedTargetM": [0.7128, 0.7128]
+  },
+  "officialPdf": {
+    "path": "source/aprilgrid_6x6_tag36h11_88mm_30pct.pdf",
+    "sha256": "cc44eccba185c25ca31ce74d3a66bb7740867f75d107e49a2b33415443e67a03"
+  },
+  "gazeboTexture": {
+    "path": "materials/textures/aprilgrid_6x6_tag36h11_88mm_30pct.png",
+    "widthPx": 3564,
+    "heightPx": 3564,
+    "pixelsPerMillimeter": 5,
+    "sha256": "dbf37987fc6d2d2e2e00da95f937df2586a7daed6eebe2c78c779b5f627a12a5"
+  }
+}

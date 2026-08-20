@@ -17,4 +17,8 @@ if(CATKIN_ENABLE_TESTING)
     test/verify_formation_scenes.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   )
+  catkin_add_nosetests(
+    test/verify_calibration_targets.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  )
 endif()

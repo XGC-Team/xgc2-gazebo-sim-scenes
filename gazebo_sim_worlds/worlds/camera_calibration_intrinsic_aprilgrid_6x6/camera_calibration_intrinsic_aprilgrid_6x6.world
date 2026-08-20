@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <world name="camera_calibration_intrinsic_aprilgrid_6x6">
+    <include><uri>model://sun</uri></include>
+    <include><uri>model://ground_plane</uri></include>
+    <scene>
+      <ambient>0.65 0.65 0.65 1</ambient>
+      <background>0.15 0.18 0.22 1</background>
+      <shadows>true</shadows>
+    </scene>
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+    <include>
+      <uri>model://aprilgrid_6x6_tag36h11_88mm</uri>
+      <name>intrinsic_aprilgrid</name>
+      <!-- Match the calibrator's board centre and keep every automatic camera
+           pose comfortably above the ground. -->
+      <pose>2 0 2.2 0 0 0</pose>
+    </include>
+  </world>
+</sdf>
