@@ -61,6 +61,9 @@ def test_calibration_worlds_keep_independent_targets() -> None:
     )
     assert "intrinsic_checkerboard" not in aprilgrid
     assert aprilgrid["intrinsic_aprilgrid"].findtext("pose") == "2 0 2.2 0 0 0"
+    world = ET.parse(str(APRILGRID_WORLD)).getroot().find("world")
+    assert world is not None
+    assert world.findtext("./gui/camera/pose") == "-1.5 -2.5 3.3 0 0.25 0.62"
 
 
 def test_field_aprilgrid_geometry_and_official_export_are_exact() -> None:

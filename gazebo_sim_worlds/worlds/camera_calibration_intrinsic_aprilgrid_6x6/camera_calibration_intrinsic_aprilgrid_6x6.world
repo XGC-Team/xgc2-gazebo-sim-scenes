@@ -8,6 +8,14 @@
       <background>0.15 0.18 0.22 1</background>
       <shadows>true</shadows>
     </scene>
+    <gui fullscreen="false">
+      <camera name="calibration_operator_camera">
+        <!-- Open Gazebo facing the printed side at useful scale.  The
+             calibration camera remains a separate movable model. -->
+        <pose>-1.5 -2.5 3.3 0 0.25 0.62</pose>
+        <view_controller>orbit</view_controller>
+      </camera>
+    </gui>
     <physics name="default_physics" type="ode">
       <max_step_size>0.001</max_step_size>
       <real_time_update_rate>1000</real_time_update_rate>
