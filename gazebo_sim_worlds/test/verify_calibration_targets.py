@@ -25,6 +25,7 @@ APRILGRID_WORLD = (
 )
 MODEL_ROOT = PACKAGE_ROOT / "models/aprilgrid_6x6_tag36h11_88mm"
 A4_MODEL_ROOT = PACKAGE_ROOT / "models/aprilgrid_6x6_tag36h11_24mm_a4"
+A4_PROFILE_ID = "a4_6x6_24mm_30pct_kalibr_v1"
 
 
 def _included_models(path: Path) -> dict[str, ET.Element]:
@@ -116,6 +117,18 @@ def test_a4_aprilgrid_profile_has_exact_geometry_and_shared_texture_contract() -
     visual = model.find("./link/visual[@name='official_aprilgrid_target']")
     assert visual is not None
     assert visual.findtext("./geometry/box/size") == "0.002 0.1944 0.1944"
-    assert _png_size(
-        A4_MODEL_ROOT / "materials/textures/aprilgrid_6x6_tag36h11_24mm_30pct.png"
-    ) == (3564, 3564)
+    texture = (
+        A4_MODEL_ROOT
+        / "materials/textures/aprilgrid_6x6_tag36h11_24mm_30pct.png"
+    )
+    field_texture = (
+        MODEL_ROOT
+        / "materials/textures/aprilgrid_6x6_tag36h11_88mm_30pct.png"
+    )
+    assert _png_size(texture) == (3564, 3564)
+    assert _sha256(texture) == (
+        "dbf37987fc6d2d2e2e00da95f937df2586a7daed6eebe2c78c779b5f627a12a5"
+    )
+    assert texture.read_bytes() == field_texture.read_bytes()
+    readme = (A4_MODEL_ROOT / "README.md").read_text(encoding="utf-8")
+    assert A4_PROFILE_ID in readme
