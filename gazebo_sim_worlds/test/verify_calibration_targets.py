@@ -10,6 +10,7 @@ import struct
 import xml.etree.ElementTree as ET
 
 import yaml
+import pytest
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,7 @@ APRILGRID_WORLD = (
     / "camera_calibration_intrinsic_aprilgrid_6x6.world"
 )
 MODEL_ROOT = PACKAGE_ROOT / "models/aprilgrid_6x6_tag36h11_88mm"
+A4_MODEL_ROOT = PACKAGE_ROOT / "models/aprilgrid_6x6_tag36h11_24mm_a4"
 
 
 def _included_models(path: Path) -> dict[str, ET.Element]:
@@ -94,3 +96,26 @@ def test_field_aprilgrid_geometry_and_official_export_are_exact() -> None:
     assert target_visual is not None
     assert target_visual.findtext("./geometry/box/size") == "0.002 0.7128 0.7128"
     assert target_visual.findtext("pose") == "-0.0111 0 0 0 0 0"
+
+
+def test_a4_aprilgrid_profile_has_exact_geometry_and_shared_texture_contract() -> None:
+    target = yaml.safe_load((A4_MODEL_ROOT / "target.yaml").read_text(encoding="utf-8"))
+    assert target == {
+        "target_type": "aprilgrid",
+        "tagCols": 6,
+        "tagRows": 6,
+        "tagSize": 0.024,
+        "tagSpacing": 0.3,
+        "tagFamily": "tag36h11",
+        "tagStartId": 0,
+        "tagEndId": 35,
+    }
+    assert 6 * target["tagSize"] + 5 * target["tagSize"] * target["tagSpacing"] == pytest.approx(0.18)
+    model = ET.parse(str(A4_MODEL_ROOT / "model.sdf")).getroot().find("model")
+    assert model is not None
+    visual = model.find("./link/visual[@name='official_aprilgrid_target']")
+    assert visual is not None
+    assert visual.findtext("./geometry/box/size") == "0.002 0.1944 0.1944"
+    assert _png_size(
+        A4_MODEL_ROOT / "materials/textures/aprilgrid_6x6_tag36h11_24mm_30pct.png"
+    ) == (3564, 3564)

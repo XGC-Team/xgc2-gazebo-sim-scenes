@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="aprilgrid_6x6_tag36h11_24mm_a4">
+    <static>true</static>
+    <link name="board">
+      <!-- Active datum: 6*0.024 + 5*0.0072 = 0.1800 m.
+           Symmetric corner marks add one 0.0072 m gap on every side. -->
+      <collision name="plate_collision">
+        <geometry><box><size>0.010 0.2044 0.2044</size></box></geometry>
+      </collision>
+      <visual name="plate_backing">
+        <geometry><box><size>0.010 0.2044 0.2044</size></box></geometry>
+        <material><script><uri>file://media/materials/scripts/gazebo.material</uri><name>Gazebo/White</name></script></material>
+      </visual>
+      <visual name="official_aprilgrid_target">
+        <pose>-0.0061 0 0 0 0 0</pose>
+        <geometry><box><size>0.002 0.1944 0.1944</size></box></geometry>
+        <cast_shadows>false</cast_shadows>
+        <material>
+          <script>
+            <uri>model://aprilgrid_6x6_tag36h11_24mm_a4/materials/scripts</uri>
+            <uri>model://aprilgrid_6x6_tag36h11_24mm_a4/materials/textures</uri>
+            <name>XGC2/AprilGrid6x6Tag36h11_24mmA4</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

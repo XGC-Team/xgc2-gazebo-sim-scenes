@@ -1,0 +1,15 @@
+material XGC2/AprilGrid6x6Tag36h11_24mmA4
+{
+  technique
+  {
+    pass
+    {
+      lighting off
+      texture_unit
+      {
+        texture aprilgrid_6x6_tag36h11_24mm_30pct.png
+        filtering none
+      }
+    }
+  }
+}
