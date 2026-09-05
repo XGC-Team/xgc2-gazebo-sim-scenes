@@ -1,4 +1,5 @@
 #include <xgc2_gazebo_scene/obstacle_path_plugin.hpp>
+#include <xgc2_gazebo_scene/path_timing.hpp>
 
 namespace gazebo {
 void DynamicObstacle::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf) {
@@ -19,6 +20,9 @@ void DynamicObstacle::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf) {
         this->orientation = true;
     }
 
+    // Also initialize the value when orientation is disabled: duplicate
+    // waypoints can still take the zero-angle duration path below.
+    this->angularVelocity = 0.8;
     if (this->orientation) {
         if (this->sdf->HasElement("angular_velocity")) {
             this->angularVelocity = _sdf->Get<double>("angular_velocity");
@@ -39,14 +43,32 @@ void DynamicObstacle::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf) {
         this->sinWave = false;
     }
 
+    double checked_duration = 0.0;
+    if (!xgc2_gazebo_scene::SegmentDuration(1.0, this->velocity, &checked_duration) ||
+        !xgc2_gazebo_scene::SegmentDuration(1.0, this->angularVelocity, &checked_duration)) {
+        gzerr << "obstaclePathPlugin requires finite positive movement speeds\n";
+        return;
+    }
+
     // read path:
     this->path.clear();
-    if (this->sdf->HasElement("path")) {
+    if (this->sdf->HasElement("path") && this->sdf->GetElement("path")->HasElement("waypoint")) {
         sdf::ElementPtr waypointElem = _sdf->GetElement("path")->GetElement("waypoint");
         while (waypointElem) {
             ignition::math::Vector3d wp = waypointElem->Get<ignition::math::Vector3d>();
             this->path.push_back(wp);
             waypointElem = waypointElem->GetNextElement("waypoint");
+        }
+    }
+
+    if (this->path.size() < 2) {
+        gzerr << "obstaclePathPlugin requires at least two waypoints\n";
+        return;
+    }
+    for (const auto& waypoint : this->path) {
+        if (!std::isfinite(waypoint.X()) || !std::isfinite(waypoint.Y()) || !std::isfinite(waypoint.Z())) {
+            gzerr << "obstaclePathPlugin requires finite waypoints\n";
+            return;
         }
     }
 
@@ -155,7 +177,11 @@ void DynamicObstacle::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf) {
             zNext = poseNext[2];
 
             double distance = sqrt(pow(xNext - xCurr, 2) + pow(yNext - yCurr, 2) + pow(zNext - zCurr, 2));
-            int duration = distance / this->velocity;
+            double duration = 0.0;
+            if (!xgc2_gazebo_scene::SegmentDuration(distance, this->velocity, &duration)) {
+                gzerr << "obstaclePathPlugin has an invalid translation duration\n";
+                return;
+            }
             totalTime += duration;
             this->timeKnot.push_back(totalTime);
         } else { // rotation
@@ -163,10 +189,19 @@ void DynamicObstacle::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf) {
             yawCurr = poseCurr[3];
             yawNext = poseNext[3];
             double angleABSDiff = std::abs(atan2(sin(yawNext - yawCurr), cos(yawNext - yawCurr)));
-            double duration = angleABSDiff / this->angularVelocity;
+            double duration = 0.0;
+            if (!xgc2_gazebo_scene::SegmentDuration(angleABSDiff, this->angularVelocity, &duration)) {
+                gzerr << "obstaclePathPlugin has an invalid rotation duration\n";
+                return;
+            }
             totalTime += duration;
             this->timeKnot.push_back(totalTime);
         }
+    }
+
+    if (!std::isfinite(totalTime) || totalTime <= 0.0) {
+        gzerr << "obstaclePathPlugin requires a finite positive animation duration\n";
+        return;
     }
 
     std::vector<std::vector<double>> newTraj;
@@ -179,9 +214,15 @@ void DynamicObstacle::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf) {
         this->timeKnot = newTime;
     }
 
+    std::vector<std::size_t> keyframe_indices;
+    if (this->pathWithAngle.size() != this->timeKnot.size() ||
+        !xgc2_gazebo_scene::UniqueKeyframeIndices(this->timeKnot, &keyframe_indices) || keyframe_indices.size() < 2) {
+        gzerr << "obstaclePathPlugin requires at least two distinct valid keyframe times\n";
+        return;
+    }
     gazebo::common::PoseAnimationPtr anim(new gazebo::common::PoseAnimation("obstaclePathLoop", totalTime, true));
     gazebo::common::PoseKeyFrame* key;
-    for (int i = 0; i < this->pathWithAngle.size(); ++i) {
+    for (const std::size_t i : keyframe_indices) {
         double t = this->timeKnot[i];
         std::vector<double> pose = this->pathWithAngle[i];
         double x = pose[0];
