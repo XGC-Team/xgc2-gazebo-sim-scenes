@@ -1,0 +1,1 @@
+<launch><include file="$(find gazebo_ros)/launch/empty_world.launch"><arg name="paused" value="true"/><arg name="gui" value="false"/><arg name="world_name" value="$(find xgc2_gazebo_scene)/test/backlog_scene.world"/></include><test test-name="backlog_scene" pkg="xgc2_gazebo_scene" type="backlog_scene.py" time-limit="60"/></launch>

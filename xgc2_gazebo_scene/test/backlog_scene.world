@@ -1,0 +1,42 @@
+<sdf version="1.6"><world name="default"><gravity>0 0 0</gravity><model name="person1_0.5_0.5_1.8">
+      <pose>0 0 0 0 0 0</pose>
+       <link name="link">
+        <collision name="bottom">
+          <pose>0 0 0.9 0 0 1.57</pose>
+          <geometry>
+            <box>
+              <size>0.35 0.75 1.8</size>
+            </box>
+          </geometry>
+        </collision>
+        </link>
+      <static>true</static></model>  
+
+    <model name="probe0"><pose>1 0 .9 0 0 0</pose><link name="body"><inertial><mass>1</mass><inertia><ixx>.01</ixx><iyy>.01</iyy><izz>.01</izz></inertia></inertial><collision name="collision"><geometry><box><size>.2 .2 .2</size></box></geometry></collision><sensor name="contact" type="contact"><always_on>true</always_on><update_rate>100</update_rate><contact><collision>collision</collision></contact><plugin name="bumper" filename="libgazebo_ros_bumper.so"><bumperTopicName>/probe0/contacts</bumperTopicName><frameName>world</frameName></plugin></sensor></link></model><model name="person2_0.5_0.5_1.8">
+      <pose>0 2 0 0 0 0</pose>
+       <link name="link">
+        <collision name="bottom">
+          <pose>0 0 0.9 0 0 1.57</pose>
+          <geometry>
+            <box>
+              <size>0.35 0.75 1.8</size>
+            </box>
+          </geometry>
+        </collision>
+        </link>
+      <static>true</static></model>  
+
+    <model name="probe1"><pose>1 2 .9 0 0 0</pose><link name="body"><inertial><mass>1</mass><inertia><ixx>.01</ixx><iyy>.01</iyy><izz>.01</izz></inertia></inertial><collision name="collision"><geometry><box><size>.2 .2 .2</size></box></geometry></collision><sensor name="contact" type="contact"><always_on>true</always_on><update_rate>100</update_rate><contact><collision>collision</collision></contact><plugin name="bumper" filename="libgazebo_ros_bumper.so"><bumperTopicName>/probe1/contacts</bumperTopicName><frameName>world</frameName></plugin></sensor></link></model><model name="person3_0.5_0.5_1.8">
+      <pose>0 4 0 0 0 0</pose>
+       <link name="link">
+        <collision name="bottom">
+          <pose>0 0 0.9 0 0 1.57</pose>
+          <geometry>
+            <box>
+              <size>0.35 0.75 1.8</size>
+            </box>
+          </geometry>
+        </collision>
+        </link>
+      <static>true</static></model>  
+    <model name="probe2"><pose>1 4 .9 0 0 0</pose><link name="body"><inertial><mass>1</mass><inertia><ixx>.01</ixx><iyy>.01</iyy><izz>.01</izz></inertia></inertial><collision name="collision"><geometry><box><size>.2 .2 .2</size></box></geometry></collision><sensor name="contact" type="contact"><always_on>true</always_on><update_rate>100</update_rate><contact><collision>collision</collision></contact><plugin name="bumper" filename="libgazebo_ros_bumper.so"><bumperTopicName>/probe2/contacts</bumperTopicName><frameName>world</frameName></plugin></sensor></link></model><model name="fractional_path"><static>true</static><link name="body" /><plugin name="path" filename="libobstaclePathPlugin.so"><orientation>false</orientation><velocity>.5</velocity><path><waypoint>0 10 0</waypoint><waypoint>0 10 0</waypoint><waypoint>.375 10 0</waypoint></path></plugin></model></world></sdf>
