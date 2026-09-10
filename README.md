@@ -8,6 +8,13 @@ parts:
 - `xgc2_gazebo_scene`: the scene director. It owns deterministic obstacle
   motion and the XGC2 runtime scene-control interface.
 
+For independently authored obstacle scenes, choose
+[`scene_editable`](gazebo_sim_worlds/worlds/scene_editable/README.md). Its world
+plugin consumes the unified scene runtime interface, materializes live geometry
+and follows scene state. The separate user workflow chooses YAML; starting an
+algorithm is not required. The adapter supports boxes, spheres, cylinders,
+capsules, closed convex meshes and multi-part obstacles without filling openings.
+
 The director currently retains both obstacle controllers without changing
 their behavior:
 

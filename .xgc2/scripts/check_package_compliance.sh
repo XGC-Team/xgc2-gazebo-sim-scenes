@@ -52,6 +52,8 @@ required_files=(
   gazebo_sim_worlds/worlds/catalog/empty.world
   gazebo_sim_worlds/worlds/catalog/empty.md
   gazebo_sim_worlds/worlds/catalog/empty.png
+  gazebo_sim_worlds/worlds/catalog/scene_editable.world
+  gazebo_sim_worlds/worlds/catalog/scene_editable.md
   gazebo_sim_worlds/models/corridor/model.config
   gazebo_sim_worlds/models/corridor/model.sdf
   gazebo_sim_worlds/models/person/model.config
@@ -65,6 +67,9 @@ required_files=(
   xgc2_gazebo_scene/src/gazebo_scene_system_plugin.cpp
   xgc2_gazebo_scene/src/motion_controller.cpp
   xgc2_gazebo_scene/src/obstacle_path_plugin.cpp
+  xgc2_gazebo_scene/src/scene_authoring_world_plugin.cpp
+  xgc2_gazebo_scene/src/scene_model.cpp
+  xgc2_gazebo_scene/include/xgc2_gazebo_scene/scene_model.hpp
 )
 
 for file in "${required_files[@]}"; do
@@ -193,5 +198,6 @@ fi
 
 grep -q 'add_library(obstaclePathPlugin SHARED' xgc2_gazebo_scene/CMakeLists.txt
 grep -q 'add_library(xgc2_gazebo_scene_system SHARED' xgc2_gazebo_scene/CMakeLists.txt
+grep -q 'add_library(xgc2_scene_authoring_world SHARED' xgc2_gazebo_scene/CMakeLists.txt
 
 echo "Package compliance checks passed."

@@ -1,0 +1,5 @@
+<launch>
+  <env name="GAZEBO_MASTER_URI" value="http://127.0.0.1:11468"/>
+  <env name="GAZEBO_MODEL_DATABASE_URI" value=""/>
+  <test test-name="scene_authoring" pkg="xgc2_gazebo_scene" type="xgc2_scene_authoring_test" time-limit="90"/>
+</launch>

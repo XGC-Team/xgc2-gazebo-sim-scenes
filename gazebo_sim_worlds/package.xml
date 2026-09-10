@@ -9,6 +9,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>xgc2_gazebo_scene</exec_depend>
   <test_depend>python3-nose</test_depend>
   <test_depend>python3-yaml</test_depend>
   <export>

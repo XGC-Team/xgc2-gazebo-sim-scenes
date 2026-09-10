@@ -40,6 +40,7 @@
 #include "xgc2_gazebo_scene/convex_mesh_geometry.hpp"
 #include "xgc2_gazebo_scene/motion_controller.hpp"
 #include "xgc2_gazebo_scene/physical_contact_filter.hpp"
+#include "xgc2_gazebo_scene/scene_ownership.hpp"
 #include "xgc2_geometry_msgs/ConvexBodyArray.h"
 #include "xgc2_geometry_msgs/ConvexBodyInstance.h"
 #include "xgc2_geometry_msgs/GeometryLibrary.h"
@@ -791,6 +792,12 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
                 response.scene_revision = scene_revision_;
                 return true;
             }
+            if (IsSceneRuntimeModel(obstacle->second.model->GetName())) {
+                response.success = false;
+                response.message = "motion belongs to the scene runtime: " + motion.name;
+                response.scene_revision = scene_revision_;
+                return true;
+            }
             std::string error;
             const MotionConfiguration configuration = ConvertMotion(motion, &error);
             if (!error.empty()) {
@@ -856,13 +863,23 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         std::set<std::string> names(request.names.begin(), request.names.end());
         if (names.empty()) {
             for (const auto& obstacle : obstacles_) {
-                names.insert(obstacle.first);
+                if (!IsSceneRuntimeModel(obstacle.second.model->GetName()))
+                    names.insert(obstacle.first);
             }
         }
         for (const auto& name : names) {
             if (obstacles_.find(name) == obstacles_.end()) {
                 response.success = false;
                 response.message = "managed obstacle does not exist: " + name;
+                response.scene_revision = scene_revision_;
+                return true;
+            }
+        }
+
+        for (const auto& name : names) {
+            if (IsSceneRuntimeModel(obstacles_.at(name).model->GetName())) {
+                response.success = false;
+                response.message = "motion belongs to the scene runtime: " + name;
                 response.scene_revision = scene_revision_;
                 return true;
             }

@@ -33,6 +33,8 @@ catkin_package(
     xgc2_gazebo_scene_geometry
     xgc2_gazebo_scene_motion
     xgc2_gazebo_scene_system
+    xgc2_scene_model
+    xgc2_scene_authoring_world
   CATKIN_DEPENDS geometry_msgs message_runtime roscpp std_msgs xgc2_geometry_msgs
 )
 
@@ -90,12 +92,28 @@ target_link_libraries(xgc2_gazebo_scene_system
     ${GAZEBO_LIBRARIES}
 )
 
+add_library(xgc2_scene_model src/scene_model.cpp)
+target_compile_features(xgc2_scene_model PUBLIC cxx_std_17)
+target_compile_options(xgc2_scene_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_include_directories(xgc2_scene_model PUBLIC include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
+add_dependencies(xgc2_scene_model ${catkin_EXPORTED_TARGETS})
+target_link_libraries(xgc2_scene_model PUBLIC xgc2_gazebo_scene_geometry ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+
+add_library(xgc2_scene_authoring_world SHARED src/scene_authoring_world_plugin.cpp)
+target_compile_features(xgc2_scene_authoring_world PUBLIC cxx_std_17)
+target_compile_options(xgc2_scene_authoring_world PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_include_directories(xgc2_scene_authoring_world PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
+add_dependencies(xgc2_scene_authoring_world ${catkin_EXPORTED_TARGETS})
+target_link_libraries(xgc2_scene_authoring_world PRIVATE xgc2_scene_model ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+
 install(TARGETS
   obstaclePathPlugin
   xgc2_gazebo_scene_contact
   xgc2_gazebo_scene_geometry
   xgc2_gazebo_scene_motion
   xgc2_gazebo_scene_system
+  xgc2_scene_model
+  xgc2_scene_authoring_world
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -107,9 +125,20 @@ install(FILES README.md DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
+  add_rostest_gtest(xgc2_scene_authoring_test test/scene_authoring.test test/scene_authoring_test.cpp)
+  if(TARGET xgc2_scene_authoring_test)
+    target_compile_features(xgc2_scene_authoring_test PUBLIC cxx_std_17)
+    target_compile_options(xgc2_scene_authoring_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_definitions(xgc2_scene_authoring_test
+      PRIVATE XGC2_SCENE_AUTHORING_TEST_WORLD="${CMAKE_CURRENT_SOURCE_DIR}/test/scene_authoring.world")
+    target_include_directories(xgc2_scene_authoring_test PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
+    add_dependencies(xgc2_scene_authoring_test xgc2_scene_authoring_world ${catkin_EXPORTED_TARGETS})
+    target_link_libraries(xgc2_scene_authoring_test xgc2_scene_model ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+  endif()
   catkin_install_python(PROGRAMS
     test/physical_contact_ground_truth_test.py
     test/scene_ground_truth_test.py
+    test/scene_runtime_gazebo_integration.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
   )
   add_rostest(test/physical_contact_ground_truth.test)

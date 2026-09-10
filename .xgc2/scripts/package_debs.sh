@@ -92,11 +92,12 @@ build_worlds_deb() {
   copy_path "${PREFIX_ROOT}/share/gazebo_sim_worlds" "${pkg_root}"
   test -f "${pkg_root}${PREFIX}/share/gazebo_sim_worlds/package.xml"
   test -f "${pkg_root}${PREFIX}/share/gazebo_sim_worlds/worlds/empty/empty.world"
+  test -f "${pkg_root}${PREFIX}/share/gazebo_sim_worlds/worlds/catalog/scene_editable.world"
   test -f "${pkg_root}${PREFIX}/share/gazebo_sim_worlds/models/corridor/model.sdf"
   write_control \
     "${pkg_root}" \
     "${package}" \
-    "" \
+    "ros-${ROS_DISTRO}-xgc2-gazebo-scene (= ${VERSION})" \
     "Reusable Gazebo Classic world and model assets for XGC2"
   fakeroot dpkg-deb --build \
     "${pkg_root}" \
@@ -111,6 +112,8 @@ build_scene_deb() {
   local geometry_library="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_scene_geometry.so"
   local motion_library="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_scene_motion.so"
   local system_plugin="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_scene_system.so"
+  local scene_model_library="${pkg_root}${PREFIX}/lib/libxgc2_scene_model.so"
+  local authoring_plugin="${pkg_root}${PREFIX}/lib/libxgc2_scene_authoring_world.so"
   local shlibdeps_output
   local shlibdeps
   local shlibdeps_stderr="${BUILD_DIR}/dpkg-shlibdeps.stderr"
@@ -124,6 +127,8 @@ build_scene_deb() {
   copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_scene_geometry.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_scene_motion.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_scene_system.so" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/libxgc2_scene_model.so" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/libxgc2_scene_authoring_world.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/pkgconfig/xgc2_gazebo_scene.pc" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/python3/dist-packages/xgc2_gazebo_scene" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/share/common-lisp/ros/xgc2_gazebo_scene" "${pkg_root}"
@@ -142,6 +147,8 @@ build_scene_deb() {
   test -f "${geometry_library}"
   test -f "${motion_library}"
   test -f "${system_plugin}"
+  test -f "${scene_model_library}"
+  test -f "${authoring_plugin}"
 
   find "${pkg_root}${PREFIX}/lib/python3/dist-packages/xgc2_gazebo_scene" \
     -type d -name __pycache__ -prune -exec rm -rf {} +
@@ -166,10 +173,12 @@ EOF
       "-e${geometry_library}" \
       "-e${motion_library}" \
       "-e${system_plugin}" \
+      "-e${scene_model_library}" \
+      "-e${authoring_plugin}" \
       2>"${shlibdeps_stderr}"
   )"
   grep -Ev \
-    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_contact|libxgc2_gazebo_scene_geometry|libxgc2_gazebo_scene_motion|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_contact|libxgc2_gazebo_scene_geometry|libxgc2_gazebo_scene_motion|libxgc2_scene_model|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
     "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
   if [[ -s "${unexpected_stderr}" ]]; then
     echo "dpkg-shlibdeps emitted an unexpected warning:" >&2
@@ -194,7 +203,7 @@ EOF
   write_control \
     "${pkg_root}" \
     "${package}" \
-    "${shlibdeps}, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-message-runtime, ros-noetic-rosconsole, ros-noetic-roscpp, ros-noetic-roscpp-serialization, ros-noetic-rostime, ros-noetic-std-msgs" \
+    "${shlibdeps}, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-message-runtime, ros-noetic-rosconsole, ros-noetic-roscpp, ros-noetic-roscpp-serialization, ros-noetic-rostime, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-1)" \
     "XGC2 Gazebo Classic scene director and obstacle controllers"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
@@ -204,17 +213,19 @@ EOF
       "${contact_library}" \
       "${geometry_library}" \
       "${motion_library}" \
-      "${system_plugin}" | grep -Eq '(RPATH|RUNPATH)'; then
+      "${system_plugin}" \
+      "${scene_model_library}" \
+      "${authoring_plugin}" | grep -Eq '(RPATH|RUNPATH)'; then
     echo "Scene libraries contain a build-time RPATH/RUNPATH" >&2
     exit 1
   fi
-  for plugin in "${path_plugin}" "${system_plugin}"; do
+  for plugin in "${path_plugin}" "${system_plugin}" "${authoring_plugin}"; do
     if ! nm -D --defined-only "${plugin}" | grep -E '[[:space:]]RegisterPlugin$' >/dev/null; then
       echo "Gazebo plugin does not export RegisterPlugin: ${plugin}" >&2
       exit 1
     fi
   done
-  for library in "${path_plugin}" "${system_plugin}"; do
+  for library in "${path_plugin}" "${system_plugin}" "${scene_model_library}" "${authoring_plugin}"; do
     if LD_LIBRARY_PATH="${pkg_root}${PREFIX}/lib:${PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
         ldd "${library}" | grep -q 'not found'; then
       echo "Scene library has unresolved shared libraries: ${library}" >&2

@@ -24,6 +24,7 @@
   <test_depend>rospy</test_depend>
   <test_depend>gazebo_msgs</test_depend>
   <test_depend>std_srvs</test_depend>
+  <test_depend>xgc2_scene_runtime</test_depend>
 
   <export>
     <gazebo_ros plugin_path="${prefix}/lib" />

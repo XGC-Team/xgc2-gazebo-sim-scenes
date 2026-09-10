@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <world name="default">
+    <physics name="test_physics" type="ode"><max_step_size>0.001</max_step_size><real_time_update_rate>1000</real_time_update_rate></physics>
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="ground"><collision name="ground"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></collision></link>
+    </model>
+    <model name="robot_camera_sentinel">
+      <static>true</static><pose>50 50 1 0 0 0</pose>
+      <link name="body"><collision name="camera"><geometry><box><size>1 1 1</size></box></geometry></collision></link>
+    </model>
+    <plugin name="xgc2_scene_authoring" filename="libxgc2_scene_authoring_world.so">
+      <scene_namespace>/xgc/scene</scene_namespace><apply_timeout>3</apply_timeout>
+    </plugin>
+  </world>
+</sdf>

@@ -1,5 +1,83 @@
 # XGC2 Gazebo Scene
 
+The editable scene entry point is `libxgc2_scene_authoring_world.so`, loaded by
+`gazebo_sim_worlds/worlds/scene_editable/scene_editable.world`. It is an adapter
+for the independent scene runtime, not an algorithm launcher. Select the world
+in Gazebo Server, then load the YAML through the separate user scene workflow.
+
+## Editable scene adapter
+
+- `/xgc/scene/gazebo/apply`: `xgc2_geometry_msgs/ApplyScene`, full typed snapshot.
+- `/xgc/scene/state`: `xgc2_geometry_msgs/SceneState`, computed current poses from
+  the scene runtime. This plugin has no separate motion clock or YAML loader.
+- `/xgc/scene/consumer_status`: `SceneConsumerStatus`, successful applied epoch
+  and revision or an explicit error, with a wall-clock heartbeat.
+
+The world plugin's `scene_namespace` parameter changes the common namespace.
+`apply_timeout` is a wall-clock timeout, default 5 seconds, maximum 60 seconds.
+Applications also work while Gazebo is paused; the adapter does not unpause the
+world or advance simulation time.
+
+Geometry is in metres and the snapshot frame must be `world`. Boxes preserve
+full side lengths, spheres preserve radius, cylinders preserve radius and full
+height. A capsule is an exact union of its cylinder and two end spheres; its
+height is the straight section only. Convex meshes preserve the supplied vertex
+coordinates and triangle topology. The existing convex validator rejects open,
+degenerate and concave meshes. Multi-part objects stay multi-part, so a gate's
+opening remains open. The temporary OBJ files are adapter-owned transport
+artifacts; they are never a second authoring source or a file path accepted from
+the viewer. Gazebo's mesh loader uses float coordinates internally.
+After allocation, original double parameters and cached collision poses are
+restored under the physics update mutex: Gazebo's SDF clone/set paths otherwise
+round authoring values. A zero-height capsule is exactly one sphere.
+
+IDs become injectively encoded model/part names. An unchanged shape retains its
+Gazebo model across other edits. Resize/regeometry replaces only that obstacle's
+model with the same stable name. Clear and replace only remove models actually
+created by this plugin. Prefix-matching foreign models, robots and cameras are
+never adopted or deleted. The name prefix remains `xgc2_obstacle_` so an optional
+legacy physical-contact observer can identify these obstacles, but that observer
+cannot configure or stop their motion. A global stop skips scene-runtime models.
+Retired entities receive a unique internal name before destruction, preventing
+Gazebo's delayed delete requests from deleting their same-name replacements.
+
+Success is returned after the actual Gazebo collision objects have the requested
+types, dimensions, local poses and mesh identity, and their visual definitions
+exist. Stale revisions, retired epochs and different contents at an already
+applied revision fail explicitly. An identical retry preserves current moving
+poses; a missing or corrupted model can be repaired with the same full snapshot.
+State from another epoch/revision, incomplete sets and malformed poses cannot move
+models. Mesh compilation/validation happens before any world mutation.
+Unchanged initial definitions retain their current running poses across edits to
+other obstacles, including when a scene is playing.
+
+World changes are not an atomic transaction. If Gazebo fails after replacement
+has begun, the adapter reports failure and retains the previous applied revision;
+the world can be partially modified. Motion is suspended until a full snapshot
+repairs it. The scene runtime must retain its unsynchronized state and retry or
+apply a compensating full snapshot. Stopping the scene runtime does not clear the
+last physical models. Saving belongs to the scene runtime, not this adapter.
+Corrective snapshots first drain outstanding factory insertions; an older failed
+request cannot insert a late obstacle after a successful correction or Clear.
+
+`scene_authoring.test` tests real Gazebo physics objects, paused edits, all shape
+classes, a ray through the gate opening, stable identity, live membership/size
+updates, stale/malformed messages and foreign-model protection. It uses its own
+Gazebo master and a private rostest ROS master.
+
+`test/scene_runtime_gazebo_integration.py` additionally starts private ROS/Gazebo
+masters and the independent scene runtime. Pass `--scene-file` pointing to the
+algorithm-owned original `uav6_knot/scene.yaml` and `--evidence-dir` pointing to a
+new test output directory. It compares all 16 actual collision definitions using
+the existing collision observer, tests live edits, persistence/reload, motion,
+late subscribers, simulator failure, exact-command retry and accepted-document
+resynchronization. It starts no algorithm. With separately built catkin workspaces,
+source the scene product `devel/setup.bash`, then the common runtime
+`devel/setup.bash --extend`; prepend the scene product's `devel/lib` to
+`GAZEBO_PLUGIN_PATH`. Test input is copied and all subprocesses are cleaned up.
+
+## Legacy world observation and motion
+
 `xgc2_gazebo_scene` is the Gazebo Classic scene director. It retains the
 legacy per-model `libobstaclePathPlugin.so` path animator used by existing
 worlds and provides the global XGC2 ground-truth scene layer. The SystemPlugin

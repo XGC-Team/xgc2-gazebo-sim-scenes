@@ -21,6 +21,7 @@ sudo apt install ros-noetic-xgc2-gazebo-sim-worlds
 ## Installed Assets
 
 - `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/empty/empty.world`
+- `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/scene_editable/scene_editable.world`
 - `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/clearpath_playpen/clearpath_playpen.world`
 - `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/corridor_dynamic_9/corridor_dynamic_9.world`
 - `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/<scene>/README.md`
@@ -45,6 +46,7 @@ GUI 文件选择器应进入 `/opt/ros/noetic/share/gazebo_sim_worlds/worlds/cat
 
 | Scene | Summary | Preview |
 | --- | --- | --- |
+| [`scene_editable`](worlds/scene_editable/README.md) | 通用在线布景空世界；独立场景工作流加载 YAML，算法无需先启动。 | — |
 | [`bridge_static`](worlds/bridge_static/README.md) | 桥梁场景，静态布景。 | [preview](worlds/bridge_static/preview.png) |
 | [`building_2f_static`](worlds/building_2f_static/README.md) | 建筑物场景，静态布景。 | [preview](worlds/building_2f_static/preview.png) |
 | [`building_4f_static`](worlds/building_4f_static/README.md) | 建筑物场景，静态布景。 | [preview](worlds/building_4f_static/preview.png) |
