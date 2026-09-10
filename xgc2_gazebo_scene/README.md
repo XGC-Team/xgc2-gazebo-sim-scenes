@@ -10,8 +10,10 @@ in Gazebo Server, then load the YAML through the separate user scene workflow.
 - `/xgc/scene/gazebo/apply`: `xgc2_geometry_msgs/ApplyScene`, full typed snapshot.
 - `/xgc/scene/state`: `xgc2_geometry_msgs/SceneState`, computed current poses from
   the scene runtime. This plugin has no separate motion clock or YAML loader.
-- `/xgc/scene/consumer_status`: `SceneConsumerStatus`, successful applied epoch
-  and revision or an explicit error, with a wall-clock heartbeat.
+- `/xgc/scene/consumer_status`: `SceneConsumerStatus` heartbeat. `applied` is
+  whether this epoch/revision is in the simulator; `operational` matches
+  `applied` for this adapter; `capability` is `ok` when applied else empty;
+  `success` is published equal to `applied` and is not a second authority.
 
 The world plugin's `scene_namespace` parameter changes the common namespace.
 `apply_timeout` is a wall-clock timeout, default 5 seconds, maximum 60 seconds.

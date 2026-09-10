@@ -87,6 +87,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         transport_->Init(world_->Name());
         visual_ = transport_->Advertise<gazebo::msgs::Visual>("~/visual");
         status_ = node_->advertise<xgc2_geometry_msgs::SceneConsumerStatus>("consumer_status", 10, true);
+        generation_ = 1;
         apply_ = node_->advertiseService("gazebo/apply", &SceneAuthoringWorldPlugin::Apply, this);
         state_ = node_->subscribe("state", 1, &SceneAuthoringWorldPlugin::State, this);
         heartbeat_ = node_->createWallTimer(ros::WallDuration(1.0), &SceneAuthoringWorldPlugin::Heartbeat, this);
@@ -99,14 +100,18 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
     }
 
   private:
-    void Publish(const std::string& epoch, std::uint64_t revision, bool success, const std::string& message) {
+    void Publish(const std::string& epoch, std::uint64_t revision, bool applied, const std::string& message) {
         xgc2_geometry_msgs::SceneConsumerStatus status;
         status.header.stamp = ros::Time::now();
         status.header.frame_id = "world";
         status.epoch = epoch;
         status.revision = revision;
         status.consumer = "gazebo";
-        status.success = success;
+        status.generation = generation_;
+        status.applied = applied;
+        status.operational = applied;
+        status.capability = applied ? "ok" : "";
+        status.success = applied;
         status.message = message;
         status_.publish(status);
     }
@@ -386,6 +391,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
     std::map<std::string, SceneModel> models_;
     bool geometry_consistent_ = false;
     std::string last_error_;
+    std::uint32_t generation_ = 0;
 };
 
 GZ_REGISTER_WORLD_PLUGIN(SceneAuthoringWorldPlugin)
