@@ -231,7 +231,9 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
             // Renaming frees the original name immediately. Waiting only for
             // that name would acknowledge a delete while the retired body and
             // its collision/visual are still in the world.
-            if (!Wait(deadline, [&] { return SceneBodiesGone(remove) && SceneBodiesGone(retiring) && !HasRetiredSceneModels(); }))
+            if (!Wait(deadline, [&] {
+                    return SceneBodiesGone(remove) && SceneBodiesGone(retiring) && !HasRetiredSceneModels();
+                }))
                 return failed("timed out waiting for removed scene collisions");
 
             for (const auto& entry : desired) {
