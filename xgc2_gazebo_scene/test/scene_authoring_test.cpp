@@ -1,4 +1,5 @@
 #include "xgc2_gazebo_scene/scene_model.hpp"
+#include "xgc2_gazebo_scene/scene_ownership.hpp"
 
 #include <gazebo/gazebo.hh>
 #include <gazebo/physics/physics.hh>
@@ -199,6 +200,10 @@ TEST_F(SceneAuthoringTest, UpdatesDimensionsPoseAndMembershipWithoutChangingOthe
     EXPECT_FALSE(Model("change"));
     EXPECT_TRUE(Model("new"));
     EXPECT_EQ(kept_entity_id, Model("keep")->GetId());
+    for (const auto& model : world->Models()) {
+        ASSERT_TRUE(model);
+        EXPECT_FALSE(IsRetiredSceneModel(model->GetName())) << model->GetName();
+    }
     scene_.revision++;
     scene_.obstacles.clear();
     ASSERT_TRUE(Apply()) << result_.message;

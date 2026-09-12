@@ -1,4 +1,5 @@
 #include "xgc2_gazebo_scene/scene_model.hpp"
+#include "xgc2_gazebo_scene/scene_ownership.hpp"
 
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/msgs/msgs.hh>
@@ -222,15 +223,15 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
             return reject(reason);
         };
         try {
-            for (const auto& name : remove)
+            std::set<std::string> retiring;
+            for (const auto& name : remove) {
                 if (const auto model = world_->ModelByName(name))
-                    RemoveOwnedModel(model);
-            if (!Wait(deadline, [&] {
-                    for (const auto& name : remove)
-                        if (world_->ModelByName(name))
-                            return false;
-                    return true;
-                }))
+                    retiring.insert(RemoveOwnedModel(model));
+            }
+            // Renaming frees the original name immediately. Waiting only for
+            // that name would acknowledge a delete while the retired body and
+            // its collision/visual are still in the world.
+            if (!Wait(deadline, [&] { return SceneBodiesGone(remove) && SceneBodiesGone(retiring) && !HasRetiredSceneModels(); }))
                 return failed("timed out waiting for removed scene collisions");
 
             for (const auto& entry : desired) {
@@ -268,7 +269,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
                     for (const auto& name : owned_)
                         if (!desired_names.count(name) && world_->ModelByName(name))
                             return false;
-                    return true;
+                    return SceneBodiesGone(retiring) && !HasRetiredSceneModels();
                 }))
                 return failed("scene application did not complete: " + error);
         } catch (const std::exception& exception) {
@@ -324,31 +325,58 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         last_error_.clear();
     }
 
-    void RemoveOwnedModel(const gazebo::physics::ModelPtr& model) {
-        boost::recursive_mutex::scoped_lock lock(*world_->Physics()->GetPhysicsUpdateMutex());
+    bool SceneBodiesGone(const std::set<std::string>& names) const {
+        for (const auto& name : names) {
+            if (world_->ModelByName(name))
+                return false;
+        }
+        return true;
+    }
+
+    bool HasRetiredSceneModels() const {
+        for (const auto& model : world_->Models()) {
+            if (model && IsRetiredSceneModel(model->GetName()))
+                return true;
+        }
+        return false;
+    }
+
+    void PublishVisualDelete(const gazebo::physics::ModelPtr& model) {
         gazebo::msgs::Visual removal;
         removal.set_name(model->GetScopedName());
         removal.set_id(model->GetId());
         removal.set_parent_name(world_->Name());
         removal.set_delete_me(true);
+        visual_->Publish(removal, true);
+    }
+
+    std::string RemoveOwnedModel(const gazebo::physics::ModelPtr& model) {
         // Entity::Fini publishes an asynchronous entity_delete request. If its
         // old name is immediately reused, that request can delete the replacement
         // model on the next server tick. Retire the old entity under a unique
         // internal name first, including cached descendant scopes.
-        const std::string retired = world_->UniqueModelName("xgc2_retired_scene_" + std::to_string(model->GetId()));
-        model->SetName(retired);
-        std::function<void(const gazebo::physics::BasePtr&)> refresh = [&](const gazebo::physics::BasePtr& parent) {
-            for (unsigned i = 0; i < parent->GetChildCount(); ++i) {
-                auto child = parent->GetChild(i);
-                const auto child_sdf = child->GetSDF();
-                if (child_sdf && child_sdf->HasAttribute("name"))
-                    child->SetName(child->GetName());
-                refresh(child);
-            }
-        };
-        refresh(model);
+        std::string retired;
+        {
+            boost::recursive_mutex::scoped_lock lock(*world_->Physics()->GetPhysicsUpdateMutex());
+            PublishVisualDelete(model);
+            retired = world_->UniqueModelName(std::string(kSceneRetiredModelPrefix) + std::to_string(model->GetId()));
+            model->SetName(retired);
+            std::function<void(const gazebo::physics::BasePtr&)> refresh = [&](const gazebo::physics::BasePtr& parent) {
+                for (unsigned i = 0; i < parent->GetChildCount(); ++i) {
+                    auto child = parent->GetChild(i);
+                    const auto child_sdf = child->GetSDF();
+                    if (child_sdf && child_sdf->HasAttribute("name"))
+                        child->SetName(child->GetName());
+                    refresh(child);
+                }
+            };
+            refresh(model);
+            PublishVisualDelete(model);
+        }
+        // RemoveModel waits for the physics lock. Holding it here would stall
+        // the update thread that actually retires the collision.
         world_->RemoveModel(retired);
-        visual_->Publish(removal, true);
+        return retired;
     }
 
     void Heartbeat(const ros::WallTimerEvent&) {
