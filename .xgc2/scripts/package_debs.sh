@@ -190,7 +190,7 @@ EOF
     echo "dpkg-shlibdeps did not produce scene runtime dependencies" >&2
     exit 1
   fi
-  if ! grep -Eq '(^|, )libgazebo11( |[(])' <<<"${shlibdeps}"; then
+  if ! grep -Eq '(^|, )libgazebo11([[:space:]]|[(]|,|$)' <<<"${shlibdeps}"; then
     echo "Scene runtime dependencies do not include libgazebo11" >&2
     exit 1
   fi
@@ -238,7 +238,95 @@ EOF
     "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
 }
 
+build_lidar_deb() {
+  local package="ros-${ROS_DISTRO}-xgc2-simple-lidar"
+  local pkg_root="${BUILD_DIR}/${package}"
+  local lidar_library="${pkg_root}${PREFIX}/lib/libxgc2_simple_lidar.so"
+  local shlibdeps_output
+  local shlibdeps
+  local shlibdeps_stderr="${BUILD_DIR}/lidar-dpkg-shlibdeps.stderr"
+  local unexpected_stderr="${BUILD_DIR}/lidar-dpkg-shlibdeps-unexpected.stderr"
+
+  mkdir -p "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/share/xgc2_simple_lidar" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/include/xgc2_simple_lidar" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/libxgc2_simple_lidar.so" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/pkgconfig/xgc2_simple_lidar.pc" "${pkg_root}"
+
+  test -f "${pkg_root}${PREFIX}/share/xgc2_simple_lidar/package.xml"
+  test -f "${pkg_root}${PREFIX}/share/xgc2_simple_lidar/models/sensor.xacro"
+  test -f "${pkg_root}${PREFIX}/share/xgc2_simple_lidar/models/sensor.sdf.xacro"
+  test -f "${pkg_root}${PREFIX}/share/xgc2_simple_lidar/cmake/xgc2_simple_lidarConfig.cmake"
+  test -f "${pkg_root}${PREFIX}/include/xgc2_simple_lidar/scan_projection.hpp"
+  test -f "${pkg_root}${PREFIX}/lib/pkgconfig/xgc2_simple_lidar.pc"
+  test -f "${lidar_library}"
+
+  mkdir -p "${BUILD_DIR}/debian"
+  cat > "${BUILD_DIR}/debian/control" <<EOF
+Source: xgc2-gazebo-sim-scenes
+Section: misc
+Priority: optional
+Maintainer: XGC2 <apt@example.com>
+
+Package: ${package}
+Architecture: any
+EOF
+  shlibdeps_output="$(
+    cd "${BUILD_DIR}"
+    dpkg-shlibdeps \
+      -O \
+      "-l${pkg_root}${PREFIX}/lib" \
+      "-e${lidar_library}" \
+      2>"${shlibdeps_stderr}"
+  )"
+  grep -Ev \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_simple_lidar|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
+  if [[ -s "${unexpected_stderr}" ]]; then
+    echo "dpkg-shlibdeps emitted an unexpected lidar warning:" >&2
+    cat "${unexpected_stderr}" >&2
+    exit 1
+  fi
+  shlibdeps="${shlibdeps_output#shlibs:Depends=}"
+  if [[ "${shlibdeps}" == "${shlibdeps_output}" || -z "${shlibdeps}" ]]; then
+    echo "dpkg-shlibdeps did not produce lidar runtime dependencies" >&2
+    exit 1
+  fi
+  if ! grep -Eq '(^|, )libgazebo11([[:space:]]|[(]|,|$)' <<<"${shlibdeps}"; then
+    echo "Lidar runtime dependencies do not include libgazebo11" >&2
+    exit 1
+  fi
+  if grep -Eq '(^|, )(cmake|catkin|gazebo-dev|libgazebo11-dev|libeigen3-dev|ros-noetic-message-generation)( |[(,]|$)' \
+      <<<"${shlibdeps}"; then
+    echo "Lidar runtime dependencies leaked a build-only package" >&2
+    exit 1
+  fi
+
+  write_control \
+    "${pkg_root}" \
+    "${package}" \
+    "${shlibdeps}, ros-${ROS_DISTRO}-gazebo-ros, ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-xacro" \
+    "GPU ray simple lidar plugin and reusable sensor xacro for XGC2"
+  find "${pkg_root}" -type d -exec chmod 0755 {} +
+  find "${pkg_root}" -type f -exec chmod 0644 {} +
+
+  if readelf -d "${lidar_library}" | grep -Eq '(RPATH|RUNPATH)'; then
+    echo "Lidar library contains a build-time RPATH/RUNPATH" >&2
+    exit 1
+  fi
+  if LD_LIBRARY_PATH="${pkg_root}${PREFIX}/lib:${PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+      ldd "${lidar_library}" | grep -q 'not found'; then
+    echo "Lidar library has unresolved shared libraries" >&2
+    exit 1
+  fi
+
+  fakeroot dpkg-deb --build \
+    "${pkg_root}" \
+    "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
+}
+
 build_worlds_deb
 build_scene_deb
+build_lidar_deb
 
 find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.deb' -print | sort

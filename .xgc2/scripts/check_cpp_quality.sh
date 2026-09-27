@@ -23,22 +23,25 @@ for tool in catkin_make clang-format clang-tidy rsync; do
 done
 
 mapfile -t cpp_files < <(
-  find "${repo_root}/xgc2_gazebo_scene" -type f \
+  find "${repo_root}/xgc2_gazebo_scene" "${repo_root}/xgc2_simple_lidar" -type f \
     \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.h' -o -name '*.hpp' \) \
     -print | sort
 )
 if [[ ${#cpp_files[@]} -eq 0 ]]; then
-  echo "No C++ files found under xgc2_gazebo_scene" >&2
+  echo "No C++ files found under the scene packages" >&2
   exit 1
 fi
 
 clang-format -n -Werror "${cpp_files[@]}"
 
 rm -rf "${workspace}"
-mkdir -p "${workspace}/src/xgc2_gazebo_scene"
+mkdir -p "${workspace}/src/xgc2_gazebo_scene" "${workspace}/src/xgc2_simple_lidar"
 rsync -a --delete \
   "${repo_root}/xgc2_gazebo_scene/" \
   "${workspace}/src/xgc2_gazebo_scene/"
+rsync -a --delete \
+  "${repo_root}/xgc2_simple_lidar/" \
+  "${workspace}/src/xgc2_simple_lidar/"
 cp "${repo_root}/.clang-tidy" "${workspace}/src/.clang-tidy"
 
 catkin_make -C "${workspace}" \
@@ -53,7 +56,7 @@ if [[ ! -f "${compile_db}" ]]; then
 fi
 
 mapfile -t tidy_files < <(
-  find "${workspace}/src/xgc2_gazebo_scene" -type f \
+  find "${workspace}/src/xgc2_gazebo_scene" "${workspace}/src/xgc2_simple_lidar" -type f \
     \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' \) \
     ! -name 'obstacle_path_plugin.cpp' -print | sort
 )
@@ -62,7 +65,7 @@ mapfile -t tidy_files < <(
 # and compiled above, but is intentionally outside clang-tidy for now.
 for file in "${tidy_files[@]}"; do
   clang-tidy -p "${workspace}/build" \
-    -header-filter="${workspace}/src/xgc2_gazebo_scene/(include|src|test)/.*" \
+    -header-filter="${workspace}/src/(xgc2_gazebo_scene|xgc2_simple_lidar)/(include|src|test)/.*" \
     "${file}"
 done
 

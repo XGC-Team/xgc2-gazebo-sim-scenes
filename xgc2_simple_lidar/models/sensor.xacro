@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="xgc2_simple_lidar_sensor" params="namespace pose rate:=10 max_range:=20 samples:=360 layers:=16 vertical_fov:=1.0">
+    <sensor name="simple_lidar" type="gpu_ray">
+      <pose>${pose}</pose>
+      <always_on>false</always_on>
+      <update_rate>${rate}</update_rate>
+      <visualize>false</visualize>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>${samples}</samples><resolution>1</resolution>
+            <min_angle>-${pi}</min_angle><max_angle>${pi}</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>${layers}</samples><resolution>1</resolution>
+            <min_angle>${-vertical_fov / 2}</min_angle><max_angle>${vertical_fov / 2}</max_angle>
+          </vertical>
+        </scan>
+        <range><min>0.15</min><max>${max_range}</max><resolution>0.01</resolution></range>
+      </ray>
+      <plugin name="simple_lidar" filename="libxgc2_simple_lidar.so">
+        <robotNamespace>${namespace}</robotNamespace>
+      </plugin>
+    </sensor>
+  </xacro:macro>
+</robot>

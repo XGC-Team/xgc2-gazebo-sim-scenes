@@ -8,8 +8,10 @@ set -u
 
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-sim-worlds" >/dev/null
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-scene" >/dev/null
+dpkg -s "ros-${ROS_DISTRO}-xgc2-simple-lidar" >/dev/null
 test "$(rospack find gazebo_sim_worlds)" = "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds"
 test "$(rospack find xgc2_gazebo_scene)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene"
+test "$(rospack find xgc2_simple_lidar)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar"
 
 world_root="/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds"
 test -f "${world_root}/worlds/empty/empty.world"
@@ -35,6 +37,14 @@ test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/obstacle_path_plugin.h
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/msg/ObstacleDefinition.msg"
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/ConfigureMotions.srv"
 test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/xgc2_gazebo_scene/msg/_ObstacleDefinition.py"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/package.xml"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/models/sensor.xacro"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/models/sensor.sdf.xacro"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/cmake/xgc2_simple_lidarConfig.cmake"
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_simple_lidar/scan_projection.hpp"
+test -f "/opt/ros/${ROS_DISTRO}/lib/pkgconfig/xgc2_simple_lidar.pc"
+test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so"
+xmllint --noout "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/package.xml"
 
 for library in libobstaclePathPlugin.so libxgc2_gazebo_scene_system.so libxgc2_scene_authoring_world.so; do
   if ldd "/opt/ros/${ROS_DISTRO}/lib/${library}" | grep -q 'not found'; then
@@ -52,6 +62,14 @@ if readelf -d \
     "/opt/ros/${ROS_DISTRO}/lib/libxgc2_scene_authoring_world.so" \
     | grep -Eq '(RPATH|RUNPATH)'; then
   echo "Installed Gazebo Scene libraries contain RPATH/RUNPATH" >&2
+  exit 1
+fi
+if ldd "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" | grep -q 'not found'; then
+  echo "Installed simple lidar library has unresolved shared libraries" >&2
+  exit 1
+fi
+if readelf -d "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" | grep -Eq '(RPATH|RUNPATH)'; then
+  echo "Installed simple lidar library contains RPATH/RUNPATH" >&2
   exit 1
 fi
 

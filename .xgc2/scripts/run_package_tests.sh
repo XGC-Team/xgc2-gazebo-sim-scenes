@@ -19,11 +19,13 @@ fi
 rm -rf "${workspace}"
 mkdir -p "${workspace}/src"
 ln -s "${repo_root}/xgc2_gazebo_scene" "${workspace}/src/xgc2_gazebo_scene"
+ln -s "${repo_root}/xgc2_simple_lidar" "${workspace}/src/xgc2_simple_lidar"
 
 # shellcheck source=/dev/null
 source "/opt/ros/${ros_distro}/setup.bash"
 
 catkin_make -C "${workspace}" -DCATKIN_ENABLE_TESTING=ON
 catkin_make -C "${workspace}" run_tests_xgc2_gazebo_scene
+catkin_make -C "${workspace}" run_tests_xgc2_simple_lidar
 catkin_test_results "${workspace}/build/test_results"
 echo "Package tests passed."

@@ -1,22 +1,25 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.3.0-3
+version: 1.4.0-1
 kind: ros1-apt
-summary: Reusable Gazebo Classic worlds and the XGC2 scene director.
+summary: Reusable Gazebo Classic worlds, scene director, and simple lidar plugin.
 ros:
   distro: noetic
   packages:
   - gazebo_sim_worlds
   - xgc2_gazebo_scene
+  - xgc2_simple_lidar
 apt:
   distribution: focal
   install:
   - ros-noetic-xgc2-gazebo-sim-worlds
   - ros-noetic-xgc2-gazebo-scene
+  - ros-noetic-xgc2-simple-lidar
   packages:
   - ros-noetic-xgc2-gazebo-sim-worlds
   - ros-noetic-xgc2-gazebo-scene
+  - ros-noetic-xgc2-simple-lidar
   depends:
   - libgazebo11
   - ros-noetic-gazebo-ros
@@ -26,17 +29,21 @@ apt:
   - ros-noetic-roscpp
   - ros-noetic-roscpp-serialization
   - ros-noetic-rostime
+  - ros-noetic-sensor-msgs
   - ros-noetic-std-msgs
+  - ros-noetic-xacro
   - ros-noetic-xgc2-geometry-msgs (>= 1.2.0-1)
 usage:
   install: 'sudo apt update
 
-    sudo apt install ros-noetic-xgc2-gazebo-sim-worlds ros-noetic-xgc2-gazebo-scene
+    sudo apt install ros-noetic-xgc2-gazebo-sim-worlds ros-noetic-xgc2-gazebo-scene ros-noetic-xgc2-simple-lidar
 
     '
   smoke_test: 'rospack find gazebo_sim_worlds
 
     rospack find xgc2_gazebo_scene
+
+    rospack find xgc2_simple_lidar
 
     test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/empty/empty.world
 
@@ -54,30 +61,50 @@ usage:
 
     test -f /opt/ros/noetic/lib/libxgc2_scene_authoring_world.so
 
+    test -f /opt/ros/noetic/share/xgc2_simple_lidar/package.xml
+
+    test -f /opt/ros/noetic/share/xgc2_simple_lidar/models/sensor.xacro
+
+    test -f /opt/ros/noetic/share/xgc2_simple_lidar/models/sensor.sdf.xacro
+
+    test -f /opt/ros/noetic/share/xgc2_simple_lidar/cmake/xgc2_simple_lidarConfig.cmake
+
+    test -f /opt/ros/noetic/include/xgc2_simple_lidar/scan_projection.hpp
+
+    test -f /opt/ros/noetic/lib/libxgc2_simple_lidar.so
+
+    test -f /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
+
     test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/scene_editable.world
 
     '
-  notes: 'This scene product has two explicit responsibilities. gazebo_sim_worlds
+  notes: 'This product keeps reusable world assets, the scene director, and the
 
-    owns reusable world and model assets only. xgc2_gazebo_scene is the scene
+    independent xgc2_simple_lidar sensor plugin in separate ROS packages.
 
-    director, retains the legacy per-model path animator, and provides the
+    gazebo_sim_worlds owns world and model assets only; xgc2_gazebo_scene owns
 
-    XGC2-managed global SystemPlugin with native and xgc2_geometry_msgs truth.
+    scene control and truth projection; xgc2_simple_lidar owns its GPU ray
+
+    plugin and reusable sensor xacro. World assets do not depend on the lidar.
 
     '
 ownership:
   paths:
   - /opt/ros/noetic/share/gazebo_sim_worlds
   - /opt/ros/noetic/share/xgc2_gazebo_scene
+  - /opt/ros/noetic/share/xgc2_simple_lidar
   - /opt/ros/noetic/include/xgc2_gazebo_scene
+  - /opt/ros/noetic/include/xgc2_simple_lidar
   - /opt/ros/noetic/lib/libobstaclePathPlugin.so
   - /opt/ros/noetic/lib/libxgc2_gazebo_scene_geometry.so
   - /opt/ros/noetic/lib/libxgc2_gazebo_scene_motion.so
   - /opt/ros/noetic/lib/libxgc2_gazebo_scene_system.so
   - /opt/ros/noetic/lib/libxgc2_scene_model.so
   - /opt/ros/noetic/lib/libxgc2_scene_authoring_world.so
+  - /opt/ros/noetic/lib/libxgc2_simple_lidar.so
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
+  - /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
   - /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene
   - /opt/ros/noetic/share/common-lisp/ros/xgc2_gazebo_scene
   - /opt/ros/noetic/share/gennodejs/ros/xgc2_gazebo_scene
@@ -86,4 +113,4 @@ release:
   dependency_policy:
     xgc2-scene-generation: rebuild
   apt_versions:
-    focal: 1.3.0-3
+    focal: 1.4.0-1

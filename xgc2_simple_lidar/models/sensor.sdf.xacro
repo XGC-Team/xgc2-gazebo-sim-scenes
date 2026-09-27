@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<sdf version="1.6" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="sensor.xacro"/>
+  <xacro:arg name="namespace" default="/robot"/>
+  <xacro:arg name="pose" default="0 0 0 0 0 0"/>
+  <xacro:arg name="rate" default="10"/>
+  <xacro:arg name="max_range" default="20"/>
+  <xacro:arg name="samples" default="360"/>
+  <xacro:arg name="layers" default="16"/>
+  <xacro:arg name="vertical_fov" default="1.0"/>
+  <xacro:xgc2_simple_lidar_sensor namespace="$(arg namespace)" pose="$(arg pose)"
+    rate="$(arg rate)" max_range="$(arg max_range)" samples="$(arg samples)"
+    layers="$(arg layers)" vertical_fov="$(arg vertical_fov)"/>
+</sdf>
