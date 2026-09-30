@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="xgc2_simple_lidar_sensor" params="namespace pose rate:=10 max_range:=20 samples:=360 layers:=16 vertical_fov:=1.0">
-    <sensor name="simple_lidar" type="gpu_ray">
+  <xacro:macro name="xgc2_simple_lidar_sensor" params="namespace pose rate:=10 max_range:=20 samples:=360 layers:=16 vertical_fov:=1.0 horizontal_fov:=${2*pi} acceleration:=gpu">
+    <sensor name="simple_lidar" type="${dict(cpu='ray', gpu='gpu_ray')[acceleration]}">
       <pose>${pose}</pose>
       <always_on>false</always_on>
       <update_rate>${rate}</update_rate>
@@ -10,7 +10,7 @@
         <scan>
           <horizontal>
             <samples>${samples}</samples><resolution>1</resolution>
-            <min_angle>-${pi}</min_angle><max_angle>${pi}</max_angle>
+            <min_angle>${-horizontal_fov / 2}</min_angle><max_angle>${horizontal_fov / 2}</max_angle>
           </horizontal>
           <vertical>
             <samples>${layers}</samples><resolution>1</resolution>
@@ -19,7 +19,7 @@
         </scan>
         <range><min>0.15</min><max>${max_range}</max><resolution>0.01</resolution></range>
       </ray>
-      <plugin name="simple_lidar" filename="libxgc2_simple_lidar.so">
+      <plugin name="simple_lidar" filename="${dict(cpu='libxgc2_simple_lidar_cpu.so', gpu='libxgc2_simple_lidar.so')[acceleration]}">
         <robotNamespace>${namespace}</robotNamespace>
       </plugin>
     </sensor>

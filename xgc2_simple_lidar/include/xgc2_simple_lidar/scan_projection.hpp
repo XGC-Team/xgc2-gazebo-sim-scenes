@@ -16,19 +16,22 @@ namespace xgc2_simple_lidar {
 class ScanProjection {
   public:
     ScanProjection(unsigned width, unsigned height, double yaw_min, double yaw_max, double pitch_min, double pitch_max,
-                   double range_min, double range_max)
+                   double range_min, double range_max, bool gpu_layout = true, unsigned stride = 3)
         : range_min_(range_min), range_max_(range_max) {
         if (width < 2 || height < 2)
             throw std::invalid_argument("simple lidar requires at least two samples on each axis");
-        rays_.reserve(static_cast<std::size_t>(width - 1) * height);
+        if (!stride)
+            throw std::invalid_argument("simple lidar scan stride must be positive");
+        const unsigned columns = width - (gpu_layout ? 1 : 0);
+        rays_.reserve(static_cast<std::size_t>(columns) * height);
         for (unsigned j = 0; j < height; ++j) {
             const double pitch = pitch_min + (pitch_max - pitch_min) * j / (height - 1);
             // Gazebo 11 GpuLaser::CreateMesh repeats the previous ray in the last
             // column when it caps the texture index. Do not emit that depth at the
             // requested final angle: it creates points off surfaces at the seam.
-            for (unsigned i = 0; i + 1 < width; ++i) {
+            for (unsigned i = 0; i < columns; ++i) {
                 const double yaw = yaw_min + (yaw_max - yaw_min) * i / (width - 1);
-                rays_.push_back({3 * (static_cast<std::size_t>(j) * width + i),
+                rays_.push_back({stride * (static_cast<std::size_t>(j) * width + i),
                                  {std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)}});
             }
         }

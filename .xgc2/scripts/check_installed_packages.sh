@@ -44,9 +44,10 @@ test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/cmake/xgc2_simple_lidarC
 test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_simple_lidar/scan_projection.hpp"
 test -f "/opt/ros/${ROS_DISTRO}/lib/pkgconfig/xgc2_simple_lidar.pc"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so"
+test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar_cpu.so"
 xmllint --noout "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/package.xml"
 
-for library in libobstaclePathPlugin.so libxgc2_gazebo_scene_system.so libxgc2_scene_authoring_world.so; do
+for library in libobstaclePathPlugin.so libxgc2_gazebo_scene_system.so libxgc2_scene_authoring_world.so libxgc2_simple_lidar.so libxgc2_simple_lidar_cpu.so; do
   if ldd "/opt/ros/${ROS_DISTRO}/lib/${library}" | grep -q 'not found'; then
     echo "Installed Gazebo Scene library has unresolved dependencies: ${library}" >&2
     exit 1
@@ -64,11 +65,11 @@ if readelf -d \
   echo "Installed Gazebo Scene libraries contain RPATH/RUNPATH" >&2
   exit 1
 fi
-if ldd "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" | grep -q 'not found'; then
+if ldd "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar_cpu.so" | grep -q 'not found'; then
   echo "Installed simple lidar library has unresolved shared libraries" >&2
   exit 1
 fi
-if readelf -d "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" | grep -Eq '(RPATH|RUNPATH)'; then
+if readelf -d "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar_cpu.so" | grep -Eq '(RPATH|RUNPATH)'; then
   echo "Installed simple lidar library contains RPATH/RUNPATH" >&2
   exit 1
 fi
