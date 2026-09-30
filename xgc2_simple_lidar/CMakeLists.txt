@@ -4,7 +4,7 @@ project(xgc2_simple_lidar VERSION 0.1.0 LANGUAGES CXX)
 find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs)
 find_package(gazebo REQUIRED)
 
-catkin_package(INCLUDE_DIRS include LIBRARIES xgc2_simple_lidar
+catkin_package(INCLUDE_DIRS include LIBRARIES xgc2_simple_lidar xgc2_simple_lidar_cpu
   CATKIN_DEPENDS roscpp sensor_msgs)
 
 add_library(xgc2_simple_lidar SHARED src/gpu_lidar_plugin.cpp)
@@ -12,8 +12,13 @@ target_compile_features(xgc2_simple_lidar PUBLIC cxx_std_17)
 target_compile_options(xgc2_simple_lidar PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(xgc2_simple_lidar PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
 target_link_libraries(xgc2_simple_lidar PRIVATE ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+add_library(xgc2_simple_lidar_cpu SHARED src/cpu_lidar_plugin.cpp)
+target_compile_features(xgc2_simple_lidar_cpu PUBLIC cxx_std_17)
+target_compile_options(xgc2_simple_lidar_cpu PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(xgc2_simple_lidar_cpu PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
+target_link_libraries(xgc2_simple_lidar_cpu PRIVATE ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 
-install(TARGETS xgc2_simple_lidar LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
+install(TARGETS xgc2_simple_lidar xgc2_simple_lidar_cpu LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 install(DIRECTORY models/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/models)
 

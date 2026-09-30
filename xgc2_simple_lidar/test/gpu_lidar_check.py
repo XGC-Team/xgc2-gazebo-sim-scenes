@@ -16,14 +16,16 @@ from pathlib import Path
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description=(
-            'Isolated Gazebo GPU world-frame scan check; '
-            'requires a hardware GL display.'
+            'Isolated Gazebo native world-frame scan check; '
+            'GPU requires a hardware GL display.'
         )
     )
     parser.add_argument('--ros-port', type=int, required=True)
     parser.add_argument('--gazebo-port', type=int, required=True)
     parser.add_argument('--plugin-dir', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--acceleration', choices=('cpu', 'gpu'), default='gpu')
+    parser.add_argument('--rebuild-cycles', type=int, default=1)
     parser.add_argument(
         '--benchmark-sensors',
         type=int,
@@ -68,7 +70,18 @@ def make_environment(args):
     return environment
 
 
-def start_processes(output_dir, environment, ros_port, processes):
+def prepare_world(args, output_dir):
+    tree = ET.parse(Path(__file__).resolve().with_name('enclosure.world'))
+    if args.acceleration == 'cpu':
+        sensor = tree.getroot().find("world/model[@name='scanner']/link/sensor")
+        sensor.set('type', 'ray')
+        sensor.find('plugin').set('filename', 'libxgc2_simple_lidar_cpu.so')
+    path = output_dir / 'enclosure.world'
+    tree.write(path, encoding='unicode')
+    return path
+
+
+def start_processes(output_dir, environment, ros_port, processes, world):
     commands = [
         ('roscore', ['roscore', '-p', str(ros_port)]),
         (
@@ -78,7 +91,7 @@ def start_processes(output_dir, environment, ros_port, processes):
                 '--verbose',
                 '-s',
                 'libgazebo_ros_api_plugin.so',
-                str(Path(__file__).resolve().with_name('enclosure.world')),
+                str(world),
             ],
         ),
     ]
@@ -173,7 +186,7 @@ def subscribe_sensor(rospy, point_cloud_type, metrics, subscribers, name, topic)
     subscribers.append(subscriber)
 
 
-def benchmark_sensor_load(metrics, gazebo_process, results_path):
+def benchmark_sensor_load(metrics, gazebo_process, results_path, expected_rate):
     time.sleep(2)
     before = copy.deepcopy(metrics)
     cpu_start, _ = process_usage(gazebo_process)
@@ -185,6 +198,8 @@ def benchmark_sensor_load(metrics, gazebo_process, results_path):
         name: {
             'wall_hz': (value['count'] - before[name]['count']) / elapsed,
             'real_time_factor': (value['stamp'] - before[name]['stamp']) / elapsed,
+            'simulation_hz': (value['count'] - before[name]['count'])
+            / (value['stamp'] - before[name]['stamp']),
             'bytes_per_frame': value['bytes'],
         }
         for name, value in metrics.items()
@@ -199,6 +214,11 @@ def benchmark_sensor_load(metrics, gazebo_process, results_path):
     write_phase(results_path, result)
     if any(item['wall_hz'] <= 0 for item in observed.values()):
         raise RuntimeError('one or more sensors stopped publishing')
+    if any(
+        not expected_rate * 0.85 <= item['simulation_hz'] <= expected_rate * 1.15
+        for item in observed.values()
+    ):
+        raise RuntimeError('native scan rate differs from the configured simulation-time rate')
 
 
 def wait_for_sensor_frames(metrics, names, baseline, minimum_frames, timeout, error):
@@ -243,7 +263,7 @@ def check_middle_sensor_rebuild(
 
     deleted = delete_model(middle_name)
     if not deleted.success:
-        raise RuntimeError('could not delete benchmark sensor: ' + middle_name)
+        raise RuntimeError('could not delete benchmark sensor: ' + middle_name + ': ' + deleted.status_message)
     time.sleep(0.3)
 
     during_delete_baseline = copy.deepcopy(metrics)
@@ -312,9 +332,17 @@ def run_check(args):
     reserve_ports(args)
     output_dir, results_path = prepare_output(args)
     environment = make_environment(args)
+    if args.acceleration == 'gpu':
+        renderer = subprocess.check_output(['glxinfo','-B'],env=environment,text=True,stderr=subprocess.STDOUT)
+        (output_dir / 'renderer.txt').write_text(renderer,encoding='utf-8')
+        if any(software in renderer.lower() for software in ('llvmpipe','softpipe','software rasterizer','accelerated: no')):
+            raise RuntimeError('GPU acceptance requires a hardware renderer; see renderer.txt')
+
+    world = prepare_world(args, output_dir)
     processes = []
     try:
-        start_processes(output_dir, environment, args.ros_port, processes)
+        start_processes(output_dir, environment, args.ros_port, processes, world)
+        write_phase(results_path, {'phase': 'configuration', 'acceleration': args.acceleration})
 
         import rospy
         from gazebo_msgs.msg import ModelState
@@ -336,7 +364,7 @@ def run_check(args):
         while len(frames) < 5 and time.monotonic() < deadline:
             time.sleep(0.05)
         if len(frames) < 5:
-            raise RuntimeError('no GPU pointcloud frames')
+            raise RuntimeError('no native pointcloud frames')
         report_cloud('static_mount', frames[-4:], point_cloud2, results_path)
 
         set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
@@ -380,12 +408,12 @@ def run_check(args):
                 queue_size=1,
             )
         delete_model = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
-        if not delete_model('scanner').success:
-            raise RuntimeError('could not delete the live sensor')
+        deleted = delete_model('scanner')
+        if not deleted.success:
+            raise RuntimeError('could not delete the live sensor: ' + deleted.status_message)
         time.sleep(0.3)
         start = len(frames)
 
-        world = Path(__file__).resolve().with_name('enclosure.world')
         model = ET.parse(world).getroot().find("world/model[@name='scanner']")
         model.find('pose').text = '0 0 0 0 0 0'
         sdf = ET.Element('sdf', version='1.6')
@@ -504,7 +532,8 @@ def run_check(args):
                 )
 
             subscribe('scanner', '/test_robot/simple_lidar/points')
-            benchmark_sensor_load(metrics, processes[-1][0], results_path)
+            expected_rate = float(sdf.find('model/link/sensor/update_rate').text)
+            benchmark_sensor_load(metrics, processes[-1][0], results_path, expected_rate)
 
             sensor_sdfs = {}
             for index in range(1, args.benchmark_sensors):
@@ -519,16 +548,17 @@ def run_check(args):
                 subscribe(name, '/' + name + '/simple_lidar/points')
 
             if args.benchmark_sensors > 1:
-                benchmark_sensor_load(metrics, processes[-1][0], results_path)
-                check_middle_sensor_rebuild(
-                    args.benchmark_sensors,
-                    sensor_sdfs,
-                    metrics,
-                    Pose,
-                    spawn_model,
-                    rospy.ServiceProxy('/gazebo/delete_model', DeleteModel),
-                    results_path,
-                )
+                benchmark_sensor_load(metrics, processes[-1][0], results_path, expected_rate)
+                for _ in range(args.rebuild_cycles):
+                    check_middle_sensor_rebuild(
+                        args.benchmark_sensors,
+                        sensor_sdfs,
+                        metrics,
+                        Pose,
+                        spawn_model,
+                        rospy.ServiceProxy('/gazebo/delete_model', DeleteModel),
+                        results_path,
+                    )
 
             for item in subscribers:
                 item.unregister()
@@ -540,7 +570,9 @@ def run_check(args):
 def spawn_box(spawn_model, pose_type, name, x, y, size_x, size_y):
     model_xml = (
         '<sdf version="1.6"><model name="{name}"><static>true</static>'
-        '<link name="body"><visual name="v"><geometry><box><size>'
+        '<link name="body"><collision name="c"><geometry><box><size>'
+        '{size_x} {size_y} 4</size></box></geometry></collision>'
+        '<visual name="v"><geometry><box><size>'
         '{size_x} {size_y} 4</size></box></geometry></visual></link>'
         '</model></sdf>'
     ).format(name=name, size_x=size_x, size_y=size_y)

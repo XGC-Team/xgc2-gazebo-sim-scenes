@@ -242,6 +242,7 @@ build_lidar_deb() {
   local package="ros-${ROS_DISTRO}-xgc2-simple-lidar"
   local pkg_root="${BUILD_DIR}/${package}"
   local lidar_library="${pkg_root}${PREFIX}/lib/libxgc2_simple_lidar.so"
+  local cpu_library="${pkg_root}${PREFIX}/lib/libxgc2_simple_lidar_cpu.so"
   local shlibdeps_output
   local shlibdeps
   local shlibdeps_stderr="${BUILD_DIR}/lidar-dpkg-shlibdeps.stderr"
@@ -251,6 +252,7 @@ build_lidar_deb() {
   copy_path "${PREFIX_ROOT}/share/xgc2_simple_lidar" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/include/xgc2_simple_lidar" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/libxgc2_simple_lidar.so" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/libxgc2_simple_lidar_cpu.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/pkgconfig/xgc2_simple_lidar.pc" "${pkg_root}"
 
   test -f "${pkg_root}${PREFIX}/share/xgc2_simple_lidar/package.xml"
@@ -260,6 +262,7 @@ build_lidar_deb() {
   test -f "${pkg_root}${PREFIX}/include/xgc2_simple_lidar/scan_projection.hpp"
   test -f "${pkg_root}${PREFIX}/lib/pkgconfig/xgc2_simple_lidar.pc"
   test -f "${lidar_library}"
+  test -f "${cpu_library}"
 
   mkdir -p "${BUILD_DIR}/debian"
   cat > "${BUILD_DIR}/debian/control" <<EOF
@@ -277,10 +280,11 @@ EOF
       -O \
       "-l${pkg_root}${PREFIX}/lib" \
       "-e${lidar_library}" \
+      "-e${cpu_library}" \
       2>"${shlibdeps_stderr}"
   )"
   grep -Ev \
-    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_simple_lidar|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_simple_lidar|libxgc2_simple_lidar_cpu|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
     "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
   if [[ -s "${unexpected_stderr}" ]]; then
     echo "dpkg-shlibdeps emitted an unexpected lidar warning:" >&2
@@ -306,16 +310,16 @@ EOF
     "${pkg_root}" \
     "${package}" \
     "${shlibdeps}, ros-${ROS_DISTRO}-gazebo-ros, ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-xacro" \
-    "GPU ray simple lidar plugin and reusable sensor xacro for XGC2"
+    "CPU/GPU ray simple lidar plugins and reusable sensor xacro for XGC2"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
 
-  if readelf -d "${lidar_library}" | grep -Eq '(RPATH|RUNPATH)'; then
+  if readelf -d "${lidar_library}" "${cpu_library}" | grep -Eq '(RPATH|RUNPATH)'; then
     echo "Lidar library contains a build-time RPATH/RUNPATH" >&2
     exit 1
   fi
   if LD_LIBRARY_PATH="${pkg_root}${PREFIX}/lib:${PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
-      ldd "${lidar_library}" | grep -q 'not found'; then
+      ldd "${lidar_library}" "${cpu_library}" | grep -q 'not found'; then
     echo "Lidar library has unresolved shared libraries" >&2
     exit 1
   fi

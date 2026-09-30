@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.4.0-1
+version: 1.4.0-2
 kind: ros1-apt
 summary: Reusable Gazebo Classic worlds, scene director, and simple lidar plugin.
 ros:
@@ -73,6 +73,8 @@ usage:
 
     test -f /opt/ros/noetic/lib/libxgc2_simple_lidar.so
 
+    test -f /opt/ros/noetic/lib/libxgc2_simple_lidar_cpu.so
+
     test -f /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
 
     test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/scene_editable.world
@@ -84,7 +86,7 @@ usage:
 
     gazebo_sim_worlds owns world and model assets only; xgc2_gazebo_scene owns
 
-    scene control and truth projection; xgc2_simple_lidar owns its GPU ray
+    scene control and truth projection; xgc2_simple_lidar owns its CPU/GPU ray
 
     plugin and reusable sensor xacro. World assets do not depend on the lidar.
 
@@ -103,6 +105,7 @@ ownership:
   - /opt/ros/noetic/lib/libxgc2_scene_model.so
   - /opt/ros/noetic/lib/libxgc2_scene_authoring_world.so
   - /opt/ros/noetic/lib/libxgc2_simple_lidar.so
+  - /opt/ros/noetic/lib/libxgc2_simple_lidar_cpu.so
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
   - /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
   - /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene
@@ -113,4 +116,4 @@ release:
   dependency_policy:
     xgc2-scene-generation: rebuild
   apt_versions:
-    focal: 1.4.0-1
+    focal: 1.4.0-2

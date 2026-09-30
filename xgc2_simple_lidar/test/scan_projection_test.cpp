@@ -32,6 +32,19 @@ TEST(ScanProjection, WorldPlanesAndMountingTransform) {
     EXPECT_EQ(cloud.fields.size(), 3u);
 }
 
+TEST(ScanProjection, CpuRangesKeepTheirFinalColumnAndMeasurementPose) {
+    xgc2_simple_lidar::ScanProjection projection(3, 2, 0, M_PI, 0, M_PI_4, 0.1, 20, false, 1);
+    const float ranges[] = {2, 3, 4, 2 * std::sqrt(2.f), 3 * std::sqrt(2.f), 4 * std::sqrt(2.f)};
+    const ignition::math::Pose3d measurement_pose(4, 5, 6, 0, 0, M_PI_2);
+    const auto& cloud = projection.Project(ranges, measurement_pose, ros::Time(12, 345));
+    ASSERT_EQ(cloud.width, 6u);
+    EXPECT_LT(point(cloud, 0).Distance({4, 7, 6}), 1e-5);
+    EXPECT_LT(point(cloud, 2).Distance({4, 1, 6}), 1e-5);
+    EXPECT_LT(point(cloud, 5).Distance({4, 1, 10}), 1e-5);
+    EXPECT_EQ(cloud.header.frame_id, "world");
+    EXPECT_EQ(cloud.header.stamp, ros::Time(12, 345));
+}
+
 TEST(ScanProjection, InvalidReturnsDoNotBecomeObstaclesOrStalePoints) {
     xgc2_simple_lidar::ScanProjection projection(3, 2, 0, 1, 0, 1, 0.1, 20);
     const float invalid[] = {0,
