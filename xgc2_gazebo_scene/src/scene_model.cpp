@@ -164,6 +164,7 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
                   std::map<std::string, SceneModel>* models, std::string* error) {
     models->clear();
     error->clear();
+    ModelSdfParser parser; // reads the SDF specification once, not once per obstacle
     try {
         if (scene.epoch.empty() || scene.scene_id.empty())
             throw std::runtime_error("scene ID and epoch are required");
@@ -241,9 +242,7 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
             model.body = body.str();
             model.sdf = "<sdf version='1.6'><model name='" + model.name + "'>" + PoseXml(model.pose) + model.body +
                         "</model></sdf>";
-            sdf::SDFPtr parsed(new sdf::SDF());
-            sdf::init(parsed);
-            if (!sdf::readString(model.sdf, parsed))
+            if (!parser.Parse(model.sdf))
                 throw std::runtime_error("Gazebo rejected compiled scene SDF");
             models->emplace(model.id, std::move(model));
         }
@@ -256,19 +255,19 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
 }
 
 bool ApplySceneModelParameters(const gazebo::physics::ModelPtr& model, const SceneModel& expected,
-                               const ignition::math::Pose3d& current_pose) {
+                               const ignition::math::Pose3d& current_pose, ModelSdfParser& parser) {
     if (!model)
+        return false;
+    // Parsing takes milliseconds and touches no Gazebo state; the physics update
+    // thread waits on the mutex taken next.
+    if (!parser.Parse(expected.sdf))
         return false;
     boost::recursive_mutex::scoped_lock lock(*model->GetWorld()->Physics()->GetPhysicsUpdateMutex());
     const auto link = model->GetLink("body");
     if (!link || link->GetCollisions().size() != expected.collisions.size())
         return false;
-    sdf::SDFPtr parsed(new sdf::SDF());
-    sdf::init(parsed);
-    if (!sdf::readString(expected.sdf, parsed))
-        return false;
     // UpdateParameters updates visual definitions and their Gazebo messages too.
-    model->UpdateParameters(parsed->Root()->GetElement("model"));
+    model->UpdateParameters(parser.Model());
     model->SetInitialRelativePose(expected.pose);
     model->SetWorldPose(current_pose);
     for (const auto& part : expected.collisions) {

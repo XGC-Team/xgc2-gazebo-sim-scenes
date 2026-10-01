@@ -1,5 +1,7 @@
 #pragma once
 
+#include "xgc2_gazebo_scene/model_sdf_parser.hpp"
+
 #include <gazebo/physics/PhysicsTypes.hh>
 #include <ignition/math/Pose3.hh>
 #include <xgc2_geometry_msgs/SceneSnapshot.h>
@@ -40,8 +42,10 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
 
 // Gazebo's SDF factory clones values through low-precision strings. Restore the
 // original typed parameters after allocation, under the physics update mutex.
+// The SDF is parsed first, with `parser`, so the mutex is held only while the
+// world is changed.
 bool ApplySceneModelParameters(const gazebo::physics::ModelPtr& model, const SceneModel& expected,
-                               const ignition::math::Pose3d& current_pose);
+                               const ignition::math::Pose3d& current_pose, ModelSdfParser& parser);
 
 // Inspect the runtime physics objects, not just the requested SDF or model name.
 bool VerifySceneModel(const gazebo::physics::ModelPtr& model, const SceneModel& expected, bool verify_pose,

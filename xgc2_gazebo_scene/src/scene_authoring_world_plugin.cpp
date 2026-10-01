@@ -284,7 +284,8 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
                     for (const auto& entry : desired) {
                         const auto model = FindModel(entry.second.name);
                         if (!parameterized.count(entry.first)) {
-                            if (!ApplySceneModelParameters(model, entry.second, current_poses.at(entry.first))) {
+                            if (!ApplySceneModelParameters(model, entry.second, current_poses.at(entry.first),
+                                                           sdf_parser_)) {
                                 VerifySceneModel(model, entry.second, false, &error);
                                 if (error.empty())
                                     error = entry.first + ": factory model is not initialized";
@@ -495,6 +496,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         ignition::math::Pose3d result;
     };
     ModelIndex<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> model_index_;
+    ModelSdfParser sdf_parser_;
     std::map<std::string, AppliedPose> applied_poses_;
     bool geometry_consistent_ = false;
     std::string last_error_;

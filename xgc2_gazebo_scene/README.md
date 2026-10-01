@@ -50,6 +50,11 @@ applied revision fail explicitly. An identical retry preserves current moving
 poses; a missing or corrupted model can be repaired with the same full snapshot.
 State from another epoch/revision, incomplete sets and malformed poses cannot move
 models. Mesh compilation/validation happens before any world mutation.
+Every obstacle's SDF is parsed twice per application (validation, then restoring
+its parameters under the physics update mutex). `ModelSdfParser`
+(`model_sdf_parser.hpp`) reads the SDF specification once, which costs about 25 ms
+per `sdf::init`, and the parameters are restored after parsing, not during it.
+`test/run_sdf_parser_benchmark.sh` measures it with libsdformat.
 Applying, State and the heartbeat resolve scene models through an index of the
 world's model list (`model_index.hpp`) that is rebuilt only when the list changes
 (`World::ModelByName` walks every entity and holds the model-loading mutex while
