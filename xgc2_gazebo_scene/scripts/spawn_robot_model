@@ -1,0 +1,297 @@
+#!/usr/bin/env python3
+"""Insert one robot model from a ROS parameter into the shared Gazebo world.
+
+A drop-in for the subset of gazebo_ros spawn_model that robot launch files
+use (-urdf/-sdf, -param, -model, pose, -reference_frame, -robot_namespace,
+-gazebo_namespace), with three differences that matter for large fleets:
+
+* The host-wide Gazebo spawn lock (/tmp/xgc2-gazebo-spawn.lock, shared with
+  Core's FS150 spawn helper) is held only across the insert and its check.
+  Interpreter start, rospy import, node registration and reading the model
+  happen before it, so robots prepare in parallel while one insert runs.
+  Robot launches used to hold that lock across the whole spawn_model process
+  with flock(1), or took no lock at all.
+* Gazebo presence is read from the ROS master over plain XML-RPC before rospy
+  is imported, and every wait is bounded. gazebo_ros spawn_model waited for
+  the spawn service forever.
+* The insert is confirmed in the world model list and retried when Gazebo
+  reports success but drops the model. An existing model of the same name is
+  reused, as a failed spawn_model left it.
+
+With -hold, a successful run replaces itself with sleep(1) so a launch file
+can mark the node required: roslaunch then ends as soon as a spawn fails,
+instead of waiting for readiness to time out, and keeps no Python process
+per robot while it runs.
+
+Exit codes: 0 spawned or reused, 1 failed (Gazebo may still be starting),
+5 no Gazebo on the ROS master, 6 the ROS master did not answer.
+"""
+import argparse
+import fcntl
+import http.client
+import json
+import math
+import os
+import signal
+import sys
+import time
+import xml.etree.ElementTree as ET
+import xmlrpc.client
+
+EXIT_FAILED = 1
+EXIT_GAZEBO_ABSENT = 5
+EXIT_MASTER_UNREACHABLE = 6
+
+GAZEBO_SPAWN_LOCK_PATH = "/tmp/xgc2-gazebo-spawn.lock"
+MASTER_CALL_TIMEOUT_SECONDS = 2.0
+PRESENCE_POLL_SECONDS = 0.2
+VERIFY_WAIT_SECONDS = 10.0
+SPAWN_ATTEMPTS = 4
+SPAWN_RETRY_SECONDS = 0.5
+PROBE_CALLER_ID = "/xgc2_spawn_robot_model_probe"
+
+
+class HelperExit(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def strip_ros_remaps(argv):
+    """Match rospy.myargv without importing rospy."""
+    return [value for value in argv if ":=" not in value]
+
+
+def master_uri_from(argv, environment):
+    for value in argv:
+        if value.startswith("__master:="):
+            return value.split(":=", 1)[1]
+    return environment.get("ROS_MASTER_URI") or "http://localhost:11311"
+
+
+class _TimeoutTransport(xmlrpc.client.Transport):
+    def __init__(self, timeout):
+        super().__init__()
+        self._timeout = timeout
+
+    def make_connection(self, host):
+        connection = super().make_connection(host)
+        connection.timeout = self._timeout
+        return connection
+
+
+def master_system_state(master_uri, timeout=MASTER_CALL_TIMEOUT_SECONDS):
+    """Return [publishers, subscribers, services] from one master round trip."""
+    proxy = xmlrpc.client.ServerProxy(master_uri, transport=_TimeoutTransport(timeout))
+    code, message, state = proxy.getSystemState(PROBE_CALLER_ID)
+    if code != 1:
+        raise OSError("ROS master rejected getSystemState: {}".format(message))
+    return state
+
+
+def gazebo_presence(state, gazebo_namespace, required_services):
+    """Classify a master snapshot as "ready", "starting", or "absent"."""
+    publishers, subscribers, services = state
+    service_names = {name for name, _providers in services}
+    if all(name in service_names for name in required_services):
+        return "ready"
+    if any(name.startswith(gazebo_namespace + "/") for name in service_names):
+        return "starting"
+    for _name, nodes in list(publishers) + list(subscribers) + list(services):
+        if gazebo_namespace in nodes:
+            return "starting"
+    return "absent"
+
+
+def wait_for_gazebo(master_uri, gazebo_namespace, required_services, absent_seconds, starting_seconds,
+                    probe=master_system_state, clock=time.monotonic, sleep=time.sleep):
+    """Return once Gazebo advertises the required services, else raise HelperExit."""
+    started = clock()
+    last_error = None
+    while True:
+        try:
+            presence = gazebo_presence(probe(master_uri), gazebo_namespace, required_services)
+        except (OSError, http.client.HTTPException, xmlrpc.client.Error, ValueError, TypeError) as error:
+            presence, last_error = None, error
+        if presence == "ready":
+            return
+        elapsed = clock() - started
+        if presence is None and elapsed >= min(absent_seconds, 5.0):
+            raise HelperExit(EXIT_MASTER_UNREACHABLE, "ROS master {} did not answer for {:.1f} s: {}".format(
+                master_uri, elapsed, last_error))
+        if presence == "absent" and elapsed >= absent_seconds:
+            raise HelperExit(EXIT_GAZEBO_ABSENT, (
+                "Gazebo is not running on ROS master {}: no {} node or service is registered after {:.1f} s"
+            ).format(master_uri, gazebo_namespace, elapsed))
+        if presence == "starting" and elapsed >= starting_seconds:
+            raise HelperExit(EXIT_FAILED, "Gazebo on {} did not advertise {} within {:.0f} s".format(
+                master_uri, ", ".join(required_services), starting_seconds))
+        sleep(PRESENCE_POLL_SECONDS)
+
+
+def quaternion_from_rpy(roll, pitch, yaw):
+    """Same static-axis convention as tf.transformations.quaternion_from_euler."""
+    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+    cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
+    return (
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    )
+
+
+def acquire_gazebo_spawn_lock(path=GAZEBO_SPAWN_LOCK_PATH):
+    """The lock that Core's FS150 helper takes for its inserts on this host."""
+    handle = open(path, "a+")
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    return handle
+
+
+def release_gazebo_spawn_lock(handle):
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    handle.close()
+
+
+def model_exists(get_world_properties, model):
+    return model in (get_world_properties().model_names or ())
+
+
+def wait_for_model(get_world_properties, model, deadline_seconds):
+    deadline = time.monotonic() + deadline_seconds
+    while True:
+        if model_exists(get_world_properties, model):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.1)
+
+
+def insert_model(spawn, get_world_properties, args, model_xml, robot_namespace, pose, log):
+    """Insert under the shared lock.
+
+    Returns ("spawned" or "reused", seconds the lock was held), or raises
+    HelperExit when Gazebo does not keep the model.
+    """
+    lock = acquire_gazebo_spawn_lock()
+    locked = time.monotonic()
+    try:
+        if model_exists(get_world_properties, args.model):
+            log("model {} is already in Gazebo; reusing it".format(args.model))
+            return "reused", time.monotonic() - locked
+        last_message = ""
+        for attempt in range(1, SPAWN_ATTEMPTS + 1):
+            result = spawn(args.model, model_xml, robot_namespace, pose, args.reference_frame)
+            last_message = result.status_message
+            if (result.success and wait_for_model(get_world_properties, args.model, VERIFY_WAIT_SECONDS)) or \
+                    model_exists(get_world_properties, args.model):
+                return "spawned", time.monotonic() - locked
+            log("spawn attempt {} for {} did not keep the model: {}".format(attempt, args.model, last_message))
+            if attempt < SPAWN_ATTEMPTS:
+                time.sleep(SPAWN_RETRY_SECONDS)
+        raise HelperExit(EXIT_FAILED, "Gazebo did not keep model {} after {} attempts ({})".format(
+            args.model, SPAWN_ATTEMPTS, last_message))
+    finally:
+        release_gazebo_spawn_lock(lock)
+
+
+def parse_arguments(argv):
+    parser = argparse.ArgumentParser(prog="spawn_robot_model")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("-urdf", action="store_true", help="the parameter holds URDF")
+    source.add_argument("-sdf", action="store_true", help="the parameter holds SDF")
+    parser.add_argument("-param", required=True, help="ROS parameter holding the model XML")
+    parser.add_argument("-model", required=True, help="Gazebo model name")
+    parser.add_argument("-reference_frame", default="")
+    parser.add_argument("-gazebo_namespace", default="/gazebo")
+    parser.add_argument("-robot_namespace", default=None, help="defaults to this node's namespace")
+    for axis in ("x", "y", "z", "R", "P", "Y"):
+        parser.add_argument("-" + axis, type=float, default=0.0)
+    parser.add_argument("-hold", action="store_true",
+                        help="after success, keep running (as sleep) so the node can be required")
+    parser.add_argument("-gazebo_timeout", type=float, default=30.0,
+                        help="seconds to wait for a Gazebo that is not registered at all")
+    parser.add_argument("-service_timeout", type=float, default=60.0,
+                        help="seconds to wait for a registered Gazebo to advertise its services")
+    return parser.parse_args(strip_ros_remaps(argv)[1:])
+
+
+def hold():
+    """Stay alive for roslaunch without keeping the Python process."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # A plain integer works for GNU and busybox sleep alike (68 years).
+    os.execvp("sleep", ["sleep", "2147483647"])
+
+
+def main(argv=None):
+    argv = sys.argv if argv is None else argv
+    args = parse_arguments(argv)
+    gazebo_namespace = args.gazebo_namespace.rstrip("/") or "/gazebo"
+    spawn_service = gazebo_namespace + ("/spawn_urdf_model" if args.urdf else "/spawn_sdf_model")
+    world_service = gazebo_namespace + "/get_world_properties"
+
+    def fail(code, message):
+        print("spawn_robot_model: " + message, file=sys.stderr, flush=True)
+        raise SystemExit(code)
+
+    def stop(_signum, _frame):
+        raise SystemExit(EXIT_FAILED)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        wait_for_gazebo(master_uri_from(argv, os.environ), gazebo_namespace, (world_service, spawn_service),
+                        args.gazebo_timeout, args.service_timeout)
+    except HelperExit as failure:
+        fail(failure.code, str(failure))
+
+    import rospy
+    from gazebo_msgs.srv import GetWorldProperties, SpawnModel
+    from geometry_msgs.msg import Pose
+
+    # Operator-side client: follow wall time, not /clock, like Core's helper.
+    rospy.init_node("spawn_" + args.model, anonymous=True, disable_signals=True, disable_rostime=True)
+    robot_namespace = rospy.get_namespace() if args.robot_namespace is None else args.robot_namespace
+    try:
+        model_xml = rospy.get_param(args.param)
+    except KeyError:
+        fail(EXIT_FAILED, "parameter {} does not exist".format(args.param))
+    if not isinstance(model_xml, str) or not model_xml.strip():
+        fail(EXIT_FAILED, "parameter {} is empty".format(args.param))
+    try:
+        ET.fromstring(model_xml)
+    except ET.ParseError as error:
+        fail(EXIT_FAILED, "parameter {} is not XML: {}".format(args.param, error))
+
+    pose = Pose()
+    pose.position.x, pose.position.y, pose.position.z = args.x, args.y, args.z
+    (pose.orientation.x, pose.orientation.y,
+     pose.orientation.z, pose.orientation.w) = quaternion_from_rpy(args.R, args.P, args.Y)
+
+    try:
+        for name in (world_service, spawn_service):
+            rospy.wait_for_service(name, timeout=args.service_timeout)
+    except rospy.ROSException as error:
+        fail(EXIT_FAILED, str(error))
+    get_world_properties = rospy.ServiceProxy(world_service, GetWorldProperties)
+    spawn = rospy.ServiceProxy(spawn_service, SpawnModel)
+    try:
+        outcome, locked_seconds = insert_model(
+            spawn, get_world_properties, args, model_xml, robot_namespace, pose,
+            lambda message: print("spawn_robot_model: " + message, flush=True))
+    except HelperExit as failure:
+        fail(failure.code, str(failure))
+    except rospy.ServiceException as error:
+        fail(EXIT_FAILED, "Gazebo service call failed: {}".format(error))
+    print("SPAWN_ROBOT_MODEL_RESULT " + json.dumps({
+        "model": args.model, "outcome": outcome, "lockSeconds": round(locked_seconds, 3),
+    }), flush=True)
+    rospy.signal_shutdown("model {}".format(outcome))
+    if args.hold:
+        hold()
+
+
+if __name__ == "__main__":
+    main()

@@ -163,3 +163,15 @@ strips, and fans, resolves optional named/centered submeshes, and verifies that
 every triangle belongs to one closed convex body. Unsupported, open, concave,
 degenerate, or multi-body mesh collisions reject the entire managed obstacle
 instead of publishing partial or approximated planning geometry.
+
+## Robot spawn helper
+
+`spawn_robot_model` replaces `gazebo_ros spawn_model` in robot launch files
+(`-urdf|-sdf -param P -model M -x ... -Y ...`, plus `-hold`). It holds the
+host-wide `/tmp/xgc2-gazebo-spawn.lock`, which Core's FS150 spawn Job also
+takes, only across the insert and its check in the world model list, so robots
+start their interpreters and read their models in parallel. It waits for
+Gazebo with bounded timeouts: exit 5 when no Gazebo is registered on the ROS
+master, 6 when the master does not answer, 1 for other failures. A model that
+already exists is reused. With `-hold` a successful run becomes `sleep`, so the
+launch can mark the node `required="true"` and end as soon as a spawn fails.

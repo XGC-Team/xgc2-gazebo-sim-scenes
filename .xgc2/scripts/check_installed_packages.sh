@@ -37,6 +37,7 @@ test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/obstacle_path_plugin.h
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/msg/ObstacleDefinition.msg"
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/ConfigureMotions.srv"
 test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/xgc2_gazebo_scene/msg/_ObstacleDefinition.py"
+test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/spawn_robot_model"
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/package.xml"
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/models/sensor.xacro"
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/models/sensor.sdf.xacro"

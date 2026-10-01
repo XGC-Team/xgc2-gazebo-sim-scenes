@@ -131,6 +131,7 @@ build_scene_deb() {
   copy_path "${PREFIX_ROOT}/lib/libxgc2_scene_authoring_world.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/pkgconfig/xgc2_gazebo_scene.pc" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/python3/dist-packages/xgc2_gazebo_scene" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/xgc2_gazebo_scene" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/share/common-lisp/ros/xgc2_gazebo_scene" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/share/gennodejs/ros/xgc2_gazebo_scene" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/share/roseus/ros/xgc2_gazebo_scene" "${pkg_root}"
@@ -142,6 +143,7 @@ build_scene_deb() {
   test -f "${pkg_root}${PREFIX}/include/xgc2_gazebo_scene/obstacle_path_plugin.hpp"
   test -f "${pkg_root}${PREFIX}/lib/pkgconfig/xgc2_gazebo_scene.pc"
   test -f "${pkg_root}${PREFIX}/lib/python3/dist-packages/xgc2_gazebo_scene/msg/_ObstacleDefinition.py"
+  test -f "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/spawn_robot_model"
   test -f "${path_plugin}"
   test -f "${contact_library}"
   test -f "${geometry_library}"
@@ -203,10 +205,12 @@ EOF
   write_control \
     "${pkg_root}" \
     "${package}" \
-    "${shlibdeps}, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-message-runtime, ros-noetic-rosconsole, ros-noetic-roscpp, ros-noetic-roscpp-serialization, ros-noetic-rostime, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-1)" \
-    "XGC2 Gazebo Classic scene director and obstacle controllers"
+    "${shlibdeps}, ros-noetic-gazebo-msgs, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-message-runtime, ros-noetic-rosconsole, ros-noetic-roscpp, ros-noetic-roscpp-serialization, ros-noetic-rospy, ros-noetic-rostime, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-1)" \
+    "XGC2 Gazebo Classic scene director, obstacle controllers and robot spawn helper"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
+  # roslaunch runs this helper as a node; it must stay executable.
+  chmod 0755 "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/spawn_robot_model"
 
   if readelf -d \
       "${path_plugin}" \

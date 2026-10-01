@@ -22,12 +22,14 @@ apt:
   - ros-noetic-xgc2-simple-lidar
   depends:
   - libgazebo11
+  - ros-noetic-gazebo-msgs
   - ros-noetic-gazebo-ros
   - ros-noetic-geometry-msgs
   - ros-noetic-message-runtime
   - ros-noetic-rosconsole
   - ros-noetic-roscpp
   - ros-noetic-roscpp-serialization
+  - ros-noetic-rospy
   - ros-noetic-rostime
   - ros-noetic-sensor-msgs
   - ros-noetic-std-msgs
@@ -60,6 +62,8 @@ usage:
     test -f /opt/ros/noetic/lib/libxgc2_gazebo_scene_system.so
 
     test -f /opt/ros/noetic/lib/libxgc2_scene_authoring_world.so
+
+    test -x /opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model
 
     test -f /opt/ros/noetic/share/xgc2_simple_lidar/package.xml
 
@@ -109,6 +113,7 @@ ownership:
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
   - /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
   - /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene
+  - /opt/ros/noetic/lib/xgc2_gazebo_scene
   - /opt/ros/noetic/share/common-lisp/ros/xgc2_gazebo_scene
   - /opt/ros/noetic/share/gennodejs/ros/xgc2_gazebo_scene
   - /opt/ros/noetic/share/roseus/ros/xgc2_gazebo_scene
