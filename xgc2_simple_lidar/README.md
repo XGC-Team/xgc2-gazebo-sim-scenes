@@ -11,9 +11,10 @@ The shared `models/sensor.xacro` macro can be included inside a Gazebo link
 sensor element for SDF model generators. Its required arguments are `namespace`
 and `pose` (`x y z roll pitch yaw`, relative to the parent link). Defaults are
 10 Hz, 360 horizontal samples, 16 vertical samples over one radian, and 20 m
-range. `max_range`, `samples`, `layers`, `horizontal_fov`, `vertical_fov`, `rate`,
-and `acceleration` can be set
-by the model description.
+range, full circle, GPU; they are defined once, as properties in
+`models/sensor.xacro` that the macro parameters and the `sensor.sdf.xacro`
+arguments both read. `max_range`, `samples`, `layers`, `horizontal_fov`,
+`vertical_fov`, `rate`, and `acceleration` can be set by the model description.
 
 FS150, Scout and Wheeltec launch files expose `enable_simple_lidar` and
 `simple_lidar_pose`. The sensor is omitted by default. Once installed and

@@ -3,13 +3,14 @@
   <xacro:include filename="sensor.xacro"/>
   <xacro:arg name="namespace" default="/robot"/>
   <xacro:arg name="pose" default="0 0 0 0 0 0"/>
-  <xacro:arg name="rate" default="10"/>
-  <xacro:arg name="max_range" default="20"/>
-  <xacro:arg name="samples" default="360"/>
-  <xacro:arg name="layers" default="16"/>
-  <xacro:arg name="vertical_fov" default="1.0"/>
-  <xacro:arg name="horizontal_fov" default="6.283185307179586"/>
-  <xacro:arg name="acceleration" default="gpu"/>
+  <!-- Optional overrides; their defaults are the macro's, from sensor.xacro. -->
+  <xacro:arg name="rate" default="${str(xgc2_simple_lidar_default_rate)}"/>
+  <xacro:arg name="max_range" default="${str(xgc2_simple_lidar_default_max_range)}"/>
+  <xacro:arg name="samples" default="${str(xgc2_simple_lidar_default_samples)}"/>
+  <xacro:arg name="layers" default="${str(xgc2_simple_lidar_default_layers)}"/>
+  <xacro:arg name="vertical_fov" default="${str(xgc2_simple_lidar_default_vertical_fov)}"/>
+  <xacro:arg name="horizontal_fov" default="${str(xgc2_simple_lidar_default_horizontal_fov)}"/>
+  <xacro:arg name="acceleration" default="${str(xgc2_simple_lidar_default_acceleration)}"/>
   <xacro:xgc2_simple_lidar_sensor namespace="$(arg namespace)" pose="$(arg pose)"
     rate="$(arg rate)" max_range="$(arg max_range)" samples="$(arg samples)"
     layers="$(arg layers)" vertical_fov="$(arg vertical_fov)" horizontal_fov="$(arg horizontal_fov)" acceleration="$(arg acceleration)"/>

@@ -1,6 +1,15 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="xgc2_simple_lidar_sensor" params="namespace pose rate:=10 max_range:=20 samples:=360 layers:=16 vertical_fov:=1.0 horizontal_fov:=${2*pi} acceleration:=gpu">
+  <!-- The only definition of the scan defaults. The macro parameters and the
+       sensor.sdf.xacro arguments both read these properties. -->
+  <xacro:property name="xgc2_simple_lidar_default_rate" value="10"/>
+  <xacro:property name="xgc2_simple_lidar_default_max_range" value="20"/>
+  <xacro:property name="xgc2_simple_lidar_default_samples" value="360"/>
+  <xacro:property name="xgc2_simple_lidar_default_layers" value="16"/>
+  <xacro:property name="xgc2_simple_lidar_default_vertical_fov" value="1.0"/>
+  <xacro:property name="xgc2_simple_lidar_default_horizontal_fov" value="${2*pi}"/>
+  <xacro:property name="xgc2_simple_lidar_default_acceleration" value="gpu"/>
+  <xacro:macro name="xgc2_simple_lidar_sensor" params="namespace pose rate:=${xgc2_simple_lidar_default_rate} max_range:=${xgc2_simple_lidar_default_max_range} samples:=${xgc2_simple_lidar_default_samples} layers:=${xgc2_simple_lidar_default_layers} vertical_fov:=${xgc2_simple_lidar_default_vertical_fov} horizontal_fov:=${xgc2_simple_lidar_default_horizontal_fov} acceleration:=${xgc2_simple_lidar_default_acceleration}">
     <sensor name="simple_lidar" type="${dict(cpu='ray', gpu='gpu_ray')[acceleration]}">
       <pose>${pose}</pose>
       <always_on>false</always_on>
