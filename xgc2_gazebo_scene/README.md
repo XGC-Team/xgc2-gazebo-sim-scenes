@@ -50,10 +50,12 @@ applied revision fail explicitly. An identical retry preserves current moving
 poses; a missing or corrupted model can be repaired with the same full snapshot.
 State from another epoch/revision, incomplete sets and malformed poses cannot move
 models. Mesh compilation/validation happens before any world mutation.
-State and the heartbeat resolve scene models through a lookup that is kept until
-the world's model list changes (`World::ModelByName` walks every entity), and a
-held obstacle whose requested pose is unchanged, and which is still exactly where
-the adapter last put it, is not set again.
+Applying, State and the heartbeat resolve scene models through an index of the
+world's model list (`model_index.hpp`) that is rebuilt only when the list changes
+(`World::ModelByName` walks every entity and holds the model-loading mutex while
+it does), refreshed before every step and every 10 ms wait pass. A held obstacle
+whose requested pose is unchanged, and which is still exactly where the adapter
+last put it, is not set again.
 Unchanged initial definitions retain their current running poses across edits to
 other obstacles, including when a scene is playing.
 

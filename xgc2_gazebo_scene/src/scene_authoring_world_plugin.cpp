@@ -1,4 +1,4 @@
-#include "xgc2_gazebo_scene/model_snapshot.hpp"
+#include "xgc2_gazebo_scene/model_index.hpp"
 #include "xgc2_gazebo_scene/scene_model.hpp"
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
 
@@ -177,8 +177,9 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         // those requests before applying a corrective snapshot; otherwise a
         // successful Clear could be followed by a late, unacknowledged obstacle.
         if (!Wait(deadline, [&] {
+                RefreshModelLookup();
                 for (auto it = pending_factory_.begin(); it != pending_factory_.end();) {
-                    if (world_->ModelByName(*it))
+                    if (FindModel(*it))
                         it = pending_factory_.erase(it);
                     else
                         ++it;
@@ -188,11 +189,11 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
             last_error_ = "previous Gazebo factory requests are still incomplete; retry synchronization";
             return reject(last_error_);
         }
+        RefreshModelLookup();
         if (identity == snapshot_identity_ && geometry_consistent_) {
             bool intact = true;
             for (const auto& entry : desired) {
-                intact =
-                    intact && VerifySceneModel(world_->ModelByName(entry.second.name), entry.second, false, &error);
+                intact = intact && VerifySceneModel(FindModel(entry.second.name), entry.second, false, &error);
             }
             if (intact) {
                 // An RPC retry must not reset a moving obstacle to its initial pose.
@@ -206,7 +207,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         // Never adopt or overwrite a model created by another world component,
         // even if it happens to use our naming prefix.
         for (const auto& entry : desired) {
-            if (world_->ModelByName(entry.second.name) && !owned_.count(entry.second.name)) {
+            if (FindModel(entry.second.name) && !owned_.count(entry.second.name)) {
                 return reject("model name is owned outside this scene adapter: " + entry.second.name);
             }
         }
@@ -220,7 +221,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
             if (!desired_names.count(name))
                 remove.insert(name);
         for (const auto& entry : desired) {
-            const auto model = world_->ModelByName(entry.second.name);
+            const auto model = FindModel(entry.second.name);
             const auto previous = models_.find(entry.first);
             current_poses[entry.first] = entry.second.pose;
             if (geometry_consistent_ && scene.epoch == epoch_ && model && previous != models_.end() &&
@@ -246,20 +247,27 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         try {
             std::set<std::string> retiring;
             for (const auto& name : remove) {
-                if (const auto model = world_->ModelByName(name))
+                if (const auto model = FindModel(name))
                     retiring.insert(RemoveOwnedModel(model));
             }
             // Renaming frees the original name immediately. Waiting only for
             // that name would acknowledge a delete while the retired body and
             // its collision/visual are still in the world.
+            // Retired bodies are gone when Gazebo has destroyed them, not when it
+            // takes them off its model list a moment before: confirm each once
+            // with ModelByName (see AllGone).
+            std::set<std::string> confirmed_gone;
             if (!Wait(deadline, [&] {
-                    return SceneBodiesGone(remove) && SceneBodiesGone(retiring) && !HasRetiredSceneModels();
+                    RefreshModelLookup();
+                    return SceneBodiesGone(remove) && RetiredBodiesGone(retiring, &confirmed_gone) &&
+                           !HasRetiredSceneModels();
                 }))
                 return failed("timed out waiting for removed scene collisions");
 
+            RefreshModelLookup();
             for (const auto& entry : desired) {
                 const auto& definition = entry.second;
-                const auto model = world_->ModelByName(definition.name);
+                const auto model = FindModel(definition.name);
                 if (model) {
                     model->SetWorldPose(current_poses.at(entry.first));
                 } else {
@@ -272,8 +280,9 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
                 return failed("scene application timed out before collision verification");
             std::set<std::string> parameterized;
             if (!Wait(deadline, [&] {
+                    RefreshModelLookup();
                     for (const auto& entry : desired) {
-                        const auto model = world_->ModelByName(entry.second.name);
+                        const auto model = FindModel(entry.second.name);
                         if (!parameterized.count(entry.first)) {
                             if (!ApplySceneModelParameters(model, entry.second, current_poses.at(entry.first))) {
                                 VerifySceneModel(model, entry.second, false, &error);
@@ -290,9 +299,9 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
                             return false;
                     }
                     for (const auto& name : owned_)
-                        if (!desired_names.count(name) && world_->ModelByName(name))
+                        if (!desired_names.count(name) && FindModel(name))
                             return false;
-                    return SceneBodiesGone(retiring) && !HasRetiredSceneModels();
+                    return RetiredBodiesGone(retiring, &confirmed_gone) && !HasRetiredSceneModels();
                 }))
                 return failed("scene application did not complete: " + error);
         } catch (const std::exception& exception) {
@@ -361,31 +370,35 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         last_error_.clear();
     }
 
-    // World::ModelByName walks the whole entity tree and copies every scoped
-    // name on the way; State used it twice per obstacle per message. Its answer
-    // for any name can only change when the world's model list does (a model
-    // added, removed or renamed: retirement renames before removing), so
-    // answers are kept until the list differs from the one they were found in.
-    // They are kept weakly: a removed model is not kept alive by the cache.
+    // World::ModelByName walks the whole entity tree, copies every scoped name
+    // on the way and holds the world's model-loading mutex meanwhile, which
+    // keeps the factory waiting while it loads the models being waited for.
+    // State used it twice per obstacle per message and Apply's wait loops once
+    // per obstacle per 10 ms pass, so every lookup goes through an index of the
+    // world's model list (model_index.hpp) that RefreshModelLookup() rebuilds
+    // only when the list differs from the one it was built from: a model
+    // added, removed or renamed (retirement renames before removing). Every
+    // State message, heartbeat and Apply step or wait pass refreshes it first.
+    // The index holds models weakly: a removed model is not kept alive.
     void RefreshModelLookup() {
-        const auto models = world_->Models();
-        if (!lookup_snapshot_.Matches(models)) {
-            model_lookup_.clear();
+        if (model_index_.Refresh(world_->Models()))
             applied_poses_.clear();
-            lookup_snapshot_.Update(models);
-        }
     }
 
-    gazebo::physics::ModelPtr FindModel(const std::string& name) {
-        auto found = model_lookup_.find(name);
-        if (found == model_lookup_.end())
-            found = model_lookup_.emplace(name, world_->ModelByName(name)).first;
-        return found->second.lock();
+    gazebo::physics::ModelPtr FindModel(const std::string& name) const { return model_index_.Find(name); }
+
+    bool RetiredBodiesGone(const std::set<std::string>& names, std::set<std::string>* confirmed) const {
+        return AllGone(
+            model_index_, names,
+            [this](const std::string& name) {
+                return world_->ModelByName(name) != nullptr;
+            },
+            confirmed);
     }
 
     bool SceneBodiesGone(const std::set<std::string>& names) const {
         for (const auto& name : names) {
-            if (world_->ModelByName(name))
+            if (FindModel(name))
                 return false;
         }
         return true;
@@ -481,8 +494,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         ignition::math::Pose3d requested;
         ignition::math::Pose3d result;
     };
-    ModelSnapshot<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> lookup_snapshot_;
-    std::map<std::string, boost::weak_ptr<gazebo::physics::Model>> model_lookup_;
+    ModelIndex<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> model_index_;
     std::map<std::string, AppliedPose> applied_poses_;
     bool geometry_consistent_ = false;
     std::string last_error_;

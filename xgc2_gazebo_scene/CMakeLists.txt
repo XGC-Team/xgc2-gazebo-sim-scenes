@@ -163,6 +163,13 @@ if(CATKIN_ENABLE_TESTING)
     target_include_directories(xgc2_gazebo_scene_model_snapshot_test PRIVATE include)
   endif()
 
+  catkin_add_gtest(xgc2_gazebo_scene_model_index_test test/model_index_test.cpp)
+  if(TARGET xgc2_gazebo_scene_model_index_test)
+    target_compile_features(xgc2_gazebo_scene_model_index_test PUBLIC cxx_std_17)
+    target_compile_options(xgc2_gazebo_scene_model_index_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_include_directories(xgc2_gazebo_scene_model_index_test PRIVATE include)
+  endif()
+
   catkin_add_gtest(xgc2_gazebo_scene_geometry_test test/convex_mesh_geometry_test.cpp)
   if(TARGET xgc2_gazebo_scene_geometry_test)
     target_compile_features(xgc2_gazebo_scene_geometry_test PUBLIC cxx_std_17)
