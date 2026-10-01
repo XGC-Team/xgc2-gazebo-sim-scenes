@@ -27,7 +27,9 @@ at most 5,744 points (68,928 XYZ bytes). CPU keeps all 360 columns, up to
 compiler and the stand-in headers under `test/standalone` (their ignition
 quaternion arithmetic repeats ignition-math 6 operation for operation); the
 catkin build runs the same test against GoogleTest, ignition-math and
-sensor_msgs.
+sensor_msgs. `test/run_standalone_benchmark.sh` times a frame against the
+frozen 1.4.0-2 projection (`test/legacy_scan_projection.hpp`) and checks that
+both produce the same bytes.
 
 Use XGC ROS1 runtime 1.2.4 or later with the Gazebo GPU-laser material fix, and a
 working hardware OpenGL display. Upstream Gazebo 11.15.1 shares its second-pass

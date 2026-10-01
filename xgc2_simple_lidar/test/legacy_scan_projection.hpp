@@ -1,3 +1,7 @@
+// Frozen copy of ScanProjection as of xgc2-gazebo-sim-scenes 1.4.0-2: one
+// ignition RotateVector, with its quaternion inverse, per point. The tests
+// and the benchmark compare the current projection with it bit for bit.
+// Test-only; never installed. The only edit is the explicit size_t offset.
 #pragma once
 
 #include <cmath>
@@ -9,14 +13,15 @@
 #include <ignition/math/Pose3.hh>
 #include <sensor_msgs/PointCloud2.h>
 
-namespace xgc2_simple_lidar {
+namespace xgc2_simple_lidar_test {
 
 // Gazebo rays use +X forward, +Y left, +Z up, not camera optical axes.
 // Configure once; frames reuse direction and message storage without PCL.
-class ScanProjection {
+class LegacyScanProjection {
   public:
-    ScanProjection(unsigned width, unsigned height, double yaw_min, double yaw_max, double pitch_min, double pitch_max,
-                   double range_min, double range_max, bool gpu_layout = true, unsigned stride = 3)
+    LegacyScanProjection(unsigned width, unsigned height, double yaw_min, double yaw_max, double pitch_min,
+                         double pitch_max, double range_min, double range_max, bool gpu_layout = true,
+                         unsigned stride = 3)
         : range_min_(range_min), range_max_(range_max) {
         if (width < 2 || height < 2)
             throw std::invalid_argument("simple lidar requires at least two samples on each axis");
@@ -37,7 +42,7 @@ class ScanProjection {
         }
         cloud_.header.frame_id = "world";
         cloud_.height = 1;
-        cloud_.point_step = kPointStep;
+        cloud_.point_step = 3 * sizeof(float);
         cloud_.is_dense = true;
         const std::uint16_t endian = 1;
         cloud_.is_bigendian = *reinterpret_cast<const std::uint8_t*>(&endian) == 0;
@@ -49,48 +54,34 @@ class ScanProjection {
             field.count = 1;
             cloud_.fields.push_back(field);
         }
-        cloud_.data.reserve(rays_.size() * kPointStep);
+        cloud_.data.reserve(rays_.size() * cloud_.point_step);
     }
 
     const sensor_msgs::PointCloud2& Project(const float* scan, const ignition::math::Pose3d& sensor_in_world,
                                             const ros::Time& stamp) {
         cloud_.header.stamp = stamp;
         ++cloud_.header.seq;
-        // Frame constants. Points are stored through a byte pointer, which may
-        // alias anything, so reading the pose inside the loop made every point
-        // reload it and recompute Quaternion::Inverse (a norm and four
-        // divisions). The per-point products are still ignition's
-        // RotateVector, q * (v * q^-1), so every point is bit-identical.
-        const ignition::math::Quaterniond rotation = sensor_in_world.Rot();
-        const ignition::math::Quaterniond inverse = rotation.Inverse();
-        const double x = sensor_in_world.Pos().X(), y = sensor_in_world.Pos().Y(), z = sensor_in_world.Pos().Z();
-        const double range_min = range_min_, range_max = range_max_;
-        // The capacity reserved at construction holds every ray: no allocation.
-        cloud_.data.resize(rays_.size() * kPointStep);
-        std::uint8_t* const out = cloud_.data.data();
-        std::size_t count = 0;
+        cloud_.data.resize(rays_.size() * cloud_.point_step);
+        unsigned count = 0;
         for (const auto& ray : rays_) {
             // Gazebo's raw GPU frame is range, retro, unused. It precedes the
             // sensor's noise/invalid-range postprocessing; this is an ideal sensor.
             const double range = scan[ray.offset];
-            if (!std::isfinite(range) || range <= range_min || range >= range_max)
+            if (!std::isfinite(range) || range <= range_min_ || range >= range_max_)
                 continue;
-            const auto v = ray.direction * range;
-            const auto rotated = rotation * (ignition::math::Quaterniond(0.0, v.X(), v.Y(), v.Z()) * inverse);
-            const float xyz[] = {static_cast<float>(x + rotated.X()), static_cast<float>(y + rotated.Y()),
-                                 static_cast<float>(z + rotated.Z())};
-            std::memcpy(out + count * kPointStep, xyz, sizeof(xyz));
+            const auto point = sensor_in_world.Pos() + sensor_in_world.Rot().RotateVector(ray.direction * range);
+            const float xyz[] = {static_cast<float>(point.X()), static_cast<float>(point.Y()),
+                                 static_cast<float>(point.Z())};
+            std::memcpy(cloud_.data.data() + static_cast<std::size_t>(count) * cloud_.point_step, xyz, sizeof(xyz));
             ++count;
         }
-        cloud_.width = static_cast<std::uint32_t>(count);
-        cloud_.row_step = static_cast<std::uint32_t>(count * kPointStep);
+        cloud_.width = count;
+        cloud_.row_step = count * cloud_.point_step;
         cloud_.data.resize(cloud_.row_step);
         return cloud_;
     }
 
   private:
-    static constexpr std::uint32_t kPointStep = 3 * sizeof(float);
-
     double range_min_, range_max_;
     struct Ray {
         std::size_t offset;
@@ -100,4 +91,4 @@ class ScanProjection {
     sensor_msgs::PointCloud2 cloud_;
 };
 
-} // namespace xgc2_simple_lidar
+} // namespace xgc2_simple_lidar_test
