@@ -17,7 +17,10 @@ class ScanProjection {
   public:
     ScanProjection(unsigned width, unsigned height, double yaw_min, double yaw_max, double pitch_min, double pitch_max,
                    double range_min, double range_max, bool gpu_layout = true, unsigned stride = 3)
-        : range_min_(range_min), range_max_(range_max) {
+        // Ranges arrive as floats. A double limit with no exact float, such as
+        // 20.9, let the GPU's no-hit value float(20.9) through as a sphere of
+        // points at the maximum range, and float(0.15) passed the near limit.
+        : range_min_(static_cast<float>(range_min)), range_max_(static_cast<float>(range_max)) {
         if (width < 2 || height < 2)
             throw std::invalid_argument("simple lidar requires at least two samples on each axis");
         if (!stride)
@@ -64,7 +67,7 @@ class ScanProjection {
         const ignition::math::Quaterniond rotation = sensor_in_world.Rot();
         const ignition::math::Quaterniond inverse = rotation.Inverse();
         const double x = sensor_in_world.Pos().X(), y = sensor_in_world.Pos().Y(), z = sensor_in_world.Pos().Z();
-        const double range_min = range_min_, range_max = range_max_;
+        const float range_min = range_min_, range_max = range_max_;
         // The capacity reserved at construction holds every ray: no allocation.
         cloud_.data.resize(rays_.size() * kPointStep);
         std::uint8_t* const out = cloud_.data.data();
@@ -72,10 +75,11 @@ class ScanProjection {
         for (const auto& ray : rays_) {
             // Gazebo's raw GPU frame is range, retro, unused. It precedes the
             // sensor's noise/invalid-range postprocessing; this is an ideal sensor.
-            const double range = scan[ray.offset];
-            if (!std::isfinite(range) || range <= range_min || range >= range_max)
+            // A range must lie strictly between the limits; NaN and inf fail.
+            const float range = scan[ray.offset];
+            if (!(range > range_min && range < range_max))
                 continue;
-            const auto v = ray.direction * range;
+            const auto v = ray.direction * static_cast<double>(range);
             const auto rotated = rotation * (ignition::math::Quaterniond(0.0, v.X(), v.Y(), v.Z()) * inverse);
             const float xyz[] = {static_cast<float>(x + rotated.X()), static_cast<float>(y + rotated.Y()),
                                  static_cast<float>(z + rotated.Z())};
@@ -91,7 +95,7 @@ class ScanProjection {
   private:
     static constexpr std::uint32_t kPointStep = 3 * sizeof(float);
 
-    double range_min_, range_max_;
+    float range_min_, range_max_;
     struct Ray {
         std::size_t offset;
         ignition::math::Vector3d direction;

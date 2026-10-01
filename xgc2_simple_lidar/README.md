@@ -18,7 +18,9 @@ by the model description.
 FS150, Scout and Wheeltec launch files expose `enable_simple_lidar` and
 `simple_lidar_pose`. The sensor is omitted by default. Once installed and
 enabled, it scans only while the point cloud has subscribers. Invalid or
-out-of-range points are omitted. On the GPU path, the final horizontal column is omitted because
+out-of-range points are omitted: a range must lie strictly between the minimum
+and maximum compared as floats, so a maximum without an exact float, such as
+20.9 m, does not turn misses into a sphere of points. On the GPU path, the final horizontal column is omitted because
 Gazebo 11 repeats a texture-edge ray there; the default complete frame contains
 at most 5,744 points (68,928 XYZ bytes). CPU keeps all 360 columns, up to
 5,760 points (69,120 bytes).

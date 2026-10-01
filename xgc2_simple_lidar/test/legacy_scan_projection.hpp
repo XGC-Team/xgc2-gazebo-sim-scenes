@@ -1,6 +1,8 @@
 // Frozen copy of ScanProjection as of xgc2-gazebo-sim-scenes 1.4.0-2: one
-// ignition RotateVector, with its quaternion inverse, per point. The tests
-// and the benchmark compare the current projection with it bit for bit.
+// ignition RotateVector, with its quaternion inverse, per point, and range
+// limits compared as doubles. The tests and the benchmark compare the
+// current projection with it bit for bit; only a range equal to a limit's
+// float rounding is treated differently now (see LimitsAreComparedAsFloats).
 // Test-only; never installed. The only edit is the explicit size_t offset.
 #pragma once
 

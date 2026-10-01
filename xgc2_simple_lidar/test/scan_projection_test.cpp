@@ -119,9 +119,11 @@ void RoomRanges(std::vector<float>& scan, unsigned width, unsigned height, unsig
 TEST(ScanProjection, FramesAreBitIdenticalToThePerPointRotation) {
     std::mt19937 random(20261001);
     std::uniform_real_distribution<double> unit(0.0, 1.0), angle(-M_PI, M_PI);
+    // float(0.15) itself is left out: it is the one value whose treatment
+    // changed with float limits (see LimitsAreComparedAsFloats).
     const float special[] = {0.0f,
                              -1.0f,
-                             0.15f,
+                             std::nextafter(0.15f, 0.0f),
                              20.0f,
                              25.0f,
                              std::numeric_limits<float>::infinity(),
@@ -165,6 +167,41 @@ TEST(ScanProjection, FramesAreBitIdenticalToThePerPointRotation) {
     }
     EXPECT_EQ(frames, 144u);
     EXPECT_TRUE(points > 100000u);
+}
+
+// One GPU frame of five columns per row: the fifth column is Gazebo's
+// repeated texel and is never read. Retro values are never coordinates.
+std::vector<float> GpuFrame(const std::vector<float>& ranges) {
+    std::vector<float> scan;
+    for (const float range : ranges) {
+        scan.push_back(range);
+        scan.push_back(0.5f);
+        scan.push_back(0.0f);
+    }
+    return scan;
+}
+
+TEST(ScanProjection, LimitsAreComparedAsFloats) {
+    // 20.9 has no exact float. The GPU writes float(20.9) for a ray that hit
+    // nothing; compared as a double it passed as a point on a 20.9 m sphere.
+    // float(0.15) is above 0.15 and passed the near limit the same way.
+    const float far = static_cast<float>(20.9), near = static_cast<float>(0.15);
+    EXPECT_LT(static_cast<double>(far), 20.9);
+    EXPECT_TRUE(static_cast<double>(near) > 0.15);
+    const auto scan = GpuFrame({far, 20.89f, near, 0.16f, 1, far, std::nextafter(far, 0.f), 1, 1, 1});
+    ScanProjection projection(5, 2, -M_PI, M_PI, 0.15, 0.3, 0.15, 20.9);
+    const auto& cloud = projection.Project(scan.data(), {}, ros::Time(1));
+    ASSERT_EQ(cloud.width, 5u);
+    EXPECT_NEAR(point(cloud, 0).Distance({}), 20.89, 1e-4);
+    EXPECT_NEAR(point(cloud, 1).Distance({}), 0.16, 1e-5);
+    EXPECT_NEAR(point(cloud, 2).Distance({}), std::nextafter(far, 0.f), 1e-4);
+    // 1.4.0-2 published the two misses and the near value as points.
+    LegacyScanProjection legacy(5, 2, -M_PI, M_PI, 0.15, 0.3, 0.15, 20.9);
+    EXPECT_EQ(legacy.Project(scan.data(), {}, ros::Time(1)).width, 8u);
+    // Exact limits behave as before: 20 m misses and 0.125 m stay excluded.
+    ScanProjection exact(5, 2, -M_PI, M_PI, 0.15, 0.3, 0.125, 20);
+    const auto boundary = GpuFrame({20, 0.125f, 19.99f, 0.126f, 1, 20, 20, 20, 20, 1});
+    EXPECT_EQ(exact.Project(boundary.data(), {}, ros::Time(1)).width, 2u);
 }
 
 TEST(ScanProjection, FramesReuseOneAllocation) {
