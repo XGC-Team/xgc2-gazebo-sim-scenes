@@ -23,6 +23,12 @@ Gazebo 11 repeats a texture-edge ray there; the default complete frame contains
 at most 5,744 points (68,928 XYZ bytes). CPU keeps all 360 columns, up to
 5,760 points (69,120 bytes).
 
+`test/run_standalone_test.sh` builds the projection test with only a C++17
+compiler and the stand-in headers under `test/standalone` (their ignition
+quaternion arithmetic repeats ignition-math 6 operation for operation); the
+catkin build runs the same test against GoogleTest, ignition-math and
+sensor_msgs.
+
 Use XGC ROS1 runtime 1.2.4 or later with the Gazebo GPU-laser material fix, and a
 working hardware OpenGL display. Upstream Gazebo 11.15.1 shares its second-pass
 material between sensors; multiple full-circle sensors can exhaust OGRE's
