@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <limits>
 #include <random>
 #include <vector>
@@ -108,8 +107,7 @@ int Run(int rounds) {
         for (const auto& pose : poses) {
             const auto& a = legacy.Project(scan.data(), pose, ros::Time(1));
             const auto& b = current.Project(scan.data(), pose, ros::Time(1));
-            identical = identical && a.width == b.width && a.data.size() == b.data.size() &&
-                        std::memcmp(a.data.data(), b.data.data(), a.data.size()) == 0;
+            identical = identical && xgc2_simple_lidar_test::SameProjection(a, b);
             points = b.width;
         }
         std::vector<double> legacy_us, current_us;

@@ -1,14 +1,17 @@
 // Frozen copy of ScanProjection as of xgc2-gazebo-sim-scenes 1.4.0-2: one
 // ignition RotateVector, with its quaternion inverse, per point, and range
 // limits compared as doubles. The tests and the benchmark compare the
-// current projection with it bit for bit; only a range equal to a limit's
-// float rounding is treated differently now (see LimitsAreComparedAsFloats).
-// Test-only; never installed. The only edit is the explicit size_t offset.
+// current projection with it (SameProjection below); only a range equal to a
+// limit's float rounding is treated differently now (see
+// LimitsAreComparedAsFloats). Test-only; never installed. The only edit to
+// the class is the explicit size_t offset.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -92,5 +95,33 @@ class LegacyScanProjection {
     std::vector<Ray> rays_;
     sensor_msgs::PointCloud2 cloud_;
 };
+
+// Whether a frame from ScanProjection carries the same projection as the
+// frozen one. Builds that cannot fuse a multiply and an add (every generic
+// x86-64 build) must give identical bytes. Where the compiler may contract to
+// FMA (arm64, or x86-64 with FMA enabled), each loop is contracted its own
+// way and a coordinate may round differently in its last bits (GCC 15 with
+// -march=x86-64-v3: 0.18% of coordinates, at most 7e-15 m); there every
+// coordinate must still be within one float ulp, or 1e-9 m near zero.
+inline bool SameProjection(const sensor_msgs::PointCloud2& a, const sensor_msgs::PointCloud2& b) {
+    if (!(a.header.seq == b.header.seq && a.header.stamp == b.header.stamp && a.header.frame_id == b.header.frame_id &&
+          a.height == b.height && a.width == b.width && a.point_step == b.point_step && a.row_step == b.row_step &&
+          a.is_bigendian == b.is_bigendian && a.is_dense == b.is_dense && a.fields.size() == b.fields.size() &&
+          a.data.size() == b.data.size()))
+        return false;
+#if defined(__FMA__) || defined(__FP_FAST_FMA) || defined(__ARM_FEATURE_FMA)
+    for (std::size_t offset = 0; offset < a.data.size(); offset += sizeof(float)) {
+        float left = 0, right = 0;
+        std::memcpy(&left, a.data.data() + offset, sizeof(float));
+        std::memcpy(&right, b.data.data() + offset, sizeof(float));
+        const float ulp = std::nextafter(std::fabs(left), std::numeric_limits<float>::infinity()) - std::fabs(left);
+        if (!(std::fabs(left - right) <= std::max(ulp, 1e-9f)))
+            return false;
+    }
+    return true;
+#else
+    return std::memcmp(a.data.data(), b.data.data(), a.data.size()) == 0;
+#endif
+}
 
 } // namespace xgc2_simple_lidar_test

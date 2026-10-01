@@ -82,13 +82,6 @@ TEST(ScanProjection, InvalidReturnsDoNotBecomeObstaclesOrStalePoints) {
     EXPECT_EQ(projection.Project(valid, {}, ros::Time(0)).header.stamp, ros::Time(0));
 }
 
-bool SameCloud(const sensor_msgs::PointCloud2& a, const sensor_msgs::PointCloud2& b) {
-    return a.header.seq == b.header.seq && a.header.stamp == b.header.stamp && a.header.frame_id == b.header.frame_id &&
-           a.height == b.height && a.width == b.width && a.point_step == b.point_step && a.row_step == b.row_step &&
-           a.is_bigendian == b.is_bigendian && a.is_dense == b.is_dense && a.fields.size() == b.fields.size() &&
-           a.data.size() == b.data.size() && std::memcmp(a.data.data(), b.data.data(), a.data.size()) == 0;
-}
-
 // First-return ranges to the walls of a room around the origin. Points on a
 // wall cancel the sensor position in one coordinate down to rounding
 // residue, where any change in the rotation arithmetic shows in the floats.
@@ -115,7 +108,8 @@ void RoomRanges(std::vector<float>& scan, unsigned width, unsigned height, unsig
 // Random scans and room scans from random poses, GPU and CPU layouts, full
 // and partial fields of view, valid and invalid ranges: every frame must
 // equal the frozen 1.4.0-2 projection byte for byte, also for a non-unit
-// quaternion.
+// quaternion (within one float ulp where the compiler contracts to FMA; see
+// SameProjection).
 TEST(ScanProjection, FramesAreBitIdenticalToThePerPointRotation) {
     std::mt19937 random(20261001);
     std::uniform_real_distribution<double> unit(0.0, 1.0), angle(-M_PI, M_PI);
@@ -160,7 +154,7 @@ TEST(ScanProjection, FramesAreBitIdenticalToThePerPointRotation) {
             const ros::Time stamp(static_cast<uint32_t>(frame), 17u);
             const auto& expected = legacy.Project(scan.data(), pose, stamp);
             const auto& actual = current.Project(scan.data(), pose, stamp);
-            ASSERT_TRUE(SameCloud(expected, actual));
+            ASSERT_TRUE(xgc2_simple_lidar_test::SameProjection(expected, actual));
             ++frames;
             points += actual.width;
         }
