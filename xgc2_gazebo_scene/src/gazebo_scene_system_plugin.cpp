@@ -41,6 +41,7 @@
 #include "xgc2_gazebo_scene/convex_mesh_geometry.hpp"
 #include "xgc2_gazebo_scene/model_snapshot.hpp"
 #include "xgc2_gazebo_scene/motion_controller.hpp"
+#include "xgc2_gazebo_scene/obstacle_messages.hpp"
 #include "xgc2_gazebo_scene/physical_contact_filter.hpp"
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
 #include "xgc2_geometry_msgs/ConvexBodyArray.h"
@@ -64,48 +65,6 @@ constexpr double kPublishPeriod = 1.0 / 30.0;
 constexpr double kExternalPositionTolerance = 1.0e-6;
 constexpr double kExternalOrientationTolerance = 1.0e-6;
 constexpr int kCylinderVertexCount = 16;
-
-geometry_msgs::Point PointMessage(const ignition::math::Vector3d& value) {
-    geometry_msgs::Point message;
-    message.x = value.X();
-    message.y = value.Y();
-    message.z = value.Z();
-    return message;
-}
-
-geometry_msgs::Pose PoseMessage(const ignition::math::Pose3d& value) {
-    geometry_msgs::Pose message;
-    message.position = PointMessage(value.Pos());
-    message.orientation.x = value.Rot().X();
-    message.orientation.y = value.Rot().Y();
-    message.orientation.z = value.Rot().Z();
-    message.orientation.w = value.Rot().W();
-    return message;
-}
-
-ignition::math::Pose3d IgnitionPose(const geometry_msgs::Pose& value) {
-    return {{value.position.x, value.position.y, value.position.z},
-            {value.orientation.w, value.orientation.x, value.orientation.y, value.orientation.z}};
-}
-
-geometry_msgs::Twist TwistMessage(const ignition::math::Vector3d& linear, const ignition::math::Vector3d& angular) {
-    geometry_msgs::Twist message;
-    message.linear.x = linear.X();
-    message.linear.y = linear.Y();
-    message.linear.z = linear.Z();
-    message.angular.x = angular.X();
-    message.angular.y = angular.Y();
-    message.angular.z = angular.Z();
-    return message;
-}
-
-geometry_msgs::Vector3 VectorMessage(const ignition::math::Vector3d& value) {
-    geometry_msgs::Vector3 message;
-    message.x = value.X();
-    message.y = value.Y();
-    message.z = value.Z();
-    return message;
-}
 
 void AppendBoxVertices(const ignition::math::Vector3d& size, std::vector<geometry_msgs::Point>* vertices) {
     const ignition::math::Vector3d half = size * 0.5;
@@ -155,29 +114,6 @@ std::string ModelNameFromScopedCollision(const std::string& collision_name) {
         return collision_name;
     }
     return collision_name.substr(0, separator);
-}
-
-std::string StandardGeometryType(const ConvexPart& part) {
-    switch (part.shape) {
-    case ConvexPart::SHAPE_BOX:
-        return "cube";
-    case ConvexPart::SHAPE_SPHERE:
-        return "sphere";
-    case ConvexPart::SHAPE_CYLINDER:
-        return "cylinder";
-    case ConvexPart::SHAPE_CONVEX_MESH: {
-        std::string type = "convex_mesh:" + part.mesh_uri;
-        if (!part.mesh_submesh.empty()) {
-            type += "#submesh=" + part.mesh_submesh;
-        }
-        if (part.mesh_center_submesh) {
-            type += "#centered";
-        }
-        return type;
-    }
-    default:
-        return "";
-    }
 }
 
 std::string VPolytopeGeometryTypeAlias(const ConvexPart& part) {
@@ -230,21 +166,6 @@ xgc2_geometry_msgs::GeometryTemplate StandardGeometryTemplate(const ConvexPart& 
         }
     }
     return geometry_template;
-}
-
-geometry_msgs::Vector3 StandardInstanceScale(const ConvexPart& part) {
-    switch (part.shape) {
-    case ConvexPart::SHAPE_BOX:
-        return part.size;
-    case ConvexPart::SHAPE_SPHERE:
-        return VectorMessage({part.radius, part.radius, part.radius});
-    case ConvexPart::SHAPE_CYLINDER:
-        return VectorMessage({part.radius, part.radius, part.length});
-    case ConvexPart::SHAPE_CONVEX_MESH:
-        return part.mesh_scale;
-    default:
-        return geometry_msgs::Vector3{};
-    }
 }
 
 bool PoseNearlyEqual(const ignition::math::Pose3d& left, const ignition::math::Pose3d& right) {
@@ -610,6 +531,7 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         if (rediscover_ || !model_snapshot_.Matches(models)) {
             RefreshContactModels(models);
             geometry_changed = DiscoverObstacles(models, simulation_time);
+            obstacle_messages_stale_ = obstacle_messages_stale_ || geometry_changed;
             model_snapshot_.Update(models);
         }
 
@@ -697,65 +619,27 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     }
 
     void PublishState(const gazebo::common::Time& simulation_time) {
-        ObstacleStateArray message;
-        message.header.stamp = ros::Time(simulation_time.sec, simulation_time.nsec);
-        message.header.frame_id = "world";
-        message.scene_epoch = scene_epoch_;
-        message.scene_revision = scene_revision_;
-        for (const auto& item : obstacles_) {
-            const ManagedObstacle& obstacle = item.second;
-            ObstacleState state;
-            state.name = item.first;
-            state.model_name = obstacle.model->GetName();
-            state.generation = obstacle.generation;
-            state.pose = PoseMessage(obstacle.observed_pose);
-            if (obstacle.controlled) {
-                const MotionSample sample = obstacle.controller.Sample(simulation_time.Double());
-                state.twist = TwistMessage(sample.linear_velocity, sample.angular_velocity);
-                state.motion_mode = obstacle.controller.modeName();
-            } else {
-                state.twist = TwistMessage(obstacle.model->WorldLinearVel(), obstacle.model->WorldAngularVel());
-                state.motion_mode = "uncontrolled";
+        // Discovery marks the messages stale whenever the set changes; the count
+        // check keeps Set() inside the messages should that ever be missed.
+        if (obstacle_messages_stale_ || obstacle_messages_.size() != obstacles_.size()) {
+            std::vector<ObstacleMessages::Obstacle> fixed;
+            fixed.reserve(obstacles_.size());
+            for (const auto& item : obstacles_) {
+                fixed.push_back(
+                    {item.first, item.second.model->GetName(), item.second.generation, &item.second.definition});
             }
-            state.motion_revision = obstacle.motion_revision;
-            message.obstacles.push_back(std::move(state));
+            obstacle_messages_.Reset(fixed);
+            obstacle_messages_stale_ = false;
         }
-        state_publisher_.publish(message);
-
-        xgc2_geometry_msgs::ConvexBodyArray instances;
-        instances.header = message.header;
-        std::int32_t instance_id = 1;
+        obstacle_messages_.Begin(ros::Time(simulation_time.sec, simulation_time.nsec), scene_epoch_, scene_revision_);
+        ObstacleDynamics dynamics;
+        std::size_t index = 0;
         for (const auto& item : obstacles_) {
-            const ManagedObstacle& obstacle = item.second;
-            ignition::math::Vector3d linear_velocity;
-            ignition::math::Vector3d angular_velocity;
-            if (obstacle.controlled) {
-                const MotionSample sample = obstacle.controller.Sample(simulation_time.Double());
-                linear_velocity = sample.linear_velocity;
-                angular_velocity = sample.angular_velocity;
-            } else {
-                linear_velocity = obstacle.model->WorldLinearVel();
-                angular_velocity = obstacle.model->WorldAngularVel();
-            }
-            const bool is_static =
-                obstacle.model->IsStatic() && (!obstacle.controlled || obstacle.controller.modeName() == "hold");
-            const bool single_part = obstacle.definition.parts.size() == 1;
-            for (const auto& part : obstacle.definition.parts) {
-                const ignition::math::Pose3d local_pose = IgnitionPose(part.local_pose);
-                const ignition::math::Pose3d world_pose = obstacle.observed_pose * local_pose;
-                const ignition::math::Vector3d offset = obstacle.observed_pose.Rot().RotateVector(local_pose.Pos());
-                xgc2_geometry_msgs::ConvexBodyInstance instance;
-                instance.id = instance_id++;
-                instance.name = single_part ? item.first : item.first + "/" + part.part_id;
-                instance.geometry_type = StandardGeometryType(part);
-                instance.pose = PoseMessage(world_pose);
-                instance.scale = StandardInstanceScale(part);
-                instance.is_static = is_static;
-                instance.velocity = TwistMessage(linear_velocity + angular_velocity.Cross(offset), angular_velocity);
-                instances.instances.push_back(std::move(instance));
-            }
+            SampleObstacle(item.second, simulation_time.Double(), &dynamics);
+            obstacle_messages_.Set(index++, dynamics);
         }
-        instances_publisher_.publish(instances);
+        state_publisher_.publish(obstacle_messages_.state());
+        instances_publisher_.publish(obstacle_messages_.instances());
     }
 
     bool ConfigureMotionsCallback(ConfigureMotions::Request& request, ConfigureMotions::Response& response) {
@@ -946,6 +830,8 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     std::map<std::string, CachedConfigure> configured_commands_;
     std::map<std::string, CachedStop> stopped_commands_;
     std::map<std::string, ContactModelDescriptor> contact_models_;
+    ObstacleMessages obstacle_messages_;
+    bool obstacle_messages_stale_ = true;
     ModelSnapshot<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> model_snapshot_;
     bool rediscover_ = true;
     std::string scene_epoch_;

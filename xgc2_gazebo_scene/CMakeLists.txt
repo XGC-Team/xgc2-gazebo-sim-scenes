@@ -163,6 +163,16 @@ if(CATKIN_ENABLE_TESTING)
     target_include_directories(xgc2_gazebo_scene_model_snapshot_test PRIVATE include)
   endif()
 
+  catkin_add_gtest(xgc2_gazebo_scene_obstacle_messages_test test/obstacle_messages_test.cpp)
+  if(TARGET xgc2_gazebo_scene_obstacle_messages_test)
+    target_compile_features(xgc2_gazebo_scene_obstacle_messages_test PUBLIC cxx_std_17)
+    target_compile_options(xgc2_gazebo_scene_obstacle_messages_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_include_directories(xgc2_gazebo_scene_obstacle_messages_test
+      PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
+    add_dependencies(xgc2_gazebo_scene_obstacle_messages_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+    target_link_libraries(xgc2_gazebo_scene_obstacle_messages_test xgc2_gazebo_scene_motion)
+  endif()
+
   catkin_add_gtest(xgc2_gazebo_scene_model_index_test test/model_index_test.cpp)
   if(TARGET xgc2_gazebo_scene_model_index_test)
     target_compile_features(xgc2_gazebo_scene_model_index_test PUBLIC cxx_std_17)

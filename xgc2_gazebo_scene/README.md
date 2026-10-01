@@ -140,6 +140,15 @@ when it changed, or while a managed model is still rejected; an unchanged
 world costs one comparison per model instead of a fresh map per update.
 `test/run_model_snapshot_benchmark.sh` measures both without Gazebo.
 
+The 30 Hz state and instance messages keep what does not change between
+publications (obstacle and model names, generation, instance ids and names,
+geometry types, scales) in `ObstacleMessages` (`obstacle_messages.hpp`), which is
+rebuilt when the set of obstacles changes. A publication writes only poses,
+velocities, the motion mode and flags, so an unchanged set allocates nothing.
+`test/obstacle_messages_test.cpp` compares the serialized messages with the ones
+rebuilt every time, and `test/run_obstacle_messages_benchmark.sh` measures both
+without Gazebo.
+
 The first pair preserves the native scene-truth contract:
 
 ```text
