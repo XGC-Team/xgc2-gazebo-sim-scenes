@@ -127,6 +127,13 @@ disable the contact subscriber. The managed obstacle prefix is independently
 configurable at `/xgc2_gazebo_scene/managed_obstacle_prefix` and defaults to
 `xgc2_obstacle_`.
 
+The contact table and the managed obstacle set are derived from the world's
+model list. Each world update compares that list (models, names, static
+flags) with the previous one (`model_snapshot.hpp`) and rebuilds both only
+when it changed, or while a managed model is still rejected; an unchanged
+world costs one comparison per model instead of a fresh map per update.
+`test/run_model_snapshot_benchmark.sh` measures both without Gazebo.
+
 The first pair preserves the native scene-truth contract:
 
 ```text

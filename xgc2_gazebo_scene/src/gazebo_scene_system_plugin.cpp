@@ -1,3 +1,4 @@
+#include <boost/weak_ptr.hpp>
 #include <gazebo/common/Events.hh>
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/msgs/msgs.hh>
@@ -38,6 +39,7 @@
 #include "xgc2_gazebo_scene/ObstacleStateArray.h"
 #include "xgc2_gazebo_scene/StopMotions.h"
 #include "xgc2_gazebo_scene/convex_mesh_geometry.hpp"
+#include "xgc2_gazebo_scene/model_snapshot.hpp"
 #include "xgc2_gazebo_scene/motion_controller.hpp"
 #include "xgc2_gazebo_scene/physical_contact_filter.hpp"
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
@@ -453,9 +455,9 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         }
     }
 
-    void RefreshContactModels() {
+    void RefreshContactModels(const gazebo::physics::Model_V& models) {
         contact_models_.clear();
-        for (const auto& model : world_->Models()) {
+        for (const auto& model : models) {
             ContactModelDescriptor descriptor;
             descriptor.name = model->GetName();
             descriptor.is_static = model->IsStatic();
@@ -542,9 +544,10 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         return true;
     }
 
-    bool DiscoverObstacles(double simulation_time) {
+    bool DiscoverObstacles(const gazebo::physics::Model_V& models, double simulation_time) {
+        rediscover_ = false;
         std::map<std::string, gazebo::physics::ModelPtr> current;
-        for (const auto& model : world_->Models()) {
+        for (const auto& model : models) {
             const std::string logical_name = LogicalName(model->GetName(), managed_obstacle_prefix_);
             if (!logical_name.empty()) {
                 current.emplace(logical_name, model);
@@ -578,6 +581,8 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             if (!BuildDefinition(item.first, obstacle.generation, item.second, &obstacle.definition, &error)) {
                 ROS_ERROR_THROTTLE(5.0, "Managed obstacle %s was rejected: %s", item.second->GetName().c_str(),
                                    error.c_str());
+                // Retried, and reported, on every update while it is present.
+                rediscover_ = true;
                 continue;
             }
             generation_counters_[item.first] = obstacle.generation;
@@ -594,8 +599,19 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             return;
         }
         const double simulation_time = info.simTime.Double();
-        RefreshContactModels();
-        const bool geometry_changed = DiscoverObstacles(simulation_time);
+        // The contact table and the managed obstacle set are functions of the
+        // world's model list (objects, names, static flags). Rebuilding them
+        // copies every name into fresh maps, on every update, for every model
+        // in the world; when the list is unchanged the rebuild yields the same
+        // state, so it runs only when the list changed or a managed model is
+        // still rejected.
+        const gazebo::physics::Model_V models = world_->Models();
+        bool geometry_changed = false;
+        if (rediscover_ || !model_snapshot_.Matches(models)) {
+            RefreshContactModels(models);
+            geometry_changed = DiscoverObstacles(models, simulation_time);
+            model_snapshot_.Update(models);
+        }
 
         for (auto& item : obstacles_) {
             ManagedObstacle& obstacle = item.second;
@@ -930,6 +946,8 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     std::map<std::string, CachedConfigure> configured_commands_;
     std::map<std::string, CachedStop> stopped_commands_;
     std::map<std::string, ContactModelDescriptor> contact_models_;
+    ModelSnapshot<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> model_snapshot_;
+    bool rediscover_ = true;
     std::string scene_epoch_;
     std::string managed_obstacle_prefix_ = kDefaultManagedPrefix;
     std::vector<std::string> tracked_model_prefixes_;
