@@ -1,6 +1,8 @@
+#include "xgc2_gazebo_scene/model_snapshot.hpp"
 #include "xgc2_gazebo_scene/scene_model.hpp"
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
 
+#include <boost/weak_ptr.hpp>
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/msgs/msgs.hh>
 #include <gazebo/physics/Model.hh>
@@ -16,7 +18,9 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -35,6 +39,20 @@ std::string SnapshotIdentity(xgc2_geometry_msgs::SceneSnapshot scene) {
     ros::serialization::OStream stream(reinterpret_cast<std::uint8_t*>(&bytes[0]), bytes.size());
     ros::serialization::serialize(stream, scene);
     return bytes;
+}
+
+std::uint64_t Bits(double value) {
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+// Bit-for-bit, so a pose that differs only in the sign of a zero is unequal.
+bool SameBits(const ignition::math::Pose3d& a, const ignition::math::Pose3d& b) {
+    return Bits(a.Pos().X()) == Bits(b.Pos().X()) && Bits(a.Pos().Y()) == Bits(b.Pos().Y()) &&
+           Bits(a.Pos().Z()) == Bits(b.Pos().Z()) && Bits(a.Rot().W()) == Bits(b.Rot().W()) &&
+           Bits(a.Rot().X()) == Bits(b.Rot().X()) && Bits(a.Rot().Y()) == Bits(b.Rot().Y()) &&
+           Bits(a.Rot().Z()) == Bits(b.Rot().Z());
 }
 
 bool FiniteTwist(const geometry_msgs::Twist& twist) {
@@ -151,6 +169,9 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
             if (scene.revision == revision_ && identity != snapshot_identity_)
                 return reject("scene revision reused for different content");
         }
+        // An application sets poses itself; the next state message sets every
+        // pose again instead of trusting what State last applied.
+        applied_poses_.clear();
         const auto deadline = ros::WallTime::now() + ros::WallDuration(timeout_);
         // A timed-out factory request can still create its model later. Drain
         // those requests before applying a corrective snapshot; otherwise a
@@ -312,8 +333,9 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         }
         // Verify every target before moving any target. The scene runtime sends
         // current world poses for all objects, including held static obstacles.
+        RefreshModelLookup();
         for (const auto& obstacle : state->obstacles) {
-            if (!world_->ModelByName(models_.at(obstacle.id).name)) {
+            if (!FindModel(models_.at(obstacle.id).name)) {
                 geometry_consistent_ = false;
                 last_error_ = "scene model disappeared: " + obstacle.id;
                 Publish(epoch_, revision_, false, last_error_);
@@ -321,10 +343,43 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
             }
         }
         for (const auto& obstacle : state->obstacles) {
-            auto model = world_->ModelByName(models_.at(obstacle.id).name);
-            model->SetWorldPose(ScenePose(obstacle.pose));
+            const auto model = FindModel(models_.at(obstacle.id).name);
+            const auto pose = ScenePose(obstacle.pose);
+            // A held obstacle arrives with the same pose 30 times a second. If
+            // the request is unchanged and the model is still exactly where the
+            // last SetWorldPose left it, setting it again recomputes the same
+            // link and collision poses (scene bodies have one canonical link)
+            // and only republishes an unchanged pose; anything that moved it
+            // in between makes the poses differ and the pose is set again.
+            auto applied = applied_poses_.find(obstacle.id);
+            if (applied != applied_poses_.end() && applied->second.model == model.get() &&
+                SameBits(applied->second.requested, pose) && SameBits(applied->second.result, model->WorldPose()))
+                continue;
+            model->SetWorldPose(pose);
+            applied_poses_[obstacle.id] = AppliedPose{model.get(), pose, model->WorldPose()};
         }
         last_error_.clear();
+    }
+
+    // World::ModelByName walks the whole entity tree and copies every scoped
+    // name on the way; State used it twice per obstacle per message. Its answer
+    // for any name can only change when the world's model list does (a model
+    // added, removed or renamed: retirement renames before removing), so
+    // answers are kept until the list differs from the one they were found in.
+    void RefreshModelLookup() {
+        const auto models = world_->Models();
+        if (!lookup_snapshot_.Matches(models)) {
+            model_lookup_.clear();
+            applied_poses_.clear();
+            lookup_snapshot_.Update(models);
+        }
+    }
+
+    gazebo::physics::ModelPtr FindModel(const std::string& name) {
+        auto found = model_lookup_.find(name);
+        if (found == model_lookup_.end())
+            found = model_lookup_.emplace(name, world_->ModelByName(name)).first;
+        return found->second;
     }
 
     bool SceneBodiesGone(const std::set<std::string>& names) const {
@@ -387,9 +442,10 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
             return;
         }
         if (geometry_consistent_) {
+            RefreshModelLookup();
             for (const auto& entry : models_) {
                 std::string error;
-                if (!VerifySceneModel(world_->ModelByName(entry.second.name), entry.second, false, &error)) {
+                if (!VerifySceneModel(FindModel(entry.second.name), entry.second, false, &error)) {
                     geometry_consistent_ = false;
                     last_error_ = error;
                     break;
@@ -419,6 +475,14 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
     std::set<std::string> owned_;
     std::set<std::string> pending_factory_;
     std::map<std::string, SceneModel> models_;
+    struct AppliedPose {
+        const gazebo::physics::Model* model;
+        ignition::math::Pose3d requested;
+        ignition::math::Pose3d result;
+    };
+    ModelSnapshot<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> lookup_snapshot_;
+    std::map<std::string, gazebo::physics::ModelPtr> model_lookup_;
+    std::map<std::string, AppliedPose> applied_poses_;
     bool geometry_consistent_ = false;
     std::string last_error_;
     std::uint32_t generation_ = 0;
