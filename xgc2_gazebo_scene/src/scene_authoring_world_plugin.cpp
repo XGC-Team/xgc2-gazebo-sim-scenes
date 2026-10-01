@@ -366,6 +366,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
     // for any name can only change when the world's model list does (a model
     // added, removed or renamed: retirement renames before removing), so
     // answers are kept until the list differs from the one they were found in.
+    // They are kept weakly: a removed model is not kept alive by the cache.
     void RefreshModelLookup() {
         const auto models = world_->Models();
         if (!lookup_snapshot_.Matches(models)) {
@@ -379,7 +380,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         auto found = model_lookup_.find(name);
         if (found == model_lookup_.end())
             found = model_lookup_.emplace(name, world_->ModelByName(name)).first;
-        return found->second;
+        return found->second.lock();
     }
 
     bool SceneBodiesGone(const std::set<std::string>& names) const {
@@ -481,7 +482,7 @@ class SceneAuthoringWorldPlugin final : public gazebo::WorldPlugin {
         ignition::math::Pose3d result;
     };
     ModelSnapshot<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> lookup_snapshot_;
-    std::map<std::string, gazebo::physics::ModelPtr> model_lookup_;
+    std::map<std::string, boost::weak_ptr<gazebo::physics::Model>> model_lookup_;
     std::map<std::string, AppliedPose> applied_poses_;
     bool geometry_consistent_ = false;
     std::string last_error_;
