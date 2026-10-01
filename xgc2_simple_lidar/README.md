@@ -61,7 +61,10 @@ world performance.
 CPU plugin; `acceleration:=gpu` keeps its native rendered-surface GPU ray path.
 Both publish only world-frame XYZ and preserve measurement time. CPU updates the
 native collision rays on the world update thread, then reads the pose and
-measurement time before that world advances. Its independent background sensor
+measurement time before that world advances. Between scans each world update
+costs only a flag and a sim-time comparison (`scan_schedule.hpp`): the
+subscriber flag is kept by the connect/disconnect callbacks, and the parent
+link is looked up only when a scan is due. Its independent background sensor
 worker stays inactive; this avoids Gazebo Classic's sensor-container/physics
 lock inversion during model removal. Only the ROS point cloud is consumed; the
 internal Gazebo scan topic is not a supported input. Delayed ROS delivery cannot

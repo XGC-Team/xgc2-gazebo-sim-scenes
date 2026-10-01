@@ -1,6 +1,4 @@
-#include <algorithm>
 #include <atomic>
-#include <cmath>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -13,6 +11,7 @@
 #include <ros/ros.h>
 
 #include "xgc2_simple_lidar/scan_projection.hpp"
+#include "xgc2_simple_lidar/scan_schedule.hpp"
 
 namespace xgc2_simple_lidar {
 
@@ -26,20 +25,38 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
         std::vector<double> native_ranges;
         std::vector<float> ranges;
         std::mutex frame_mutex;
-        double period{0.1}, next_scan{0}, previous_time{0};
+        ScanSchedule schedule{0.1};
         std::atomic<bool> closing{false};
+        // Kept by the connect and disconnect callbacks (ROS spinner threads),
+        // which read the count and store it as one step under the mutex.
+        // Frame() runs after every world update and reads only this flag:
+        // Publisher::getNumSubscribers searches every topic the gzserver
+        // process advertises under roscpp's global topic lock.
+        std::mutex subscriber_mutex;
+        std::atomic<bool> subscribed{false};
 
         void Stop() {
             closing = true;
-            std::lock_guard<std::mutex> lock(frame_mutex);
+            const std::scoped_lock lock(frame_mutex, subscriber_mutex);
             publisher.shutdown();
         }
 
+        void UpdateSubscribed() {
+            const std::lock_guard<std::mutex> lock(subscriber_mutex);
+            subscribed = publisher.getNumSubscribers() > 0;
+        }
+
         void Frame() {
-            if (closing || !publisher.getNumSubscribers())
+            if (closing || !subscribed)
                 return;
             std::lock_guard<std::mutex> lock(frame_mutex);
             if (closing)
+                return;
+            // Updates between scans stop here. The sensor and its parent are
+            // looked up only when a scan is due: EntityByName walks the
+            // world's entity tree and copies every scoped name on the way.
+            const double now = world->SimTime().Double();
+            if (!schedule.Due(now))
                 return;
             auto current = sensor.lock();
             if (!current)
@@ -47,14 +64,7 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
             auto parent = world->EntityByName(current->ParentName());
             if (!parent)
                 return;
-            const double now = world->SimTime().Double();
-            if (now < previous_time)
-                next_scan = now;
-            previous_time = now;
-            if (now + 1e-9 < next_scan)
-                return;
-            const double elapsed = std::max(0.0, now - next_scan);
-            next_scan += (std::floor(elapsed / period) + 1) * period;
+            schedule.Taken(now);
             // RaySensor's background worker stays inactive (no Gazebo scan
             // transport subscriber). Updating in WorldUpdateEnd avoids the
             // SensorContainer -> physics / model deletion -> SensorContainer
@@ -98,7 +108,7 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
         auto state = std::make_shared<State>();
         state->sensor = cpu;
         state->world = gazebo::physics::get_world(cpu->WorldName());
-        state->period = 1.0 / cpu->UpdateRate();
+        state->schedule = ScanSchedule(1.0 / cpu->UpdateRate());
         state->projection = std::make_unique<ScanProjection>(
             width, height, cpu->AngleMin().Radian(), cpu->AngleMax().Radian(), cpu->VerticalAngleMin().Radian(),
             cpu->VerticalAngleMax().Radian(), cpu->RangeMin(), cpu->RangeMax(), false, 1);
@@ -106,8 +116,20 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
         const auto robot_namespace =
             config->HasElement("robotNamespace") ? config->Get<std::string>("robotNamespace") : "";
         state->node = std::make_unique<ros::NodeHandle>(robot_namespace);
-        state->publisher = state->node->advertise<sensor_msgs::PointCloud2>("simple_lidar/points", 1);
         const std::weak_ptr<State> weak = state;
+        const auto subscribers = [weak](const ros::SingleSubscriberPublisher&) {
+            if (auto current = weak.lock())
+                current->UpdateSubscribed();
+        };
+        auto options = ros::AdvertiseOptions::create<sensor_msgs::PointCloud2>(
+            "simple_lidar/points", 1, subscribers, subscribers, ros::VoidConstPtr(), nullptr);
+        {
+            // A subscriber may connect, and its callback run, before advertise
+            // returns; the callback reads the publisher under the same lock.
+            const std::lock_guard<std::mutex> lock(state->subscriber_mutex);
+            state->publisher = state->node->advertise(options);
+        }
+        state->UpdateSubscribed();
         frame_connection_ = gazebo::event::Events::ConnectWorldUpdateEnd([weak]() {
             if (auto current = weak.lock())
                 current->Frame();

@@ -73,11 +73,13 @@ required_files=(
   xgc2_simple_lidar/CMakeLists.txt
   xgc2_simple_lidar/package.xml
   xgc2_simple_lidar/include/xgc2_simple_lidar/scan_projection.hpp
+  xgc2_simple_lidar/include/xgc2_simple_lidar/scan_schedule.hpp
   xgc2_simple_lidar/models/sensor.xacro
   xgc2_simple_lidar/models/sensor.sdf.xacro
   xgc2_simple_lidar/src/cpu_lidar_plugin.cpp
   xgc2_simple_lidar/src/gpu_lidar_plugin.cpp
   xgc2_simple_lidar/test/scan_projection_test.cpp
+  xgc2_simple_lidar/test/scan_schedule_test.cpp
 )
 
 for file in "${required_files[@]}"; do
