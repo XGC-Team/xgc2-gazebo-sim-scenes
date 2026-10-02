@@ -64,7 +64,9 @@ class ScanProjection {
         // reload it and recompute Quaternion::Inverse (a norm and four
         // divisions). The per-point products are still ignition's
         // RotateVector, q * (v * q^-1), so every point is bit-identical.
-        const ignition::math::Quaterniond rotation = sensor_in_world.Rot();
+        const auto& measured_rotation = sensor_in_world.Rot();
+        const ignition::math::Quaterniond rotation(measured_rotation.W(), measured_rotation.X(), measured_rotation.Y(),
+                                                   measured_rotation.Z());
         const ignition::math::Quaterniond inverse = rotation.Inverse();
         const double x = sensor_in_world.Pos().X(), y = sensor_in_world.Pos().Y(), z = sensor_in_world.Pos().Z();
         const float range_min = range_min_, range_max = range_max_;

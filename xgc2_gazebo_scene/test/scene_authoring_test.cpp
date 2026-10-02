@@ -377,6 +377,39 @@ TEST_F(SceneAuthoringTest, FollowsOnlyCompleteCurrentRevisionStateAndRejectsMalf
     EXPECT_DOUBLE_EQ(40, Model("moving")->WorldPose().Pos().X()) << "editing another object reset current motion state";
 }
 
+TEST_F(SceneAuthoringTest, ReappliesHeldStateAfterWorldReset) {
+    scene_.revision++;
+    scene_.obstacles = {Obstacle("held", "box")};
+    ASSERT_TRUE(Apply()) << result_.message;
+    auto publisher = node_.advertise<xgc2_geometry_msgs::SceneState>("/xgc/scene/state", 1);
+    ASSERT_TRUE(Eventually([&] {
+        return publisher.getNumSubscribers() > 0;
+    }));
+    xgc2_geometry_msgs::SceneState state;
+    state.header.frame_id = "world";
+    state.epoch = scene_.epoch;
+    state.revision = scene_.revision;
+    xgc2_geometry_msgs::SceneObstacleState obstacle;
+    obstacle.id = "held";
+    obstacle.pose = Pose(40, -3, 2);
+    state.obstacles.push_back(obstacle);
+    publisher.publish(state);
+    ASSERT_TRUE(Eventually([&] {
+        return Model("held")->WorldPose().Pos().X() == 40;
+    }));
+
+    const auto model = Model("held");
+    world->Reset();
+    ASSERT_EQ(model, Model("held"));
+    ASSERT_DOUBLE_EQ(10, model->WorldPose().Pos().X());
+    // The request is identical and the model list did not change, but reset
+    // changed the measured world pose: the adapter must not skip this state.
+    publisher.publish(state);
+    ASSERT_TRUE(Eventually([&] {
+        return model->WorldPose().Pos().Equal({40, -3, 2}, 1.0e-6);
+    }));
+}
+
 } // namespace
 } // namespace xgc2_gazebo_scene
 
