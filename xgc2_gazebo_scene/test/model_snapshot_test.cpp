@@ -26,8 +26,14 @@ FakePtr Make(const std::string& name, bool is_static) {
 }
 
 std::vector<FakePtr> World() {
-    return {Make("ground_plane", true), Make("xgc2_obstacle_scene_1", true), Make("xgc2_obstacle_scene_2", true),
-            Make("uav1", false), Make("uav2", false)};
+    std::vector<FakePtr> models;
+    models.reserve(5);
+    models.push_back(Make("ground_plane", true));
+    models.push_back(Make("xgc2_obstacle_scene_1", true));
+    models.push_back(Make("xgc2_obstacle_scene_2", true));
+    models.push_back(Make("uav1", false));
+    models.push_back(Make("uav2", false));
+    return models;
 }
 
 TEST(ModelSnapshot, AnEmptySnapshotMatchesOnlyAnEmptyWorld) {
