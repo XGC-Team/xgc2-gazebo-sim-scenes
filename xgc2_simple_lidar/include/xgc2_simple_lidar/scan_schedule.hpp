@@ -9,7 +9,9 @@ namespace xgc2_simple_lidar {
 // world update (250-1000 Hz) and a scan is due at the sensor rate. Due() is
 // the only work on the updates in between; whatever else gates a scan (the
 // sensor and its parent link still exist) runs only when one is due, and
-// Taken() then advances the schedule.
+// Taken() then advances the schedule. Nothing about the cloud's consumers
+// enters the schedule: scans are due at the sensor rate whether or not a
+// subscriber exists.
 //
 // Scans stay on the grid k * period anchored at sim time 0. When sim time
 // runs backwards (a world reset), the next scan taken restarts the grid at
@@ -19,7 +21,7 @@ class ScanSchedule {
   public:
     explicit ScanSchedule(double period) : period_(period) {}
 
-    // Call on every world update while the cloud has subscribers.
+    // Call on every world update.
     bool Due(double now) {
         if (now < previous_)
             reset_ = true;

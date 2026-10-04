@@ -344,6 +344,7 @@ def run_check(args):
         start_processes(output_dir, environment, args.ros_port, processes, world)
         write_phase(results_path, {'phase': 'configuration', 'acceleration': args.acceleration})
 
+        import rosgraph
         import rospy
         from gazebo_msgs.msg import ModelState
         from gazebo_msgs.srv import DeleteModel, GetModelState, SetModelState, SpawnModel
@@ -353,6 +354,26 @@ def run_check(args):
 
         rospy.init_node('simple_lidar_check', disable_signals=True)
         rospy.wait_for_service('/gazebo/set_model_state', timeout=30)
+        # The sensor scans and publishes whether or not the cloud has a
+        # subscriber. Leave it without one for a while: the topic must be
+        # advertised and must have no subscriber. roscpp advances the header
+        # sequence of a publisher on every publish call, also while nobody is
+        # subscribed, so the first frame a late subscriber receives carries
+        # the number of scans taken since the plugin loaded. A sensor that
+        # scans only for subscribers would deliver sequence 0 or 1 here.
+        topic = '/test_robot/simple_lidar/points'
+        idle_seconds = 3.0
+        rate_hz = float(
+            ET.parse(world).getroot().find(
+                "world/model[@name='scanner']/link/sensor/update_rate"
+            ).text
+        )
+        time.sleep(idle_seconds)
+        published, subscribed, _ = rosgraph.Master('/simple_lidar_check').getSystemState()
+        if topic not in [name for name, _ in published]:
+            raise RuntimeError('the lidar plugin did not advertise its cloud')
+        if topic in [name for name, nodes in subscribed if nodes]:
+            raise RuntimeError('the check itself subscribed before the idle phase ended')
         frames = []
         subscriber = rospy.Subscriber(
             '/test_robot/simple_lidar/points',
@@ -365,6 +386,21 @@ def run_check(args):
             time.sleep(0.05)
         if len(frames) < 5:
             raise RuntimeError('no native pointcloud frames')
+        # Wall seconds stand for simulated seconds only up to the real-time
+        # factor, so only 30 % of the scans of the idle phase are required.
+        minimum_sequence = int(0.3 * rate_hz * idle_seconds)
+        write_phase(results_path, {
+            'phase': 'unsubscribed_then_subscribe',
+            'idle_seconds': idle_seconds,
+            'rate_hz': rate_hz,
+            'first_sequence': frames[0].header.seq,
+            'minimum_sequence': minimum_sequence,
+        })
+        if frames[0].header.seq < minimum_sequence:
+            raise RuntimeError(
+                'the sensor did not scan while the cloud had no subscriber: '
+                'first sequence ' + str(frames[0].header.seq)
+            )
         report_cloud('static_mount', frames[-4:], point_cloud2, results_path)
 
         set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)

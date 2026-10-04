@@ -12,7 +12,10 @@
   <xacro:macro name="xgc2_simple_lidar_sensor" params="namespace pose rate:=${xgc2_simple_lidar_default_rate} max_range:=${xgc2_simple_lidar_default_max_range} samples:=${xgc2_simple_lidar_default_samples} layers:=${xgc2_simple_lidar_default_layers} vertical_fov:=${xgc2_simple_lidar_default_vertical_fov} horizontal_fov:=${xgc2_simple_lidar_default_horizontal_fov} acceleration:=${xgc2_simple_lidar_default_acceleration}">
     <sensor name="simple_lidar" type="${dict(cpu='ray', gpu='gpu_ray')[acceleration]}">
       <pose>${pose}</pose>
-      <always_on>false</always_on>
+      <!-- The sensor scans at update_rate whether or not the cloud has a
+           subscriber. The CPU plugin keeps Gazebo's own background update
+           off and takes the scans itself at the same rate. -->
+      <always_on>true</always_on>
       <update_rate>${rate}</update_rate>
       <visualize>false</visualize>
       <ray>

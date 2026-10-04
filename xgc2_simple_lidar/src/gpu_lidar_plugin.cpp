@@ -1,6 +1,5 @@
 #include <atomic>
 #include <memory>
-#include <mutex>
 #include <string>
 
 #include <gazebo/common/Plugin.hh>
@@ -25,24 +24,16 @@ class GpuLidarPlugin final : public gazebo::SensorPlugin {
         ros::Publisher publisher;
         std::unique_ptr<ScanProjection> projection;
         unsigned width{0}, height{0};
-        // Connect and disconnect callbacks run on the ROS spinner threads. The
-        // count read and SetActive must be one step, or a late disconnect can
-        // switch rendering off after a new subscriber connected.
-        std::mutex activity_mutex;
         std::atomic<bool> layout_error_reported{false};
         ~State() {
             if (const auto current = sensor.lock())
                 current->SetActive(false);
             publisher.shutdown();
         }
-        void UpdateActivity() {
-            const std::lock_guard<std::mutex> lock(activity_mutex);
-            if (const auto current = sensor.lock())
-                current->SetActive(publisher.getNumSubscribers() > 0);
-        }
+        // Every rendered frame is projected and published. Whether anyone
+        // subscribes never decides whether the sensor scans: a subscriber
+        // dependent sensor hides its cost until the first consumer connects.
         void Frame(const float* ranges, unsigned columns, unsigned rows, unsigned depth) {
-            if (!publisher.getNumSubscribers())
-                return;
             if (columns != width || rows != height || depth != 3) {
                 if (!layout_error_reported.exchange(true))
                     ROS_ERROR_STREAM("simple lidar " << label << " received a " << columns << "x" << rows << "x"
@@ -73,11 +64,15 @@ class GpuLidarPlugin final : public gazebo::SensorPlugin {
             config->HasElement("robotNamespace") ? config->Get<std::string>("robotNamespace") : "";
         const auto label = robot_namespace + " (" + (sensor ? sensor->ScopedName() : std::string("no sensor")) + ")";
         auto gpu = std::dynamic_pointer_cast<gazebo::sensors::GpuRaySensor>(sensor);
+        // The sensor renders only after this plugin is complete. A plugin that
+        // cannot load leaves it inactive whatever the SDF always_on says, so
+        // no frame is rendered that nothing projects.
+        if (gpu)
+            gpu->SetActive(false);
         if (!gpu || !ros::isInitialized()) {
             gzerr << "simple lidar " << label << " requires a gpu_ray sensor and gazebo_ros_api_plugin\n";
             return;
         }
-        gpu->SetActive(false);
         auto state = std::make_shared<State>();
         state->sensor = gpu;
         state->label = label;
@@ -93,19 +88,7 @@ class GpuLidarPlugin final : public gazebo::SensorPlugin {
             gpu->VerticalAngleMin().Radian(), gpu->VerticalAngleMax().Radian(), gpu->RangeMin(), gpu->RangeMax());
         state->node = std::make_unique<ros::NodeHandle>(robot_namespace);
         const std::weak_ptr<State> weak_state = state;
-        const auto activity = [weak_state](const ros::SingleSubscriberPublisher&) {
-            if (auto current = weak_state.lock())
-                current->UpdateActivity();
-        };
-        auto options = ros::AdvertiseOptions::create<sensor_msgs::PointCloud2>("simple_lidar/points", 1, activity,
-                                                                               activity, ros::VoidConstPtr(), nullptr);
-        {
-            // A subscriber may connect, and its callback run, before advertise
-            // returns; the callback reads the publisher under the same lock.
-            const std::lock_guard<std::mutex> lock(state->activity_mutex);
-            state->publisher = state->node->advertise(options);
-        }
-        state->UpdateActivity();
+        state->publisher = state->node->advertise<sensor_msgs::PointCloud2>("simple_lidar/points", 1);
         // GpuRaySensor::Fini removes its camera before destroying sensor plugins.
         // Keep the event source alive until this connection has been disconnected.
         camera_ = gpu->LaserCamera();
@@ -115,6 +98,7 @@ class GpuLidarPlugin final : public gazebo::SensorPlugin {
                     current->Frame(ranges, width, height, depth);
             });
         state_ = std::move(state);
+        gpu->SetActive(true);
     }
 
   private:

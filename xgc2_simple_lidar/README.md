@@ -18,7 +18,8 @@ arguments both read. `max_range`, `samples`, `layers`, `horizontal_fov`,
 
 FS150, Scout and Wheeltec launch files expose `enable_simple_lidar` and
 `simple_lidar_pose`. The sensor is omitted by default. Once installed and
-enabled, it scans only while the point cloud has subscribers. Invalid or
+enabled, it scans at its rate whether or not the point cloud has subscribers
+(`always_on` is true; see "Always on" below). Invalid or
 out-of-range points are omitted: a range must lie strictly between the minimum
 and maximum compared as floats, so a maximum without an exact float, such as
 20.9 m, does not turn misses into a sphere of points. On the GPU path, the final horizontal column is omitted because
@@ -40,7 +41,9 @@ material between sensors; multiple full-circle sensors can exhaust OGRE's
 texture slots. The image builds the rendering library with an independent
 material per sensor. No CUDA or PCL dependency is needed.
 
-The live check (`--acceleration cpu|gpu`) runs its own ROS and Gazebo processes, tests a nonzero mount
+The live check (`--acceleration cpu|gpu`) runs its own ROS and Gazebo processes. It first
+leaves the sensor without a subscriber and requires the first frame of a late
+subscriber to show that the sensor scanned meanwhile (see "Always on"). It then tests a nonzero mount
 transform while translating and rotating, opening occlusion, thin obstacle
 position updates, deletion and respawn, and optionally reports one- and
 multi-sensor load:
@@ -63,16 +66,15 @@ CPU plugin; `acceleration:=gpu` keeps its native rendered-surface GPU ray path.
 Both publish only world-frame XYZ and preserve measurement time. CPU updates the
 native collision rays on the world update thread, then reads the pose and
 measurement time before that world advances. Between scans each world update
-costs only a flag and a sim-time comparison (`scan_schedule.hpp`): the
-subscriber flag is kept by the connect/disconnect callbacks, and the parent
-link is looked up only when a scan is due. Its independent background sensor
-worker stays inactive; this avoids Gazebo Classic's sensor-container/physics
+costs only a closing flag and a sim-time comparison (`scan_schedule.hpp`); the
+parent link is looked up only when a scan is due. Its independent background
+sensor worker stays inactive (the plugin takes every scan itself, at the sensor
+rate); this avoids Gazebo Classic's sensor-container/physics
 lock inversion during model removal. Only the ROS point cloud is consumed; the
 internal Gazebo scan topic is not a supported input. Delayed ROS delivery cannot
 substitute a later robot pose. Invalid acceleration names fail xacro expansion. CPU and GPU
 use collision and visual geometry respectively; scene assets must keep those
-representations consistent. Both sensors stop scanning when no ROS subscriber
-needs the cloud. `rate`, `max_range`, `samples`, `layers`, `horizontal_fov` and
+representations consistent. `rate`, `max_range`, `samples`, `layers`, `horizontal_fov` and
 `vertical_fov` remain reusable sensor parameters.
 
 GPU acceptance rejects llvmpipe/softpipe and records the actual GL renderer.
@@ -80,3 +82,26 @@ With NVIDIA containers, enable the graphics/display driver capabilities and
 NVIDIA GLX vendor; a working X display alone is insufficient. The Experiment
 exposes the observation/acceleration/scan settings, not an independent mount
 pose. Model-owned internal offsets remain responsible for chassis clearance.
+
+## Always on
+
+Both plugins scan and publish at the sensor rate from the moment they load,
+whether or not any node subscribes to `simple_lidar/points`. Publishing never
+depends on subscription: the plugins do not read the publisher's subscriber
+count or register connect and disconnect callbacks (`test/lidar_gating_contract_test.cpp`
+pins this in the sources, `test/scan_schedule_test.cpp` pins the scan rate with
+zero subscribers). `models/sensor.xacro` sets `always_on` to true, and the GPU
+plugin activates its sensor itself once it is loaded, whatever the SDF says. A
+plugin that cannot load (for example without `gazebo_ros_api_plugin`) leaves
+its sensor inactive. The CPU plugin keeps Gazebo's own background update of the
+ray sensor off in every case, because it takes the scans itself.
+
+Cost of an enabled sensor that no node consumes, with the xacro defaults:
+360 x 16 = 5,760 rays per scan at 10 Hz = 57,600 rays per second per sensor, and
+5.76 million rays per second for 100 sensors (counts from the defaults, not
+measurements). Each frame is also projected into a cloud and handed to roscpp,
+which serializes and sends a message only while the topic has subscribers. The
+GPU cost per ray is not measured here. The sensor is omitted unless a launch
+file enables it, so a robot with no consumer of the cloud leaves it disabled; an
+enabled sensor costs the same during readiness, during the run and with any
+number of subscribers.
