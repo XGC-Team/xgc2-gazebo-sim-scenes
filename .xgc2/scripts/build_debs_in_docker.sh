@@ -68,7 +68,14 @@ docker run --rm \
     fi
     apt-get update
     apt-get install -y --no-install-recommends \
-      ros-noetic-xgc2-geometry-msgs
+      ros-noetic-xgc2-geometry-msgs \
+      ros-noetic-xgc2-world-lidar \
+      ros-noetic-nav-msgs ros-noetic-sensor-msgs ros-noetic-pcl-conversions
+    world_lidar_version="$(dpkg-query -W -f="\${Version}" ros-noetic-xgc2-world-lidar)"
+    dpkg --compare-versions "${world_lidar_version}" ge 1.2.0-12 || {
+      echo "world sensor producer requires ros-noetic-xgc2-world-lidar >= 1.2.0-12" >&2
+      exit 1
+    }
 
     cd /workspace/gazebo-sim-scenes
     .xgc2/scripts/check_package_compliance.sh

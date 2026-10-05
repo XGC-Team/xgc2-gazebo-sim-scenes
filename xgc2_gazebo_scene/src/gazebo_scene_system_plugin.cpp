@@ -1,5 +1,16 @@
 #include <boost/weak_ptr.hpp>
 #include <gazebo/common/Events.hh>
+#include <gazebo/common/Exception.hh>
+#include <ros/callback_queue.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/Odometry.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <boost/property_tree/json_parser.hpp>
+#include <atomic>
+#include <cstdlib>
+#include <fstream>
+#include <stdexcept>
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/msgs/msgs.hh>
 #include <gazebo/physics/BoxShape.hh>
@@ -44,6 +55,7 @@
 #include "xgc2_gazebo_scene/obstacle_messages.hpp"
 #include "xgc2_gazebo_scene/physical_contact_filter.hpp"
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
+#include "xgc2_gazebo_scene/world_sensor_inputs.hpp"
 #include "xgc2_geometry_msgs/ConvexBodyArray.h"
 #include "xgc2_geometry_msgs/ConvexBodyInstance.h"
 #include "xgc2_geometry_msgs/GeometryLibrary.h"
@@ -216,6 +228,16 @@ MotionConfiguration ConvertMotion(const MotionSpec& message, std::string* error)
     return configuration;
 }
 
+// Main-thread cold failure only. The stock ROS API plugin starts a thread
+// that waits for services not advertised until WorldCreated. Its destructor
+// joins that thread; NodeHandle::shutdown alone does not cancel the global
+// ros::ok() wait. Cancel this server's ROS runtime before the original common
+// exception/Fini route. Healthy start and runtime sensor fatal use no such call.
+[[noreturn]] void FailSensorColdStart(const std::string& message) {
+    if (ros::isStarted()) ros::shutdown();
+    gzthrow(message);
+}
+
 } // namespace
 
 class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
@@ -223,18 +245,45 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     GazeboSceneSystemPlugin() = default;
 
     ~GazeboSceneSystemPlugin() override {
-        if (spinner_) {
-            spinner_->stop();
-        }
-        contact_subscriber_.reset();
-        gazebo_transport_node_.reset();
+        // No callback may borrow the host after the cold join below. Cancel a
+        // fatal connection wait even when transport was stopped before plugins.
+        sensor_teardown_.store(true, std::memory_order_release);
+        if (sensor_system_) sensor_system_->fence();
         world_reset_connection_.reset();
         update_connection_.reset();
         world_created_connection_.reset();
+        contact_subscriber_.reset();
+        { std::lock_guard<std::mutex> lock(mutex_); } // finish an entered update before cold join
+        for (auto& input : sensor_pose_subscribers_) input.shutdown();
+        for (auto& input : sensor_cloud_subscribers_) input.shutdown();
+        sensor_geometry_queue_.disable();
+        if (spinner_) spinner_->stop();
+        if (sensor_system_) sensor_system_->stop(); // cold thread, never fatal caller
+        sensor_system_.reset();
+        sensor_geometry_node_.reset();
+        sensor_control_publisher_.reset();
+        gazebo_transport_node_.reset();
         node_.reset();
     }
 
     void Load(int /*argc*/, char** /*argv*/) override {
+        // Existing supervised launcher owns this one immutable private artifact.
+        // Absence retains the original legitimate no-attachment Scene behavior.
+        const char* path = std::getenv(kWorldSensorInputsEnvironment);
+        if (path && *path) {
+            try {
+                if (*path != '/') throw std::invalid_argument("sensor input file must be absolute");
+                std::ifstream file(path);
+                if (!file) throw std::runtime_error("cannot open frozen World lidar inputs");
+                boost::property_tree::ptree input;
+                boost::property_tree::read_json(file, input);
+                sensor_inputs_ = std::make_unique<WorldSensorInputs>(ParseWorldSensorInputs(input));
+            } catch (const std::exception& error) {
+                // Server LoadImpl catches gazebo::common::Exception and routes
+                // main through Fini/return-1. std exceptions are not that route.
+                FailSensorColdStart(std::string("XGC required sensor cold configuration: ") + error.what());
+            }
+        }
         world_created_connection_ = gazebo::event::Events::ConnectWorldCreated(
             std::bind(&GazeboSceneSystemPlugin::OnWorldCreated, this, std::placeholders::_1));
     }
@@ -265,15 +314,18 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     void OnWorldCreated(const std::string& world_name) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (world_) {
+            if (sensor_inputs_) FailSensorColdStart("required World sensors cannot attach to a second World");
             ROS_ERROR("XGC Gazebo Scene supports one world per gzserver process");
             return;
         }
         world_ = gazebo::physics::get_world(world_name);
         if (!world_) {
+            if (sensor_inputs_) FailSensorColdStart("required sensor World could not be resolved");
             gzerr << "XGC Gazebo Scene could not resolve world " << world_name << "\n";
             return;
         }
         if (!ros::isInitialized()) {
+            if (sensor_inputs_) FailSensorColdStart("required World sensors need gazebo_ros_api_plugin first");
             gzerr << "XGC Gazebo Scene requires gazebo_ros_api_plugin to load first\n";
             world_.reset();
             return;
@@ -290,6 +342,12 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         if (!node_->getParam("physical_contacts/tracked_model_prefixes", tracked_model_prefixes_)) {
             tracked_model_prefixes_.clear();
         }
+        if (sensor_inputs_) {
+            try { ConfigureWorldSensors(world_name); }
+            catch (const std::exception& error) {
+                FailSensorColdStart(std::string("XGC required sensor cold initialization: ") + error.what());
+            }
+        }
         geometry_publisher_ = node_->advertise<ObstacleDefinitionArray>(kGeometryTopic, 1, true);
         state_publisher_ = node_->advertise<ObstacleStateArray>(kStateTopic, 1, true);
         geometry_library_publisher_ =
@@ -303,8 +361,10 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             // A Gazebo transport subscriber makes ContactManager retain the
             // engine contacts without forcing every consumer to ingest the
             // high-volume raw wheel/ground stream.
-            gazebo_transport_node_.reset(new gazebo::transport::Node());
-            gazebo_transport_node_->Init(world_name);
+            if (!gazebo_transport_node_) {
+                gazebo_transport_node_.reset(new gazebo::transport::Node());
+                gazebo_transport_node_->Init(world_name);
+            }
             contact_subscriber_ =
                 gazebo_transport_node_->Subscribe("~/physics/contacts", &GazeboSceneSystemPlugin::OnContacts, this);
             world_reset_connection_ =
@@ -318,6 +378,118 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         update_connection_ = gazebo::event::Events::ConnectWorldUpdateBegin(
             std::bind(&GazeboSceneSystemPlugin::OnUpdate, this, std::placeholders::_1));
         ROS_INFO("XGC Gazebo Scene attached to world %s", world_name.c_str());
+    }
+
+
+    void ConfigureWorldSensors(const std::string& world_name) {
+        const auto& inputs = *sensor_inputs_;
+        sensor_sources_.resize(inputs.poses.size());
+        sensor_pose_subscribers_.resize(inputs.poses.size());
+        sensor_cloud_subscribers_.resize(inputs.clouds.size());
+        sensor_cloud_loaded_.assign(inputs.clouds.size(), false);
+        auto initial_geometry = std::make_shared<xgc2_world_lidar::WorldSensorGeometry>();
+        initial_geometry->shared.resize(inputs.configuration.shared.size());
+        sensor_geometry_ = std::move(initial_geometry);
+        sensor_outputs_.reserve(inputs.outputs.size());
+        for (const auto& topic : inputs.outputs)
+            sensor_outputs_.push_back(node_->advertise<sensor_msgs::PointCloud2>(topic, 10));
+        if (!gazebo_transport_node_) {
+            gazebo_transport_node_.reset(new gazebo::transport::Node());
+            gazebo_transport_node_->Init(world_name);
+        }
+        sensor_control_publisher_ = gazebo_transport_node_->Advertise<gazebo::msgs::ServerControl>(
+            "/gazebo/server/control", 1);
+        sensor_geometry_node_ = std::make_unique<ros::NodeHandle>(*node_);
+        sensor_geometry_node_->setCallbackQueue(&sensor_geometry_queue_);
+        for (std::size_t i = 0; i < inputs.poses.size(); ++i) {
+            const auto& input = inputs.poses[i];
+            if (input.type == "nav_msgs/Odometry")
+                sensor_pose_subscribers_[i] = node_->subscribe<nav_msgs::Odometry>(
+                    input.topic, 50, [this, i](const nav_msgs::Odometry::ConstPtr& pose) {
+                        AcceptSensorPose(i, pose->pose.pose, pose->header.stamp);
+                    });
+            else
+                sensor_pose_subscribers_[i] = node_->subscribe<geometry_msgs::PoseStamped>(
+                    input.topic, 50, [this, i](const geometry_msgs::PoseStamped::ConstPtr& pose) {
+                        AcceptSensorPose(i, pose->pose, pose->header.stamp);
+                    });
+        }
+        for (std::size_t i = 0; i < inputs.clouds.size(); ++i)
+            sensor_cloud_subscribers_[i] = sensor_geometry_node_->subscribe<sensor_msgs::PointCloud2>(
+                inputs.clouds[i].topic, 1,
+                [this, i](const sensor_msgs::PointCloud2::ConstPtr& message) {
+                    // This queue is only serviced by the sensor caller, never
+                    // the control spinner or Gazebo's physics update thread.
+                    if (sensor_cloud_loaded_[i]) return;
+                    const auto& binding = sensor_inputs_->clouds[i];
+                    if (!binding.gpu_frame.empty() && message->header.frame_id != binding.gpu_frame)
+                        throw std::invalid_argument("GPU static cloud does not use its declared world frame");
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+                    pcl::fromROSMsg(*message, *cloud);
+                    // Immutable next pin; never edit the in-flight geometry.
+                    auto next = std::make_shared<xgc2_world_lidar::WorldSensorGeometry>(*sensor_geometry_);
+                    for (const auto group : binding.groups) next->shared[group] = cloud;
+                    ++next->version;
+                    sensor_geometry_ = std::move(next);
+                    sensor_cloud_loaded_[i] = true;
+                    sensor_cloud_subscribers_[i].shutdown(); // original first-cloud policy
+                });
+        xgc2_world_lidar::WorldSensorCallbacks callbacks;
+        callbacks.now = [] { return ros::Time::now(); }; // original ROS domain, not Grid/World time
+        callbacks.process_inputs = [this] { sensor_geometry_queue_.callAvailable(ros::WallDuration(0)); };
+        callbacks.capture = [this](xgc2_world_lidar::WorldSensorAcquisition& frame) {
+            { std::lock_guard<std::mutex> lock(sensor_input_mutex_);
+              for (std::size_t i = 0; i < sensor_sources_.size(); ++i) frame.sources[i] = sensor_sources_[i]; }
+            frame.geometry = sensor_geometry_; // same caller as geometry callback, const strong pin
+            frame.world_commit = sensor_world_commit_.load(std::memory_order_relaxed);
+        };
+        callbacks.publish = [this](std::size_t i, xgc2_world_lidar::SensorOutputKind,
+                                   const sensor_msgs::PointCloud2& cloud,
+                                   const xgc2_world_lidar::SensorAcquisition&) {
+            if (!sensor_teardown_.load(std::memory_order_acquire)) sensor_outputs_[i].publish(cloud);
+        };
+        callbacks.fatal = [this](std::exception_ptr error) { ReportSensorFatal(error); };
+        sensor_system_ = std::make_unique<xgc2_world_lidar::WorldSensorSystem>(
+            inputs.configuration, std::move(callbacks));
+        // Requires the matching cold-start postcondition library: static
+        // pool/layout/clock anchor only. No map, source, timer or first-step wait.
+        sensor_system_->start();
+    }
+
+    void AcceptSensorPose(std::size_t i, const geometry_msgs::Pose& pose, const ros::Time& stamp) {
+        if (sensor_teardown_.load(std::memory_order_acquire)) return;
+        { std::lock_guard<std::mutex> lock(sensor_input_mutex_);
+          auto& source = sensor_sources_[i];
+          source.position = {pose.position.x, pose.position.y, pose.position.z};
+          source.orientation = {pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z};
+          source.source_stamp = stamp; source.ready = true; ++source.source_version;
+          source.world_commit = sensor_world_commit_.load(std::memory_order_relaxed); }
+        // Original accepted source, no new finite/normalization/Pairer/truth substitution.
+        // The original ROS clock/due loop and actual World update supply wakeups;
+        // do not borrow a partially constructed sensor owner from a ROS callback.
+    }
+
+    void ReportSensorFatal(std::exception_ptr error) {
+        // WorldSensorSystem has already fenced and destroyed scan/GPU/pool
+        // resources. Do not acquire the host mutex or stop/join this caller.
+        std::string failure = "unknown World sensor backend failure";
+        try { std::rethrow_exception(error); }
+        catch (const std::exception& value) { failure = value.what(); }
+        catch (...) {}
+        ROS_FATAL("XGC Gazebo World sensor failed: %s", failure.c_str());
+        // Original Server control subscriber appears AFTER WorldCreated. Keep
+        // native publisher/Node alive; never send early and assume latching.
+        while (!sensor_teardown_.load(std::memory_order_acquire)) {
+            if (sensor_control_publisher_->WaitForConnection(gazebo::common::Time(0, 10000000))) {
+                if (sensor_teardown_.load(std::memory_order_acquire)) return;
+                gazebo::msgs::ServerControl stop;
+                stop.set_stop(true);
+                sensor_control_publisher_->Publish(stop, true);
+                // Connection and local send are NOT execution/identity ACK.
+                // Server main consumes its existing queue and does shutdown.
+                return;
+            }
+        }
     }
 
     void PublishPhysicalCollision(bool collision, const std::string& detail) {
@@ -516,6 +688,9 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
 
     void OnUpdate(const gazebo::common::UpdateInfo& info) {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (sensor_teardown_.load(std::memory_order_acquire)) return;
+        sensor_world_commit_.fetch_add(1, std::memory_order_relaxed);
+        if (sensor_system_) sensor_system_->notify();
         if (!world_) {
             return;
         }
@@ -810,6 +985,20 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
 
     std::mutex mutex_;
     gazebo::physics::WorldPtr world_;
+    std::unique_ptr<WorldSensorInputs> sensor_inputs_;
+    std::unique_ptr<xgc2_world_lidar::WorldSensorSystem> sensor_system_;
+    std::atomic<bool> sensor_teardown_{false};
+    std::atomic<uint64_t> sensor_world_commit_{0};
+    std::mutex sensor_input_mutex_;
+    std::vector<xgc2_world_lidar::SensorAcquisition> sensor_sources_;
+    std::shared_ptr<const xgc2_world_lidar::WorldSensorGeometry> sensor_geometry_;
+    std::vector<ros::Subscriber> sensor_pose_subscribers_, sensor_cloud_subscribers_;
+    std::vector<bool> sensor_cloud_loaded_; // sensor caller only
+    std::vector<ros::Publisher> sensor_outputs_;
+    ros::CallbackQueue sensor_geometry_queue_;
+    std::unique_ptr<ros::NodeHandle> sensor_geometry_node_;
+    gazebo::transport::PublisherPtr sensor_control_publisher_;
+
     gazebo::event::ConnectionPtr world_created_connection_;
     gazebo::event::ConnectionPtr update_connection_;
     gazebo::event::ConnectionPtr world_reset_connection_;

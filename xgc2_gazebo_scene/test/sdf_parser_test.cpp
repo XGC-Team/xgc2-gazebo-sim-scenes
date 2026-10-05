@@ -1,5 +1,8 @@
 #include "obstacle_sdf.hpp"
 #include "xgc2_gazebo_scene/model_sdf_parser.hpp"
+#include "xgc2_gazebo_scene/world_sensor_inputs.hpp"
+#include <boost/property_tree/json_parser.hpp>
+#include <sstream>
 
 #include <gtest/gtest.h>
 
@@ -97,6 +100,50 @@ TEST(ModelSdfParser, HasNoModelAfterARejectedString) {
     EXPECT_TRUE(parser.Parse(ObstacleSdf(3, 1)));
     ASSERT_NE(parser.Model(), nullptr);
     EXPECT_EQ(parser.Model()->Get<std::string>("name"), "xgc2_obstacle_scene_3");
+}
+
+
+boost::property_tree::ptree SharedAttachment() {
+    std::istringstream data(R"({"shared":[{
+      "observation_model":"crop_through","backend":"cpu",
+      "prevoxel_leaf_m":[0.1,0.1,0.1],"range_m":5.0,
+      "heading_cos_min":0.5,"vertical_slab_tan":0.5773502691896257,
+      "publish_rate_hz":12.0,"frame_id":"map","stamp_policy":"zero",
+      "input_cloud_topic":"/map_generator/global_cloud","pose_type":"nav_msgs/Odometry",
+      "pose_topics":["/xgc/act1/uav1/odom","/xgc/act1/uav2/odom"],
+      "output_topics":["/uav1/simple_lidar/points","/uav2/simple_lidar/points"]}]})");
+    boost::property_tree::ptree input;
+    boost::property_tree::read_json(data, input);
+    return input;
+}
+
+TEST(GazeboWorldSensorInputs, KeepsOriginalSharedSourceOrderAndParameters) {
+    const auto result = ParseWorldSensorInputs(SharedAttachment());
+    ASSERT_EQ(result.configuration.shared.size(), 1U);
+    ASSERT_EQ(result.poses.size(), 2U);
+    EXPECT_EQ(result.poses[0].topic, "/xgc/act1/uav1/odom");
+    EXPECT_EQ(result.poses[0].type, "nav_msgs/Odometry");
+    EXPECT_EQ(result.configuration.shared[0].source_indices, (std::vector<std::size_t>{0, 1}));
+    EXPECT_EQ(result.configuration.shared[0].worker_threads, 1U);
+    EXPECT_EQ(result.configuration.shared[0].metadata.frame_id, "map");
+    EXPECT_EQ(result.configuration.shared[0].metadata.stamp_policy, "zero");
+    EXPECT_DOUBLE_EQ(result.configuration.shared[0].metadata.range_m, 5.0);
+    EXPECT_DOUBLE_EQ(result.configuration.shared[0].metadata.publish_rate_hz, 12.0);
+    EXPECT_EQ(result.clouds[0].topic, "/map_generator/global_cloud");
+    EXPECT_EQ(result.outputs[1], "/uav2/simple_lidar/points");
+    EXPECT_TRUE(result.configuration.normal.empty());
+}
+
+TEST(GazeboWorldSensorInputs, RejectsWrongAuthorityAndMalformedFrozenAttachment) {
+    auto input = SharedAttachment();
+    input.put("normal.schemaVersion", 1);
+    EXPECT_THROW(ParseWorldSensorInputs(input), std::invalid_argument);
+    input = SharedAttachment(); input.put("sceneFile", "/different-world.yaml");
+    EXPECT_THROW(ParseWorldSensorInputs(input), std::invalid_argument);
+    input = SharedAttachment(); input.get_child("shared").front().second.put("worker_threads", 0);
+    EXPECT_THROW(ParseWorldSensorInputs(input), std::invalid_argument);
+    input = SharedAttachment(); input.get_child("shared").front().second.get_child("output_topics").pop_back();
+    EXPECT_THROW(ParseWorldSensorInputs(input), std::invalid_argument);
 }
 
 } // namespace

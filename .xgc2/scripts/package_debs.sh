@@ -205,7 +205,7 @@ EOF
   write_control \
     "${pkg_root}" \
     "${package}" \
-    "${shlibdeps}, ros-noetic-gazebo-msgs, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-message-runtime, ros-noetic-rosconsole, ros-noetic-roscpp, ros-noetic-roscpp-serialization, ros-noetic-rospy, ros-noetic-rostime, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-1)" \
+    "${shlibdeps}, ros-noetic-gazebo-msgs, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-message-runtime, ros-noetic-nav-msgs, ros-noetic-sensor-msgs, ros-noetic-pcl-conversions, ros-noetic-rosconsole, ros-noetic-roscpp, ros-noetic-roscpp-serialization, ros-noetic-rospy, ros-noetic-rostime, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-1)" \
     "XGC2 Gazebo Classic scene director, obstacle controllers and robot spawn helper"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +

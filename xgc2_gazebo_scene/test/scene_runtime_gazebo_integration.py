@@ -25,7 +25,7 @@ import xmlrpc.client
 import rospkg
 import rospy
 import yaml
-from gazebo_msgs.srv import GetModelState
+from gazebo_msgs.srv import GetModelState, GetPhysicsProperties
 from std_msgs.msg import String
 from xgc2_gazebo_scene.msg import ConvexPart, ObstacleDefinitionArray, MotionSpec
 from xgc2_gazebo_scene.srv import ConfigureMotions, StopMotions
@@ -72,11 +72,14 @@ def close(left, right, tolerance=2e-6):
 
 
 class Integration:
-    def __init__(self, scene_file, evidence):
+    def __init__(self, scene_file, evidence, world_file=None, scene_system_plugin=None):
         self.evidence = evidence
         self.evidence.mkdir(parents=True, exist_ok=False)
-        self.source = evidence / 'scene.yaml'
-        shutil.copyfile(scene_file, self.source)
+        self.source = None
+        if scene_file is not None:
+            self.source = evidence / 'scene.yaml'
+            shutil.copyfile(scene_file, self.source)
+        self.scene_system_plugin = str(scene_system_plugin or 'libxgc2_gazebo_scene_system.so')
         self.processes = []
         self.logs = []
         self.samples = {}
@@ -88,16 +91,22 @@ class Integration:
         os.environ['GAZEBO_MODEL_DATABASE_URI'] = ''
         os.environ['ROS_LOG_DIR'] = str(evidence / 'ros-log')
         os.environ['ROS_HOME'] = str(evidence / 'ros-home')
-        self.packages = rospkg.RosPack()
-        self.world = Path(self.packages.get_path('gazebo_sim_worlds')) / 'worlds/scene_editable/scene_editable.world'
-        self.scene_node = Path(self.packages.get_path('xgc2_scene_runtime')) / 'scripts/scene_node'
-        assert self.world.is_file(), 'Source the updated scene product overlay before running: ' + str(self.world)
-        assert self.scene_node.is_file(), self.scene_node
+        self.scene_node = None
+        if world_file is not None:
+            # Select an existing original fixture world. No world generation or
+            # geometry/source substitution participates in this cold-only test.
+            self.world = world_file
+        else:
+            self.packages = rospkg.RosPack()
+            self.world = Path(self.packages.get_path('gazebo_sim_worlds')) / 'worlds/scene_editable/scene_editable.world'
+            self.scene_node = Path(self.packages.get_path('xgc2_scene_runtime')) / 'scripts/scene_node'
+            assert self.scene_node.is_file(), self.scene_node
+        assert self.world.is_file(), self.world
 
-    def start(self, name, args):
+    def start(self, name, args, env=None):
         log = (self.evidence / (name + '.log')).open('wb')
         self.logs.append(log)
-        process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env)
         self.processes.append(process)
         self.events.append({'process': name, 'pid': process.pid, 'argv': [str(arg) for arg in args]})
         return process
@@ -109,7 +118,7 @@ class Integration:
             os.killpg(process.pid, sig)
             try:
                 process.wait(timeout=5)
-                return
+                return sig
             except subprocess.TimeoutExpired:
                 pass
 
@@ -327,6 +336,66 @@ class Integration:
                             'final_revision': self.envelope['revision'], 'ros_port': self.ros_port,
                             'gazebo_port': self.gazebo_port})
 
+    def run_sensor_lifecycle(self, sensor_inputs):
+        """The original private fixture, selecting only required cold attachment.
+
+        This does not test runtime backend-fatal delivery or scientific output.
+        No cloud/pose readiness or first physics step participates in readiness.
+        """
+        self.start('roscore', ['roscore', '-p', str(self.ros_port)])
+        master = xmlrpc.client.ServerProxy(os.environ['ROS_MASTER_URI'])
+        wait_for(lambda: master.getPid('/scene_integration')[0] == 1, 'private ROS master')
+        rospy.init_node('scene_integration', anonymous=True, disable_signals=True)
+        rospy.set_param('/use_sim_time', True)
+        frozen = self.evidence / 'world-lidar-inputs.json'
+        shutil.copyfile(sensor_inputs, frozen)
+        original = json.loads(frozen.read_text())
+        assert original.get('shared') and not original.get('normal') and 'sceneFile' not in original
+        bad = self.evidence / 'wrong-authority.json'
+        rejected = copy.deepcopy(original)
+        rejected['normal'] = {}
+        bad.write_text(json.dumps(rejected, allow_nan=False) + '\n')
+        environment = dict(os.environ, XGC_GAZEBO_WORLD_LIDAR_INPUTS=str(bad))
+        failed = self.start('gazebo-cold-rejected', [
+            'gzserver', '--verbose', '--pause', '-s', 'libgazebo_ros_api_plugin.so',
+            '-s', self.scene_system_plugin, str(self.world)], env=environment)
+        code = failed.wait(timeout=30)
+        assert code == 255, ('expected original common::Exception/Fini main return -1', code)
+        for log in self.logs:
+            log.flush()
+        assert 'XGC required sensor cold configuration:' in (
+            self.evidence / 'gazebo-cold-rejected.log').read_text(errors='replace')
+        self.events.append({'required_cold_rejection_exit': code})
+
+        environment['XGC_GAZEBO_WORLD_LIDAR_INPUTS'] = str(frozen)
+        self.gzserver = self.start('gazebo-sensor-paused', [
+            'gzserver', '--verbose', '--pause', '-s', 'libgazebo_ros_api_plugin.so',
+            '-s', self.scene_system_plugin, str(self.world)], env=environment)
+        state_topic = '/xgc2/simulation/obstacles/state'
+
+        def original_state_registered():
+            assert self.gzserver.poll() is None, 'required attachment server exited during cold initialization'
+            node = master.lookupNode('/scene_integration', '/gazebo')
+            if node[0] != 1:
+                return False
+            result = xmlrpc.client.ServerProxy(node[2]).requestTopic(
+                '/scene_integration', state_topic, [['TCPROS']])
+            return result[0] == 1
+
+        wait_for(original_state_registered, 'existing /gazebo state topic registration')
+        rospy.wait_for_service('/gazebo/get_physics_properties', timeout=5)
+        properties = rospy.ServiceProxy('/gazebo/get_physics_properties', GetPhysicsProperties)()
+        assert properties.success and properties.pause, properties
+        self.events.append({'required_cold_initialized_state_registered': state_topic,
+                            'paused': True, 'cloud_or_pose_published': False,
+                            'registration_is_not_message_or_sensor_output_ack': True})
+        stopped_by = self.stop(self.gzserver)
+        assert stopped_by == signal.SIGINT and self.gzserver.returncode == 0, (stopped_by, self.gzserver.returncode)
+        self.events.append({'paused_normal_stop_signal': 'SIGINT',
+                            'paused_normal_stop_exit': self.gzserver.returncode,
+                            'result': 'passed_selected_cold_and_paused_fixture',
+                            'runtime_backend_fatal_and_teardown_race': 'not exercised'})
+
     def close(self):
         for process in reversed(self.processes):
             self.stop(process)
@@ -337,13 +406,29 @@ class Integration:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--scene-file', type=Path, required=True)
+    parser.add_argument('--scene-file', type=Path)
     parser.add_argument('--evidence-dir', type=Path, required=True, help='New directory for logs and temporary scene saves')
+    parser.add_argument('--world-sensor-inputs', type=Path,
+                        help='Select only cold/paused sensor lifecycle using this actual frozen attachment')
+    parser.add_argument('--world-file', type=Path, help='Existing original fixture world for the selected cold/paused case')
+    parser.add_argument('--scene-system-plugin', type=Path, help='Exact compiled existing SceneSystemPlugin ELF')
     args = parser.parse_args()
-    runner = Integration(args.scene_file.resolve(), args.evidence_dir.resolve())
+    if args.world_sensor_inputs is not None:
+        if args.world_file is None or args.scene_system_plugin is None:
+            parser.error('selected cold/paused fixture requires exact world and plugin paths')
+    elif args.scene_file is None:
+        parser.error('original full scene fixture requires --scene-file')
+    runner = Integration(args.scene_file.resolve() if args.scene_file else None,
+                         args.evidence_dir.resolve(),
+                         args.world_file.resolve() if args.world_file else None,
+                         args.scene_system_plugin.resolve() if args.scene_system_plugin else None)
     try:
-        runner.run()
-        print('Original 16 obstacle runtime/Gazebo integration passed:', runner.evidence)
+        if args.world_sensor_inputs is not None:
+            runner.run_sensor_lifecycle(args.world_sensor_inputs.resolve())
+            print('Selected required sensor cold/paused fixture passed:', runner.evidence)
+        else:
+            runner.run()
+            print('Original 16 obstacle runtime/Gazebo integration passed:', runner.evidence)
     except Exception as error:
         runner.events.append({'result': 'failed', 'error': str(error)})
         raise

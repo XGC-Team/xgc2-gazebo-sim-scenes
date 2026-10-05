@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.4.1-2
+version: 1.4.1-3
 kind: ros1-apt
 summary: Reusable Gazebo Classic worlds, scene director, and simple lidar plugin.
 ros:
@@ -26,6 +26,8 @@ apt:
   - ros-noetic-gazebo-ros
   - ros-noetic-geometry-msgs
   - ros-noetic-message-runtime
+  - ros-noetic-nav-msgs
+  - ros-noetic-pcl-conversions
   - ros-noetic-rosconsole
   - ros-noetic-roscpp
   - ros-noetic-roscpp-serialization
@@ -35,6 +37,7 @@ apt:
   - ros-noetic-std-msgs
   - ros-noetic-xacro
   - ros-noetic-xgc2-geometry-msgs (>= 1.2.0-1)
+  - ros-noetic-xgc2-world-lidar (>= 1.2.0-12)
 usage:
   install: 'sudo apt update
 
@@ -121,4 +124,4 @@ release:
   dependency_policy:
     xgc2-scene-generation: rebuild
   apt_versions:
-    focal: 1.4.1-2
+    focal: 1.4.1-3

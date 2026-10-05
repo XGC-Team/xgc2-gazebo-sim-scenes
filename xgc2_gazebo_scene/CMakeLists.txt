@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
 project(xgc2_gazebo_scene VERSION 0.1.0 LANGUAGES CXX)
 
+find_package(XgcWorldLidar CONFIG REQUIRED)
+
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
+  nav_msgs
+  sensor_msgs
+  pcl_conversions
   message_generation
   roscpp
   std_msgs
@@ -35,7 +40,7 @@ catkin_package(
     xgc2_gazebo_scene_system
     xgc2_scene_model
     xgc2_scene_authoring_world
-  CATKIN_DEPENDS geometry_msgs message_runtime roscpp std_msgs xgc2_geometry_msgs
+  CATKIN_DEPENDS geometry_msgs nav_msgs sensor_msgs pcl_conversions message_runtime roscpp std_msgs xgc2_geometry_msgs
 )
 
 add_library(xgc2_gazebo_scene_contact
@@ -88,6 +93,7 @@ target_link_libraries(xgc2_gazebo_scene_system
     xgc2_gazebo_scene_contact
     xgc2_gazebo_scene_geometry
     xgc2_gazebo_scene_motion
+    XgcWorldLidar::Sensors
     ${catkin_LIBRARIES}
     ${GAZEBO_LIBRARIES}
 )
@@ -178,7 +184,7 @@ if(CATKIN_ENABLE_TESTING)
     target_compile_features(xgc2_gazebo_scene_sdf_parser_test PUBLIC cxx_std_17)
     target_compile_options(xgc2_gazebo_scene_sdf_parser_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_include_directories(xgc2_gazebo_scene_sdf_parser_test PRIVATE include ${GAZEBO_INCLUDE_DIRS})
-    target_link_libraries(xgc2_gazebo_scene_sdf_parser_test ${GAZEBO_LIBRARIES})
+    target_link_libraries(xgc2_gazebo_scene_sdf_parser_test XgcWorldLidar::Sensors ${GAZEBO_LIBRARIES})
   endif()
 
   catkin_add_gtest(xgc2_gazebo_scene_model_index_test test/model_index_test.cpp)
