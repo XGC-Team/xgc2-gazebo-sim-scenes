@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset DISPLAY WAYLAND_DISPLAY
+: "${XGC2_PYTHON_EXECUTABLE:?select image Python >=3.10 explicitly}"
+"${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3,10); from xgc2_xrpc.http import Client"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
@@ -45,7 +48,7 @@ rsync -a --delete \
 cp "${repo_root}/.clang-tidy" "${workspace}/src/.clang-tidy"
 
 catkin_make -C "${workspace}" \
-  -DCATKIN_ENABLE_TESTING=ON \
+  -DPYTHON_EXECUTABLE="${XGC2_PYTHON_EXECUTABLE}" -DCATKIN_ENABLE_TESTING=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 

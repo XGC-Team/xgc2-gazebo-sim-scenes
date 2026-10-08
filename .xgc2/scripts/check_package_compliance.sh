@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset DISPLAY WAYLAND_DISPLAY
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
@@ -67,7 +68,14 @@ required_files=(
   xgc2_gazebo_scene/src/gazebo_scene_system_plugin.cpp
   xgc2_gazebo_scene/src/motion_controller.cpp
   xgc2_gazebo_scene/src/obstacle_path_plugin.cpp
-  xgc2_gazebo_scene/src/scene_authoring_world_plugin.cpp
+  xgc2_gazebo_scene/src/simulation_service.cpp
+  xgc2_gazebo_scene/src/simulation_world_plugin.cpp
+  xgc2_gazebo_scene/src/simulation_entity_ack_plugin.cpp
+  xgc2_gazebo_scene/src/simulation_sensor_ack_plugin.cpp
+  xgc2_gazebo_scene/src/simulation_ros_data_plugin.cpp
+  xgc2_gazebo_scene/scripts/simulation_world_prepare
+  gazebo_sim_worlds/scripts/native_world_start
+  gazebo_sim_worlds/launch/native_world.launch
   xgc2_gazebo_scene/src/scene_model.cpp
   xgc2_gazebo_scene/include/xgc2_gazebo_scene/scene_model.hpp
   xgc2_simple_lidar/CMakeLists.txt
@@ -215,6 +223,10 @@ fi
 
 grep -q 'add_library(obstaclePathPlugin SHARED' xgc2_gazebo_scene/CMakeLists.txt
 grep -q 'add_library(xgc2_gazebo_scene_system SHARED' xgc2_gazebo_scene/CMakeLists.txt
-grep -q 'add_library(xgc2_scene_authoring_world SHARED' xgc2_gazebo_scene/CMakeLists.txt
+grep -q 'add_library(xgc2_simulation_service SHARED' xgc2_gazebo_scene/CMakeLists.txt
+grep -q 'add_library(xgc2_simulation_ros_data SHARED' xgc2_gazebo_scene/CMakeLists.txt
+test ! -e xgc2_gazebo_scene/src/scene_authoring_world_plugin.cpp
+test ! -e xgc2_gazebo_scene/srv/ConfigureMotions.srv
+test ! -e xgc2_gazebo_scene/srv/StopMotions.srv
 
 echo "Package compliance checks passed."

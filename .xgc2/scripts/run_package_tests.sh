@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset DISPLAY WAYLAND_DISPLAY
+: "${XGC2_PYTHON_EXECUTABLE:?select image Python >=3.10 explicitly}"
+"${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3,10); from xgc2_xrpc.http import Client"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
@@ -29,7 +32,7 @@ ln -s "${repo_root}/gazebo_sim_worlds" "${workspace}/src/gazebo_sim_worlds"
 export GAZEBO_MODEL_PATH="${repo_root}/gazebo_sim_worlds/models:${GAZEBO_MODEL_PATH:-}"
 export GAZEBO_MODEL_DATABASE_URI=""
 
-catkin_make -C "${workspace}" -DCATKIN_ENABLE_TESTING=ON
+catkin_make -C "${workspace}" -DPYTHON_EXECUTABLE="${XGC2_PYTHON_EXECUTABLE}" -DCATKIN_ENABLE_TESTING=ON
 catkin_make -C "${workspace}" run_tests_xgc2_gazebo_scene
 catkin_make -C "${workspace}" run_tests_xgc2_simple_lidar
 catkin_test_results "${workspace}/build/test_results"

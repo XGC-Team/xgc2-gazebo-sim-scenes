@@ -1,9 +1,9 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.4.1-3
+version: 1.4.1-4
 kind: ros1-apt
-summary: Reusable Gazebo Classic worlds, scene director, simple lidar, and shadow-depth plugin.
+summary: Explicit Gazebo Classic worlds, native simulation-v1 service, ROS user data, simple lidar and rendering.
 ros:
   distro: noetic
   packages:
@@ -34,6 +34,9 @@ apt:
   - ros-noetic-roscpp-serialization
   - ros-noetic-rospy
   - ros-noetic-rostime
+  - ros-noetic-rosgraph-msgs
+  - libxgc2-xrpc1 (>= 0.1.0-1)
+  - ros-noetic-xgc2-scene-runtime (>= 1.2.0-12)
   - ros-noetic-sensor-msgs
   - ros-noetic-std-msgs
   - ros-noetic-xacro
@@ -64,7 +67,19 @@ usage:
 
     test -f /opt/ros/noetic/lib/libxgc2_gazebo_scene_system.so
 
-    test -f /opt/ros/noetic/lib/libxgc2_scene_authoring_world.so
+    test -f /opt/ros/noetic/lib/libxgc2_simulation_service.so
+
+    test -f /opt/ros/noetic/lib/libxgc2_simulation_world.so
+
+    test -f /opt/ros/noetic/lib/libxgc2_simulation_entity_ack.so
+
+    test -f /opt/ros/noetic/lib/libxgc2_simulation_sensor_ack.so
+
+    test -f /opt/ros/noetic/lib/libxgc2_simulation_ros_data.so
+
+    test -x /opt/ros/noetic/lib/gazebo_sim_worlds/native_world_start
+
+    test -x /opt/ros/noetic/lib/xgc2_gazebo_scene/simulation_world_prepare
 
     test -x /opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model
 
@@ -118,7 +133,12 @@ ownership:
   - /opt/ros/noetic/lib/libxgc2_scene_model.so
   - /opt/ros/noetic/lib/libxgc2_gazebo_rendering.so
   - /opt/ros/noetic/share/xgc2_gazebo_rendering
-  - /opt/ros/noetic/lib/libxgc2_scene_authoring_world.so
+  - /opt/ros/noetic/lib/libxgc2_simulation_service.so
+  - /opt/ros/noetic/lib/libxgc2_simulation_world.so
+  - /opt/ros/noetic/lib/libxgc2_simulation_entity_ack.so
+  - /opt/ros/noetic/lib/libxgc2_simulation_sensor_ack.so
+  - /opt/ros/noetic/lib/libxgc2_simulation_ros_data.so
+  - /opt/ros/noetic/lib/gazebo_sim_worlds
   - /opt/ros/noetic/lib/libxgc2_simple_lidar.so
   - /opt/ros/noetic/lib/libxgc2_simple_lidar_cpu.so
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
@@ -129,7 +149,11 @@ ownership:
   - /opt/ros/noetic/share/gennodejs/ros/xgc2_gazebo_scene
   - /opt/ros/noetic/share/roseus/ros/xgc2_gazebo_scene
 release:
+  requires:
+  - libxgc2-robotics-interfaces-dev
   dependency_policy:
     xgc2-scene-generation: rebuild
+    xgc2-xrpc: rebuild
+    libxgc2-robotics-interfaces-dev: rebuild
   apt_versions:
-    focal: 1.4.1-3
+    focal: 1.4.1-4

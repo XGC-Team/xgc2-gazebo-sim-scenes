@@ -30,17 +30,13 @@
 #include <utility>
 #include <vector>
 
-#include "xgc2_gazebo_scene/ConfigureMotions.h"
 #include "xgc2_gazebo_scene/ConvexPart.h"
-#include "xgc2_gazebo_scene/MotionSpec.h"
 #include "xgc2_gazebo_scene/ObstacleDefinition.h"
 #include "xgc2_gazebo_scene/ObstacleDefinitionArray.h"
 #include "xgc2_gazebo_scene/ObstacleState.h"
 #include "xgc2_gazebo_scene/ObstacleStateArray.h"
-#include "xgc2_gazebo_scene/StopMotions.h"
 #include "xgc2_gazebo_scene/convex_mesh_geometry.hpp"
 #include "xgc2_gazebo_scene/model_snapshot.hpp"
-#include "xgc2_gazebo_scene/motion_controller.hpp"
 #include "xgc2_gazebo_scene/obstacle_messages.hpp"
 #include "xgc2_gazebo_scene/physical_contact_filter.hpp"
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
@@ -59,11 +55,7 @@ constexpr char kGeometryLibraryTopic[] = "/xgc2/simulation/obstacles/geometry_li
 constexpr char kInstancesTopic[] = "/xgc2/simulation/obstacles/instances";
 constexpr char kPhysicalCollisionTopic[] = "/xgc2/simulation/physical_collision";
 constexpr char kPhysicalCollisionDetailTopic[] = "/xgc2/simulation/physical_collision_detail";
-constexpr char kConfigureService[] = "/xgc2/gazebo/obstacles/configure_motions";
-constexpr char kStopService[] = "/xgc2/gazebo/obstacles/stop_motions";
 constexpr double kPublishPeriod = 1.0 / 30.0;
-constexpr double kExternalPositionTolerance = 1.0e-6;
-constexpr double kExternalOrientationTolerance = 1.0e-6;
 constexpr int kCylinderVertexCount = 16;
 
 void AppendBoxVertices(const ignition::math::Vector3d& size, std::vector<geometry_msgs::Point>* vertices) {
@@ -168,54 +160,6 @@ xgc2_geometry_msgs::GeometryTemplate StandardGeometryTemplate(const ConvexPart& 
     return geometry_template;
 }
 
-bool PoseNearlyEqual(const ignition::math::Pose3d& left, const ignition::math::Pose3d& right) {
-    if ((left.Pos() - right.Pos()).Length() > kExternalPositionTolerance) {
-        return false;
-    }
-    const double dot = std::abs(left.Rot().W() * right.Rot().W() + left.Rot().X() * right.Rot().X() +
-                                left.Rot().Y() * right.Rot().Y() + left.Rot().Z() * right.Rot().Z());
-    return std::abs(1.0 - dot) <= kExternalOrientationTolerance;
-}
-
-std::string ConfigureFingerprint(const xgc2_gazebo_scene::ConfigureMotions::Request& request) {
-    std::ostringstream stream;
-    stream.precision(17);
-    stream << request.expected_scene_revision;
-    for (const auto& motion : request.motions) {
-        stream << '|' << motion.name << '|' << motion.mode << '|' << motion.twist.linear.x << '|'
-               << motion.twist.linear.y << '|' << motion.twist.linear.z << '|' << motion.twist.angular.x << '|'
-               << motion.twist.angular.y << '|' << motion.twist.angular.z << '|' << motion.speed;
-        for (const auto& waypoint : motion.waypoints) {
-            stream << '|' << waypoint.x << '|' << waypoint.y << '|' << waypoint.z;
-        }
-    }
-    return stream.str();
-}
-
-std::string StopFingerprint(const xgc2_gazebo_scene::StopMotions::Request& request) {
-    std::ostringstream stream;
-    stream << request.expected_scene_revision;
-    for (const auto& name : request.names) {
-        stream << '|' << name;
-    }
-    return stream.str();
-}
-
-MotionConfiguration ConvertMotion(const MotionSpec& message, std::string* error) {
-    MotionConfiguration configuration;
-    if (!ParseMotionMode(message.mode, &configuration.mode)) {
-        *error = "unsupported motion mode for " + message.name + ": " + message.mode;
-        return configuration;
-    }
-    configuration.linear_velocity.Set(message.twist.linear.x, message.twist.linear.y, message.twist.linear.z);
-    configuration.angular_velocity.Set(message.twist.angular.x, message.twist.angular.y, message.twist.angular.z);
-    configuration.speed = message.speed;
-    for (const auto& waypoint : message.waypoints) {
-        configuration.waypoints.emplace_back(waypoint.x, waypoint.y, waypoint.z);
-    }
-    return configuration;
-}
-
 } // namespace
 
 class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
@@ -223,9 +167,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     GazeboSceneSystemPlugin() = default;
 
     ~GazeboSceneSystemPlugin() override {
-        if (spinner_) {
-            spinner_->stop();
-        }
         contact_subscriber_.reset();
         gazebo_transport_node_.reset();
         world_reset_connection_.reset();
@@ -245,21 +186,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         uint64_t generation = 0;
         ObstacleDefinition definition;
         ignition::math::Pose3d observed_pose = ignition::math::Pose3d::Zero;
-        MotionController controller;
-        bool controlled = false;
-        bool has_commanded_pose = false;
-        ignition::math::Pose3d commanded_pose = ignition::math::Pose3d::Zero;
-        uint64_t motion_revision = 0;
-    };
-
-    struct CachedConfigure {
-        std::string fingerprint;
-        ConfigureMotions::Response response;
-    };
-
-    struct CachedStop {
-        std::string fingerprint;
-        StopMotions::Response response;
     };
 
     void OnWorldCreated(const std::string& world_name) {
@@ -274,7 +200,7 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             return;
         }
         if (!ros::isInitialized()) {
-            gzerr << "XGC Gazebo Scene requires gazebo_ros_api_plugin to load first\n";
+            gzerr << "XGC Gazebo Scene requires the native ROS user-data plugin to load first\n";
             world_.reset();
             return;
         }
@@ -310,11 +236,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             world_reset_connection_ =
                 gazebo::event::Events::ConnectWorldReset(std::bind(&GazeboSceneSystemPlugin::OnWorldReset, this));
         }
-        configure_service_ =
-            node_->advertiseService(kConfigureService, &GazeboSceneSystemPlugin::ConfigureMotionsCallback, this);
-        stop_service_ = node_->advertiseService(kStopService, &GazeboSceneSystemPlugin::StopMotionsCallback, this);
-        spinner_ = std::make_unique<ros::AsyncSpinner>(1);
-        spinner_->start();
         update_connection_ = gazebo::event::Events::ConnectWorldUpdateBegin(
             std::bind(&GazeboSceneSystemPlugin::OnUpdate, this, std::placeholders::_1));
         ROS_INFO("XGC Gazebo Scene attached to world %s", world_name.c_str());
@@ -465,7 +386,7 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         return true;
     }
 
-    bool DiscoverObstacles(const gazebo::physics::Model_V& models, double simulation_time) {
+    bool DiscoverObstacles(const gazebo::physics::Model_V& models) {
         rediscover_ = false;
         std::map<std::string, gazebo::physics::ModelPtr> current;
         for (const auto& model : models) {
@@ -495,10 +416,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             obstacle.generation = generation_counters_[item.first] + 1;
             obstacle.observed_pose = item.second->WorldPose();
             std::string error;
-            MotionConfiguration hold;
-            if (!obstacle.controller.Configure(hold, obstacle.observed_pose, simulation_time, &error)) {
-                ROS_ERROR("Cannot initialize obstacle controller: %s", error.c_str());
-            }
             if (!BuildDefinition(item.first, obstacle.generation, item.second, &obstacle.definition, &error)) {
                 ROS_ERROR_THROTTLE(5.0, "Managed obstacle %s was rejected: %s", item.second->GetName().c_str(),
                                    error.c_str());
@@ -530,33 +447,13 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         bool geometry_changed = false;
         if (rediscover_ || !model_snapshot_.Matches(models)) {
             RefreshContactModels(models);
-            geometry_changed = DiscoverObstacles(models, simulation_time);
+            geometry_changed = DiscoverObstacles(models);
             obstacle_messages_stale_ = obstacle_messages_stale_ || geometry_changed;
             model_snapshot_.Update(models);
         }
 
         for (auto& item : obstacles_) {
             ManagedObstacle& obstacle = item.second;
-            const ignition::math::Pose3d current_pose = obstacle.model->WorldPose();
-            if (obstacle.controlled && obstacle.has_commanded_pose &&
-                !PoseNearlyEqual(current_pose, obstacle.commanded_pose)) {
-                obstacle.controlled = false;
-                obstacle.has_commanded_pose = false;
-                obstacle.observed_pose = current_pose;
-                ++obstacle.motion_revision;
-                ++scene_revision_;
-                ROS_INFO("External pose update took control of managed obstacle %s", item.first.c_str());
-            }
-            if (obstacle.controlled) {
-                const MotionSample sample = obstacle.controller.Sample(simulation_time);
-                // Drive pose kinematically each step. Zero residual twist so Gazebo
-                // does not integrate past the commanded pose between updates and
-                // falsely trip the external-control detector.
-                obstacle.model->SetWorldPose(sample.pose);
-                obstacle.model->SetWorldTwist(ignition::math::Vector3d::Zero, ignition::math::Vector3d::Zero);
-                obstacle.commanded_pose = obstacle.model->WorldPose();
-                obstacle.has_commanded_pose = true;
-            }
             obstacle.observed_pose = obstacle.model->WorldPose();
         }
 
@@ -642,172 +539,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         instances_publisher_.publish(obstacle_messages_.instances());
     }
 
-    bool ConfigureMotionsCallback(ConfigureMotions::Request& request, ConfigureMotions::Response& response) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const std::string fingerprint = ConfigureFingerprint(request);
-        const auto cached = configured_commands_.find(request.command_id);
-        if (cached != configured_commands_.end()) {
-            if (cached->second.fingerprint != fingerprint) {
-                response.success = false;
-                response.message = "command_id was reused with different parameters";
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            response = cached->second.response;
-            return true;
-        }
-        if (request.command_id.empty() || request.command_id.size() > 128) {
-            response.success = false;
-            response.message = "command_id must contain 1 to 128 characters";
-            response.scene_revision = scene_revision_;
-            return true;
-        }
-        if (request.expected_scene_revision != 0 && request.expected_scene_revision != scene_revision_) {
-            response.success = false;
-            response.message = "scene revision conflict";
-            response.scene_revision = scene_revision_;
-            return true;
-        }
-        if (request.motions.empty()) {
-            response.success = false;
-            response.message = "at least one motion is required";
-            response.scene_revision = scene_revision_;
-            return true;
-        }
-
-        std::set<std::string> names;
-        std::vector<std::pair<std::string, MotionController>> prepared;
-        prepared.reserve(request.motions.size());
-        for (const auto& motion : request.motions) {
-            if (!names.insert(motion.name).second) {
-                response.success = false;
-                response.message = "duplicate obstacle name: " + motion.name;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            const auto obstacle = obstacles_.find(motion.name);
-            if (obstacle == obstacles_.end()) {
-                response.success = false;
-                response.message = "managed obstacle does not exist: " + motion.name;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            if (IsSceneRuntimeModel(obstacle->second.model->GetName())) {
-                response.success = false;
-                response.message = "motion belongs to the scene runtime: " + motion.name;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            std::string error;
-            const MotionConfiguration configuration = ConvertMotion(motion, &error);
-            if (!error.empty()) {
-                response.success = false;
-                response.message = error;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            MotionController controller;
-            if (!controller.Configure(configuration, obstacle->second.observed_pose, world_->SimTime().Double(),
-                                      &error)) {
-                response.success = false;
-                response.message = error;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            prepared.emplace_back(motion.name, std::move(controller));
-        }
-
-        ++scene_revision_;
-        for (auto& item : prepared) {
-            ManagedObstacle& obstacle = obstacles_.at(item.first);
-            obstacle.controller = std::move(item.second);
-            obstacle.controlled = true;
-            obstacle.has_commanded_pose = false;
-            ++obstacle.motion_revision;
-            response.motion_revisions.push_back(obstacle.motion_revision);
-        }
-        response.success = true;
-        response.message = "configured " + std::to_string(prepared.size()) + " obstacle motions";
-        response.scene_revision = scene_revision_;
-        configured_commands_.emplace(request.command_id, CachedConfigure{fingerprint, response});
-        return true;
-    }
-
-    bool StopMotionsCallback(StopMotions::Request& request, StopMotions::Response& response) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const std::string fingerprint = StopFingerprint(request);
-        const auto cached = stopped_commands_.find(request.command_id);
-        if (cached != stopped_commands_.end()) {
-            if (cached->second.fingerprint != fingerprint) {
-                response.success = false;
-                response.message = "command_id was reused with different parameters";
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            response = cached->second.response;
-            return true;
-        }
-        if (request.command_id.empty() || request.command_id.size() > 128) {
-            response.success = false;
-            response.message = "command_id must contain 1 to 128 characters";
-            response.scene_revision = scene_revision_;
-            return true;
-        }
-        if (request.expected_scene_revision != 0 && request.expected_scene_revision != scene_revision_) {
-            response.success = false;
-            response.message = "scene revision conflict";
-            response.scene_revision = scene_revision_;
-            return true;
-        }
-
-        std::set<std::string> names(request.names.begin(), request.names.end());
-        if (names.empty()) {
-            for (const auto& obstacle : obstacles_) {
-                if (!IsSceneRuntimeModel(obstacle.second.model->GetName()))
-                    names.insert(obstacle.first);
-            }
-        }
-        for (const auto& name : names) {
-            if (obstacles_.find(name) == obstacles_.end()) {
-                response.success = false;
-                response.message = "managed obstacle does not exist: " + name;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-        }
-
-        for (const auto& name : names) {
-            if (IsSceneRuntimeModel(obstacles_.at(name).model->GetName())) {
-                response.success = false;
-                response.message = "motion belongs to the scene runtime: " + name;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-        }
-
-        ++scene_revision_;
-        for (const auto& name : names) {
-            ManagedObstacle& obstacle = obstacles_.at(name);
-            MotionConfiguration hold;
-            std::string error;
-            if (!obstacle.controller.Configure(hold, obstacle.observed_pose, world_->SimTime().Double(), &error)) {
-                response.success = false;
-                response.message = error;
-                response.scene_revision = scene_revision_;
-                return true;
-            }
-            obstacle.controlled = true;
-            obstacle.has_commanded_pose = false;
-            ++obstacle.motion_revision;
-            response.motion_revisions.push_back(obstacle.motion_revision);
-        }
-        response.success = true;
-        response.message = "stopped " + std::to_string(names.size()) + " obstacle motions";
-        response.scene_revision = scene_revision_;
-        stopped_commands_.emplace(request.command_id, CachedStop{fingerprint, response});
-        return true;
-    }
-
     std::mutex mutex_;
     gazebo::physics::WorldPtr world_;
     gazebo::event::ConnectionPtr world_created_connection_;
@@ -816,19 +547,14 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     gazebo::transport::NodePtr gazebo_transport_node_;
     gazebo::transport::SubscriberPtr contact_subscriber_;
     std::unique_ptr<ros::NodeHandle> node_;
-    std::unique_ptr<ros::AsyncSpinner> spinner_;
     ros::Publisher geometry_publisher_;
     ros::Publisher state_publisher_;
     ros::Publisher geometry_library_publisher_;
     ros::Publisher instances_publisher_;
     ros::Publisher physical_collision_publisher_;
     ros::Publisher physical_collision_detail_publisher_;
-    ros::ServiceServer configure_service_;
-    ros::ServiceServer stop_service_;
     std::map<std::string, ManagedObstacle> obstacles_;
     std::map<std::string, uint64_t> generation_counters_;
-    std::map<std::string, CachedConfigure> configured_commands_;
-    std::map<std::string, CachedStop> stopped_commands_;
     std::map<std::string, ContactModelDescriptor> contact_models_;
     ObstacleMessages obstacle_messages_;
     bool obstacle_messages_stale_ = true;

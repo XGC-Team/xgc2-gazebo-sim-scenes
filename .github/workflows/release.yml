@@ -1,90 +1,45 @@
 name: release
-
 on:
   workflow_dispatch:
     inputs:
       expected_version:
-        description: Expected .xgc2/product.yml version
         required: true
         type: string
       expected_source_sha:
-        description: Expected source commit SHA
         required: true
         type: string
       prepare_action:
-        description: Release-train action
         required: false
         default: release
         type: choice
-        options:
-          - release
-          - compatibility-verify
+        options: [release, compatibility-verify]
       apt_overlay_url:
-        description: Optional release-scoped staging APT base URL
         required: false
         default: ""
         type: string
       dependency_set_digest:
-        description: SHA256 of the resolved release-train dependency set
         required: false
         default: ""
         type: string
-
 permissions:
   actions: read
   contents: read
-
+  packages: read
 defaults:
   run:
     shell: bash
-
 env:
+  DOCKER_IMAGE: ${{ vars.XGC2_CLASSIC_BUILD_IMAGE }}
+  XGC2_PYTHON_EXECUTABLE: ${{ vars.XGC2_CLASSIC_PYTHON_EXECUTABLE }}
+  XGC2_XRPC_WHEEL_URL: ${{ vars.XGC2_XRPC_WHEEL_URL }}
+  XGC2_XRPC_WHEEL_SHA256: ${{ vars.XGC2_XRPC_WHEEL_SHA256 }}
   XGC2_APT_OVERLAY_URL: ${{ inputs.apt_overlay_url }}
   XGC2_DEPENDENCY_SET_DIGEST: ${{ inputs.dependency_set_digest }}
-
+  EXPECTED_VERSION: ${{ inputs.expected_version }}
+  EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+  PREPARE_ACTION: ${{ inputs.prepare_action }}
 jobs:
-  prepare-contract:
-    name: Validate prepare contract
-    runs-on: ubuntu-latest
-    steps:
-      - name: Validate release-train inputs
-        env:
-          PREPARE_ACTION: ${{ inputs.prepare_action }}
-          APT_OVERLAY_URL: ${{ inputs.apt_overlay_url }}
-          DEPENDENCY_SET_DIGEST: ${{ inputs.dependency_set_digest }}
-        run: |
-          set -euo pipefail
-          case "$PREPARE_ACTION" in
-            release|compatibility-verify) ;;
-            *)
-              echo "unsupported prepare_action: $PREPARE_ACTION" >&2
-              exit 1
-              ;;
-          esac
-          if [[ -n "$DEPENDENCY_SET_DIGEST" && ! "$DEPENDENCY_SET_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "dependency_set_digest must be empty or 64 lowercase hex characters" >&2
-            exit 1
-          fi
-          if [[ -n "$APT_OVERLAY_URL" && ! "$DEPENDENCY_SET_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "apt_overlay_url requires a dependency_set_digest" >&2
-            exit 1
-          fi
-  validate-release-inputs:
-    needs: prepare-contract
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.product.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-  release-checks:
-    needs: validate-release-inputs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
   build-debs:
-    needs: validate-release-inputs
     strategy:
       fail-fast: false
       matrix:
@@ -96,65 +51,42 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-
-
-
-      - name: Validate expected version and source SHA
-        id: product
+        with:
+          fetch-depth: 2
+      - name: Validate central prepare identity
         run: |
-          set -euo pipefail
-          version="$(sed -nE 's|^version:[[:space:]]*([^[:space:]#]+).*|\1|p' .xgc2/product.yml | head -n1)"
-          if [[ -z "${version}" ]]; then
-            echo "::error::missing version in .xgc2/product.yml"
-            exit 1
+          test "$EXPECTED_VERSION" = "$(awk '/^version:/ {print $2; exit}' .xgc2/product.yml)"
+          test "$EXPECTED_SOURCE_SHA" = "$(git rev-parse HEAD)"
+          case "$PREPARE_ACTION" in release|compatibility-verify) ;; *) exit 1 ;; esac
+          if [[ -n "$XGC2_APT_OVERLAY_URL" ]]; then
+            [[ "$XGC2_DEPENDENCY_SET_DIGEST" =~ ^[0-9a-f]{64}$ ]]
           fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          if [[ "${version}" != "${{ inputs.expected_version }}" ]]; then
-            echo "::error::product.yml version ${version} does not match expected_version ${{ inputs.expected_version }}"
-            exit 1
-          fi
-          source_sha="$(git rev-parse HEAD)"
-          if [[ "${source_sha}" != "${{ inputs.expected_source_sha }}" ]]; then
-            echo "::error::HEAD ${source_sha} does not match expected_source_sha ${{ inputs.expected_source_sha }}"
-            exit 1
-          fi
-
-
-      - name: Run release checks
+      - name: Check source metadata
         run: |
-          set -euo pipefail
           git diff --check HEAD
           bash -n .xgc2/scripts/*.sh
-          if [[ "${{ inputs.run_cpp_quality }}" == "true" && -x .xgc2/scripts/check_cpp_quality.sh ]]; then
-            .xgc2/scripts/check_cpp_quality.sh
-          fi
-          if [[ "${{ inputs.run_source_tests }}" == "true" && -x .xgc2/scripts/run_package_tests.sh ]]; then
-            .xgc2/scripts/run_package_tests.sh
-          fi
-
-
-      - name: Build and install-check deb packages
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and install-check Classic native packages
         run: |
           install -d "$GITHUB_WORKSPACE/.ci/build-manifests"
           .xgc2/scripts/build_debs_in_docker.sh \
-            --work-dir "$RUNNER_TEMP/xgc2-gazebo-sim-scenes-${{ matrix.arch }}" \
+            --work-dir "$RUNNER_TEMP/xgc2-scenes-${{ matrix.arch }}" \
             --output-dir "$GITHUB_WORKSPACE/debs"
-
-      - name: Create release-train build manifest
+      - name: Create trusted v1 build manifest
         run: |
+          version="$(awk '/^version:/ {print $2; exit}' .xgc2/product.yml)"
+          test -n "$version"
           python3 .xgc2/scripts/xgc2_artifact_manifest.py build \
-            --deb-dir debs \
-            --output-dir .ci/build-manifests \
-            --product xgc2-gazebo-sim-scenes \
-            --product-version "${{ inputs.expected_version }}" \
-            --distribution focal \
-            --architecture "${{ matrix.arch }}" \
-            --source-sha "${{ inputs.expected_source_sha }}" \
-            --ci-run-id "$GITHUB_RUN_ID" \
-            --ci-workflow "$GITHUB_WORKFLOW" \
-            --ci-workflow-ref "$GITHUB_WORKFLOW_REF"
-
-      - name: Upload deb artifacts
+            --deb-dir debs --output-dir .ci/build-manifests \
+            --product xgc2-gazebo-sim-scenes --product-version "$version" \
+            --distribution focal --architecture "${{ matrix.arch }}" \
+            --source-sha "$GITHUB_SHA" --ci-run-id "$GITHUB_RUN_ID" \
+            --ci-workflow "$GITHUB_WORKFLOW" --ci-workflow-ref "$GITHUB_WORKFLOW_REF"
+      - name: Upload exact Debian packages and manifests
         if: ${{ inputs.prepare_action == 'release' }}
         uses: actions/upload-artifact@v4
         with:

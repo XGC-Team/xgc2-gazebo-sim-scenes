@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Execute the explicitly prepared native world; ROS is a user-data edge."""
+import argparse
+import os
+import math
+from pathlib import Path
+import shutil
+import sys
+import xml.etree.ElementTree as ET
+
+
+def absolute_file(value, label, maximum):
+    path = Path(value)
+    if not path.is_absolute() or not path.is_file():
+        raise ValueError(label+' must identify an existing absolute file')
+    path = path.resolve(strict=True)
+    if path.stat().st_size <= 0 or path.stat().st_size > maximum:
+        raise ValueError(label+' exceeds its bounded input size or is empty')
+    return path
+
+
+def compose(arguments, environment):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--world', required=True)
+    for name in ('paused', 'gui', 'ros-data'):
+        parser.add_argument('--'+name, required=True, choices=('true', 'false'))
+    parser.add_argument('--vrpn-config', default='')
+    parser.add_argument('--gazebo-bin', default='')
+    parser.add_argument('--plugin-dir', action='append', default=[])
+    parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--clock-rate-hz', type=float, default=None)
+    args, remappings = parser.parse_known_args(arguments)
+    mapped = {}
+    for value in remappings:
+        key, separator, target = value.partition(':=')
+        if separator != ':=' or key not in ('__name', '__ns', '__log') or not target or key in mapped:
+            raise ValueError('Only explicit ROS name, namespace and log remappings are supported')
+        mapped[key] = target
+    world = absolute_file(args.world, '--world', 8*1024*1024)
+    raw = world.read_bytes()
+    if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():
+        raise ValueError('Prepared worlds cannot declare XML entities')
+    sdf = ET.fromstring(raw)
+    worlds = sdf.findall('world')
+    if sdf.tag != 'sdf' or len(worlds) != 1:
+        raise ValueError('A prepared single-world SDF is required')
+    native = [p for p in worlds[0].findall('plugin') if p.get('filename') == 'libxgc2_simulation_world.so']
+    if len(native) != 1 or any(not native[0].findtext(key) for key in ('socket_path', 'target_id', 'resource_root')):
+        raise ValueError('The world must contain exactly one explicitly configured native XRPC authority')
+    rate = float(native[0].findtext('clock_rate_hz', '0')) if args.clock_rate_hz is None else args.clock_rate_hz
+    if not math.isfinite(rate) or not 0 <= rate <= 1e6:
+        raise ValueError('--clock-rate-hz must be finite in [0, 1000000]')
+    env = dict(environment)
+    for key in ('XGC_SIM_VRPN_CONFIG', 'XGC_SIM_ROS_NAME', 'XGC_SIM_ROS_NAMESPACE', 'XGC_SIM_ROS_LOG', 'XGC_SIM_ROS_CLOCK_RATE_HZ'):
+        env.pop(key, None)
+    for key, variable in (('__name', 'XGC_SIM_ROS_NAME'), ('__ns', 'XGC_SIM_ROS_NAMESPACE'), ('__log', 'XGC_SIM_ROS_LOG')):
+        if key in mapped: env[variable] = mapped[key]
+    plugins = []
+    if args.ros_data == 'true':
+        plugins.append('libxgc2_simulation_ros_data.so')
+        env['XGC_SIM_ROS_CLOCK_RATE_HZ'] = str(rate)
+    if args.vrpn_config:
+        if args.ros_data != 'true': raise ValueError('VRPN user data requires --ros-data true')
+        env['XGC_SIM_VRPN_CONFIG'] = str(absolute_file(args.vrpn_config, '--vrpn-config', 1024*1024))
+        plugins.append('libgazebo_sim_vrpn_system_plugin.so')
+    directories = []
+    for value in args.plugin_dir:
+        path = Path(value)
+        if not path.is_absolute() or not path.is_dir(): raise ValueError('--plugin-dir must identify an absolute library directory')
+        directories.append(str(path.resolve(strict=True)))
+    if directories:
+        env['GAZEBO_PLUGIN_PATH'] = os.pathsep.join(directories+([env['GAZEBO_PLUGIN_PATH']] if env.get('GAZEBO_PLUGIN_PATH') else []))
+    executable = args.gazebo_bin or shutil.which('gazebo' if args.gui == 'true' else 'gzserver', path=env.get('PATH'))
+    if not executable: raise ValueError('The selected native Gazebo executable is not installed')
+    executable = str(absolute_file(executable, '--gazebo-bin', 256*1024*1024))
+    if not os.access(executable, os.X_OK): raise ValueError('The selected native Gazebo binary is not executable')
+    argv = [executable]
+    if args.verbose: argv.append('--verbose')
+    if args.paused == 'true': argv.append('-u')
+    for plugin in plugins: argv += ['-s', plugin]
+    argv.append(str(world))
+    return executable, argv, env
+
+
+def main(arguments=None):
+    try:
+        executable, argv, environment = compose(sys.argv[1:] if arguments is None else arguments, os.environ)
+        os.execve(executable, argv, environment)
+    except (OSError, ValueError, ET.ParseError) as error:
+        print('native_world_start: '+str(error), file=sys.stderr)
+        return 2
+
+if __name__ == '__main__': sys.exit(main())

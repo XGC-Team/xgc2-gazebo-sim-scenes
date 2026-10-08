@@ -1,0 +1,11 @@
+<launch>
+  <arg name="world"/>
+  <arg name="paused"/>
+  <arg name="gui"/>
+  <arg name="ros_data"/>
+  <arg name="vrpn_config" default=""/>
+  <arg name="gazebo_bin" default=""/>
+  <arg name="clock_rate_hz" default=""/>
+  <node pkg="gazebo_sim_worlds" type="native_world_start" name="native_world" output="screen" required="true"
+        args="--world &quot;$(arg world)&quot; --paused $(arg paused) --gui $(arg gui) --ros-data $(arg ros_data) --vrpn-config &quot;$(arg vrpn_config)&quot; --gazebo-bin &quot;$(arg gazebo_bin)&quot; $(eval '--clock-rate-hz '+arg('clock_rate_hz') if arg('clock_rate_hz') else '')"/>
+</launch>
