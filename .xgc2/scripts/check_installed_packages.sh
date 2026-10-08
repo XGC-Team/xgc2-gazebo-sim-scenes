@@ -9,9 +9,11 @@ set -u
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-sim-worlds" >/dev/null
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-scene" >/dev/null
 dpkg -s "ros-${ROS_DISTRO}-xgc2-simple-lidar" >/dev/null
+dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-rendering" >/dev/null
 test "$(rospack find gazebo_sim_worlds)" = "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds"
 test "$(rospack find xgc2_gazebo_scene)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene"
 test "$(rospack find xgc2_simple_lidar)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar"
+test "$(rospack find xgc2_gazebo_rendering)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_rendering"
 
 world_root="/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds"
 test -f "${world_root}/worlds/empty/empty.world"
@@ -46,9 +48,11 @@ test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_simple_lidar/scan_projection.hpp"
 test -f "/opt/ros/${ROS_DISTRO}/lib/pkgconfig/xgc2_simple_lidar.pc"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so"
 test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar_cpu.so"
+test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_gazebo_rendering.so"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_rendering/package.xml"
 xmllint --noout "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/package.xml"
 
-for library in libobstaclePathPlugin.so libxgc2_gazebo_scene_system.so libxgc2_scene_authoring_world.so libxgc2_simple_lidar.so libxgc2_simple_lidar_cpu.so; do
+for library in libobstaclePathPlugin.so libxgc2_gazebo_scene_system.so libxgc2_scene_authoring_world.so libxgc2_simple_lidar.so libxgc2_simple_lidar_cpu.so libxgc2_gazebo_rendering.so; do
   if ldd "/opt/ros/${ROS_DISTRO}/lib/${library}" | grep -q 'not found'; then
     echo "Installed Gazebo Scene library has unresolved dependencies: ${library}" >&2
     exit 1

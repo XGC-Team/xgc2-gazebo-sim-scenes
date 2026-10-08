@@ -333,8 +333,76 @@ EOF
     "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
 }
 
+build_rendering_deb() {
+  local package="ros-${ROS_DISTRO}-xgc2-gazebo-rendering"
+  local pkg_root="${BUILD_DIR}/${package}"
+  local library="${pkg_root}${PREFIX}/lib/libxgc2_gazebo_rendering.so"
+  local shlibdeps_output
+  local shlibdeps
+  local shlibdeps_stderr="${BUILD_DIR}/rendering-dpkg-shlibdeps.stderr"
+  local unexpected_stderr="${BUILD_DIR}/rendering-dpkg-shlibdeps-unexpected.stderr"
+
+  mkdir -p "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/share/xgc2_gazebo_rendering" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/libxgc2_gazebo_rendering.so" "${pkg_root}"
+  test -f "${pkg_root}${PREFIX}/share/xgc2_gazebo_rendering/package.xml"
+  test -f "${library}"
+
+  mkdir -p "${BUILD_DIR}/debian"
+  cat > "${BUILD_DIR}/debian/control" <<EOF
+Source: xgc2-gazebo-sim-scenes
+Section: misc
+Priority: optional
+Maintainer: XGC2 <apt@example.com>
+
+Package: ${package}
+Architecture: any
+EOF
+  shlibdeps_output="$(
+    cd "${BUILD_DIR}"
+    dpkg-shlibdeps -O "-l${pkg_root}${PREFIX}/lib" "-e${library}" 2>"${shlibdeps_stderr}"
+  )"
+  grep -Ev \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name 'libxgc2_gazebo_rendering\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
+  if [[ -s "${unexpected_stderr}" ]]; then
+    echo "dpkg-shlibdeps emitted an unexpected rendering warning:" >&2
+    cat "${unexpected_stderr}" >&2
+    exit 1
+  fi
+  shlibdeps="${shlibdeps_output#shlibs:Depends=}"
+  if [[ "${shlibdeps}" == "${shlibdeps_output}" || -z "${shlibdeps}" ]]; then
+    echo "dpkg-shlibdeps did not produce rendering runtime dependencies" >&2
+    exit 1
+  fi
+  if ! grep -Eq '(^|, )libgazebo11([[:space:]]|[(]|,|$)' <<<"${shlibdeps}"; then
+    echo "Rendering runtime dependencies do not include libgazebo11" >&2
+    exit 1
+  fi
+  write_control \
+    "${pkg_root}" \
+    "${package}" \
+    "${shlibdeps}" \
+    "Gazebo Classic shadow-depth plugin for XGC2"
+  find "${pkg_root}" -type d -exec chmod 0755 {} +
+  find "${pkg_root}" -type f -exec chmod 0644 {} +
+  chmod 0755 "${library}"
+  if readelf -d "${library}" | grep -Eq '(RPATH|RUNPATH)'; then
+    echo "Rendering library contains a build-time RPATH/RUNPATH" >&2
+    exit 1
+  fi
+  if ! nm -D --defined-only "${library}" | grep -E '[[:space:]]RegisterPlugin$' >/dev/null; then
+    echo "Gazebo plugin does not export RegisterPlugin: ${library}" >&2
+    exit 1
+  fi
+  fakeroot dpkg-deb --build \
+    "${pkg_root}" \
+    "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
+}
+
 build_worlds_deb
 build_scene_deb
 build_lidar_deb
+build_rendering_deb
 
 find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.deb' -print | sort

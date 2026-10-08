@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>xgc2_gazebo_rendering</name>
+  <version>0.1.0</version>
+  <description>Gazebo Classic shadow-depth plugin. It is a simulator plugin, not a ROS visualization product.</description>
+  <maintainer email="867768510@qq.com">XGC Team</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>gazebo_dev</build_depend>
+  <exec_depend>gazebo</exec_depend>
+</package>

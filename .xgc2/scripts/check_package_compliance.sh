@@ -80,6 +80,9 @@ required_files=(
   xgc2_simple_lidar/src/gpu_lidar_plugin.cpp
   xgc2_simple_lidar/test/scan_projection_test.cpp
   xgc2_simple_lidar/test/scan_schedule_test.cpp
+  xgc2_gazebo_rendering/CMakeLists.txt
+  xgc2_gazebo_rendering/package.xml
+  xgc2_gazebo_rendering/src/gazebo_rendering_plugin.cpp
 )
 
 for file in "${required_files[@]}"; do
@@ -92,7 +95,8 @@ done
 xmllint --noout \
   gazebo_sim_worlds/package.xml \
   xgc2_gazebo_scene/package.xml \
-  xgc2_simple_lidar/package.xml
+  xgc2_simple_lidar/package.xml \
+  xgc2_gazebo_rendering/package.xml
 
 while IFS= read -r xml_file; do
   xmllint --noout "${xml_file}"

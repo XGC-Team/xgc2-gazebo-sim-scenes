@@ -1,25 +1,28 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.4.1-2
+version: 1.4.1-3
 kind: ros1-apt
-summary: Reusable Gazebo Classic worlds, scene director, and simple lidar plugin.
+summary: Reusable Gazebo Classic worlds, scene director, simple lidar, and shadow-depth plugin.
 ros:
   distro: noetic
   packages:
   - gazebo_sim_worlds
   - xgc2_gazebo_scene
   - xgc2_simple_lidar
+  - xgc2_gazebo_rendering
 apt:
   distribution: focal
   install:
   - ros-noetic-xgc2-gazebo-sim-worlds
   - ros-noetic-xgc2-gazebo-scene
   - ros-noetic-xgc2-simple-lidar
+  - ros-noetic-xgc2-gazebo-rendering
   packages:
   - ros-noetic-xgc2-gazebo-sim-worlds
   - ros-noetic-xgc2-gazebo-scene
   - ros-noetic-xgc2-simple-lidar
+  - ros-noetic-xgc2-gazebo-rendering
   depends:
   - libgazebo11
   - ros-noetic-gazebo-msgs
@@ -79,6 +82,8 @@ usage:
 
     test -f /opt/ros/noetic/lib/libxgc2_simple_lidar_cpu.so
 
+    test -f /opt/ros/noetic/lib/libxgc2_gazebo_rendering.so
+
     test -f /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
 
     test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/scene_editable.world
@@ -107,6 +112,8 @@ ownership:
   - /opt/ros/noetic/lib/libxgc2_gazebo_scene_motion.so
   - /opt/ros/noetic/lib/libxgc2_gazebo_scene_system.so
   - /opt/ros/noetic/lib/libxgc2_scene_model.so
+  - /opt/ros/noetic/lib/libxgc2_gazebo_rendering.so
+  - /opt/ros/noetic/share/xgc2_gazebo_rendering
   - /opt/ros/noetic/lib/libxgc2_scene_authoring_world.so
   - /opt/ros/noetic/lib/libxgc2_simple_lidar.so
   - /opt/ros/noetic/lib/libxgc2_simple_lidar_cpu.so
