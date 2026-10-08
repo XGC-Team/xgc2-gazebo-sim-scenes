@@ -41,7 +41,7 @@ apt:
 usage:
   install: 'sudo apt update
 
-    sudo apt install ros-noetic-xgc2-gazebo-sim-worlds ros-noetic-xgc2-gazebo-scene ros-noetic-xgc2-simple-lidar
+    sudo apt install ros-noetic-xgc2-gazebo-sim-worlds ros-noetic-xgc2-gazebo-scene ros-noetic-xgc2-simple-lidar ros-noetic-xgc2-gazebo-rendering
 
     '
   smoke_test: 'rospack find gazebo_sim_worlds
@@ -89,15 +89,19 @@ usage:
     test -f /opt/ros/noetic/share/gazebo_sim_worlds/worlds/catalog/scene_editable.world
 
     '
-  notes: 'This product keeps reusable world assets, the scene director, and the
+  notes: 'This product keeps reusable world assets, the scene director, the
 
-    independent xgc2_simple_lidar sensor plugin in separate ROS packages.
+    independent xgc2_simple_lidar sensor plugin, and the Gazebo shadow-depth
 
-    gazebo_sim_worlds owns world and model assets only; xgc2_gazebo_scene owns
+    plugin in separate ROS packages. gazebo_sim_worlds owns world and model
 
-    scene control and truth projection; xgc2_simple_lidar owns its CPU/GPU ray
+    assets only; xgc2_gazebo_scene owns scene control and truth projection;
 
-    plugin and reusable sensor xacro. World assets do not depend on the lidar.
+    xgc2_simple_lidar owns its CPU/GPU ray plugin and reusable sensor xacro;
+
+    xgc2_gazebo_rendering owns libxgc2_gazebo_rendering.so. World assets do not
+
+    depend on the lidar.
 
     '
 ownership:
@@ -128,4 +132,4 @@ release:
   dependency_policy:
     xgc2-scene-generation: rebuild
   apt_versions:
-    focal: 1.4.1-2
+    focal: 1.4.1-3
