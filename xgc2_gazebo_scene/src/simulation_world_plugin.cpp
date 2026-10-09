@@ -17,7 +17,7 @@ class SimulationWorldPlugin final : public gazebo::WorldPlugin {
         if (config->HasElement("chassis_robot_id"))
             for (auto id = config->GetElement("chassis_robot_id"); id; id = id->GetNextElement("chassis_robot_id"))
                 chassis_ids.push_back(id->Get<std::string>());
-        const std::vector<std::string>& required_components;
+        std::vector<std::string> required_components;
         if (config->HasElement("required_component"))
             for (auto id = config->GetElement("required_component"); id; id = id->GetNextElement("required_component"))
                 required_components.push_back(id->Get<std::string>());
