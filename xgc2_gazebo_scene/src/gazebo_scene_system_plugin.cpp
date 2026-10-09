@@ -532,7 +532,13 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         ObstacleDynamics dynamics;
         std::size_t index = 0;
         for (const auto& item : obstacles_) {
-            SampleObstacle(item.second, simulation_time.Double(), &dynamics);
+            const ManagedObstacle& obstacle = item.second;
+            dynamics.pose = obstacle.observed_pose;
+            dynamics.linear_velocity = obstacle.model->WorldLinearVel();
+            dynamics.angular_velocity = obstacle.model->WorldAngularVel();
+            dynamics.motion_mode = "uncontrolled";
+            dynamics.motion_revision = 0;
+            dynamics.is_static = obstacle.model->IsStatic();
             obstacle_messages_.Set(index++, dynamics);
         }
         state_publisher_.publish(obstacle_messages_.state());

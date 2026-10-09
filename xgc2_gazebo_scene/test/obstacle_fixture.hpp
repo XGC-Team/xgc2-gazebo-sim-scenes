@@ -42,6 +42,28 @@ struct Obstacle {
     std::uint64_t motion_revision = 0;
 };
 
+/// Reads an obstacle the way the 30 Hz publication reports it: the controller's
+/// sample while a motion drives it, Gazebo's velocities while it does not.
+/// `Obstacle` has `model` (WorldLinearVel, WorldAngularVel, IsStatic),
+/// `observed_pose`, `controlled`, `controller` (Sample, modeName) and
+/// `motion_revision`.
+template <class Obstacle>
+void SampleObstacle(const Obstacle& obstacle, double simulation_time, ObstacleDynamics* dynamics) {
+    dynamics->pose = obstacle.observed_pose;
+    if (obstacle.controlled) {
+        const MotionSample sample = obstacle.controller.Sample(simulation_time);
+        dynamics->linear_velocity = sample.linear_velocity;
+        dynamics->angular_velocity = sample.angular_velocity;
+        dynamics->motion_mode = obstacle.controller.modeName();
+    } else {
+        dynamics->linear_velocity = obstacle.model->WorldLinearVel();
+        dynamics->angular_velocity = obstacle.model->WorldAngularVel();
+        dynamics->motion_mode = "uncontrolled";
+    }
+    dynamics->motion_revision = obstacle.motion_revision;
+    dynamics->is_static = obstacle.model->IsStatic() && (!obstacle.controlled || dynamics->motion_mode == "hold");
+}
+
 using Obstacles = std::map<std::string, Obstacle>;
 
 class Scene {
