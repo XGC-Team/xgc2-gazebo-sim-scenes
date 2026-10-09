@@ -155,6 +155,7 @@ ownership:
 release:
   requires:
   - libxgc2-robotics-interfaces-dev
+  - xgc2-xrpc
   dependency_policy:
     xgc2-scene-generation: rebuild
     xgc2-xrpc: rebuild
