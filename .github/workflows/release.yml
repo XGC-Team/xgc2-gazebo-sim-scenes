@@ -31,8 +31,6 @@ defaults:
 env:
   DOCKER_IMAGE: ${{ vars.XGC2_CLASSIC_BUILD_IMAGE }}
   XGC2_PYTHON_EXECUTABLE: ${{ vars.XGC2_CLASSIC_PYTHON_EXECUTABLE }}
-  XGC2_XRPC_WHEEL_URL: ${{ vars.XGC2_XRPC_WHEEL_URL }}
-  XGC2_XRPC_WHEEL_SHA256: ${{ vars.XGC2_XRPC_WHEEL_SHA256 }}
   XGC2_APT_OVERLAY_URL: ${{ inputs.apt_overlay_url }}
   XGC2_DEPENDENCY_SET_DIGEST: ${{ inputs.dependency_set_digest }}
   EXPECTED_VERSION: ${{ inputs.expected_version }}

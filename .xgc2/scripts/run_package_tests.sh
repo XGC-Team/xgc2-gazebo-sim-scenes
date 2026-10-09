@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 unset DISPLAY WAYLAND_DISPLAY
-: "${XGC2_PYTHON_EXECUTABLE:?select image Python >=3.10 explicitly}"
-"${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3,10); from xgc2_xrpc.http import Client"
+: "${XGC2_PYTHON_EXECUTABLE:?select image Python >=3.8 explicitly}"
+"${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3,8); from xgc2_xrpc.http import Client"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"

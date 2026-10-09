@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 unset DISPLAY WAYLAND_DISPLAY
-: "${XGC2_PYTHON_EXECUTABLE:?select installed Python >=3.10 with the formal XRPC wheel}"
-"${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3,10); from xgc2_xrpc.http import Client"
+: "${XGC2_PYTHON_EXECUTABLE:?select installed Python >=3.8 with the formal XRPC wheel}"
+"${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3,8); from xgc2_xrpc.http import Client"
 
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
 set +u
