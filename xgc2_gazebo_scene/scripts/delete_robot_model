@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Delete the actual native entity generation and wait for world completion."""
+import argparse
+import json
+import re
+import time
+from urllib.parse import quote
+
+from xgc2_xrpc.http import Fault
+from xgc2_xrpc.runtime import Runtime
+from xgc2_scene_runtime.simulation_client import SimulationClient
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--namespace', required=True)
+    parser.add_argument('--simulation-service-ref-json', required=True)
+    parser.add_argument('--target-id', required=True)
+    args = parser.parse_args()
+    if not re.fullmatch(r'/[A-Za-z][A-Za-z0-9_]{0,127}', args.namespace):
+        parser.error('robot requires one absolute ROS namespace segment')
+    runtime = Runtime(blocking_workers=1, max_calls=2)
+    client = None
+    try:
+        client = SimulationClient(json.loads(args.simulation_service_ref_json), runtime=runtime,
+                                  local_target=args.target_id, timeout=5)
+        path = '/v1/entities/'+quote(args.namespace[1:], safe='')
+        deadline = time.monotonic()+5
+        try:
+            entities = client.client.json(path, method='GET')['entities']
+        except Fault as error:
+            if error.code == 'not_found':
+                return
+            raise
+        if len(entities) != 1:
+            raise ValueError('world did not return one robot entity')
+        reference = entities[0]['ref']
+        if reference['id'] != args.namespace[1:]:
+            raise ValueError('world returned a different robot identity')
+        client.timeout = max(.001, deadline-time.monotonic())
+        client.operation(path, {'generation': reference['generation']}, method='DELETE')
+    finally:
+        if client is not None:
+            client.close()
+        runtime.close()
+
+
+if __name__ == '__main__':
+    main()

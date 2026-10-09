@@ -14,15 +14,72 @@ from unittest.mock import patch
 
 from xgc2_xrpc.http import Host
 from xgc2_xrpc.runtime import Runtime
+from xgc2_simple_lidar.configuration import robot_parameters
 
 HELPER = Path(__file__).resolve().parents[1]/'scripts/spawn_robot_model'
 loader = importlib.machinery.SourceFileLoader('spawn_robot_model', str(HELPER))
 spec = importlib.util.spec_from_loader(loader.name, loader)
 helper = importlib.util.module_from_spec(spec)
 loader.exec_module(helper)
+loader = importlib.machinery.SourceFileLoader('delete_robot_model', str(HELPER.with_name('delete_robot_model')))
+spec = importlib.util.spec_from_loader(loader.name, loader)
+delete_helper = importlib.util.module_from_spec(spec)
+loader.exec_module(delete_helper)
 
 
 class SpawnTest(unittest.TestCase):
+    def test_native_robot_input_owns_names_pose_and_sensor_switches(self):
+        robot = {'kind': 'scout_mini', 'namespace': '/ugv7', 'runMode': 'simulation',
+                 'initialPose': {'x': 1, 'y': 2, 'z': .181, 'yaw': .3},
+                 'authoredSimulationSensors': {'simpleLidar': False},
+                 'scout': {'lidarSimulationEnabled': True, 'imageSimulationEnabled': False}}
+        parameters = robot_parameters(robot, 'scout', '/ugv7')
+        self.assertEqual(parameters['ns'], 'ugv7')
+        self.assertEqual(parameters['model_name'], 'ugv7')
+        self.assertEqual(parameters['robot_description_param'], '/ugv7/robot_description')
+        self.assertEqual(parameters['frame_prefix'], 'ugv7/')
+        self.assertEqual(parameters['z'], .181)
+        self.assertTrue(parameters['enable_lidar'])
+        self.assertFalse(parameters['enable_camera'])
+        with self.assertRaises(ValueError):
+            robot_parameters(robot, 'scout', '/ugv8')
+        robot['initialPose']['x'] = float('nan')
+        with self.assertRaises(ValueError):
+            robot_parameters(robot, 'scout', '/ugv7')
+
+    def test_stop_uses_observed_generation_and_native_terminal_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Runtime(blocking_workers=1)
+            path = str(Path(directory)/'world.sock')
+            calls = []
+            def read(context, value):
+                calls.append('get')
+                return {'entities': [{'ref': {'id': 'ugv7', 'generation': 73}}]}
+            def delete(context, value):
+                calls.append(('delete', value['generation']))
+                return {'id': context.request_id, 'state': 'accepted'}
+            def wait(context, value):
+                calls.append('terminal')
+                return {'id': 'stop-one', 'state': 'succeeded', 'result': {}}
+            host = Host(path, {('GET', '/v1/entities/ugv7'): read,
+                               ('DELETE', '/v1/entities/ugv7'): delete,
+                               ('POST', '/v1/operations/stop-one/wait'): wait},
+                        runtime=runtime, instance_id='world1')
+            host.start()
+            reference = {'target_id': 'fixture', 'service': 'xgc2.simulation', 'api_version': 'v1',
+                         'profile': 'http.v1', 'instance_id': 'world1',
+                         'endpoint': {'kind': 'unix', 'address': path}}
+            try:
+                argv = ['delete_robot_model', '--namespace', '/ugv7',
+                        '--simulation-service-ref-json', json.dumps(reference), '--target-id', 'fixture']
+                with patch.object(sys, 'argv', argv), patch(
+                        'xgc2_scene_runtime.simulation_client.uuid.uuid4',
+                        return_value=types.SimpleNamespace(hex='stop-one')):
+                    delete_helper.main()
+                self.assertEqual(calls, ['get', ('delete', 73), 'terminal'])
+            finally:
+                host.close(); runtime.close()
+
     def test_one_native_creation_and_no_ros_control(self):
         with tempfile.TemporaryDirectory() as directory:
             runtime = Runtime(blocking_workers=1)

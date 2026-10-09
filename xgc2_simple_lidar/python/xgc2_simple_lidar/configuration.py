@@ -1,5 +1,36 @@
 """Interpret authored observations at the sensor's native boundary."""
 import math
+import re
+
+
+def robot_parameters(robot, profile, namespace):
+    """Lower one frozen robot at the native launch boundary."""
+    if not isinstance(robot, dict) or robot.get('namespace') != namespace:
+        raise ValueError('robot namespace differs from the claimed namespace')
+    if not re.fullmatch(r'/[A-Za-z][A-Za-z0-9_]{0,127}', namespace):
+        raise ValueError('robot requires one absolute ROS namespace segment')
+    name = namespace[1:]
+    if robot.get('kind') != {'scout': 'scout_mini', 'mecanum': 'mecanum_ugv'}[profile]:
+        raise ValueError('robot kind differs from the native launch profile')
+    parameters = surface_parameters(robot['authoredSimulationSensors'])
+    parameters.update(ns=name, model_name=name)
+    for key in ('x', 'y', 'z', 'yaw'):
+        value = robot['initialPose'][key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError('robot initial pose must be finite')
+        parameters[key] = value
+    if profile == 'scout':
+        scout = robot['scout']
+        parameters.update(robot_description_param=namespace+'/robot_description',
+                          tf_prefix=name, frame_prefix=name+'/', sensor_ns=name,
+                          robot_state_publisher_ns=name, run_mode=robot['runMode'])
+        for source, target in (('lidarSimulationEnabled', 'enable_lidar'),
+                               ('imageSimulationEnabled', 'enable_camera')):
+            value = scout[source]
+            if not isinstance(value, bool):
+                raise ValueError('Scout sensor switches must be boolean')
+            parameters[target] = value
+    return parameters
 
 
 def surface_parameters(sensors):
