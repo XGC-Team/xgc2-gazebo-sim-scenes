@@ -18,7 +18,7 @@ class ChassisRosQueue;
 // state, so teardown cannot invert the domain -> vehicle state lock order.
 class ChassisRosCallbacks {
   public:
-    explicit ChassisRosCallbacks(gazebo::physics::WorldPtr world);
+    explicit ChassisRosCallbacks(const gazebo::physics::WorldPtr& world);
     ~ChassisRosCallbacks();
     ChassisRosCallbacks(const ChassisRosCallbacks&) = delete;
     ChassisRosCallbacks& operator=(const ChassisRosCallbacks&) = delete;

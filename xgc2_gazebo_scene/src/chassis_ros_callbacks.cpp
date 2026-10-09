@@ -74,7 +74,7 @@ namespace {
 std::mutex registration_mutex;
 std::map<gazebo::physics::World*, std::weak_ptr<detail::ChassisRosDispatcher>> dispatchers;
 } // namespace
-ChassisRosCallbacks::ChassisRosCallbacks(gazebo::physics::WorldPtr world) : state_(std::make_shared<State>()) {
+ChassisRosCallbacks::ChassisRosCallbacks(const gazebo::physics::WorldPtr& world) : state_(std::make_shared<State>()) {
     if (!world)
         throw std::invalid_argument("chassis ROS dispatcher requires native world");
     std::lock_guard<std::mutex> lock(registration_mutex);
