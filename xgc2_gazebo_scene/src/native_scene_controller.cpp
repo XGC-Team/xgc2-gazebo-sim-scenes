@@ -360,10 +360,10 @@ std::shared_ptr<const PreparedSceneCommand> NativeSceneController::Prepare(const
             frozen_part["id"] = p.id;
             frozen_part["pose"] = part["pose"];
             frozen_part["geometry"] = geometry;
-            frozen["parts"].append(std::move(frozen_part));
+            frozen["parts"].append(frozen_part);
             body.parts.push_back(std::move(p));
         }
-        command->definition["obstacles"].append(std::move(frozen));
+        command->definition["obstacles"].append(frozen);
         snapshot.obstacles.push_back(std::move(body));
     }
     if (!CompileScene(snapshot, impl_->mesh_root, &command->models, &error))
@@ -479,7 +479,7 @@ std::string NativeSceneController::Snapshot() const {
             state["pose"] = NativePose(model->second->WorldPose());
             state["twist"]["linear"] = NativeVector(model->second->WorldLinearVel());
             state["twist"]["angular"] = NativeVector(model->second->WorldAngularVel());
-            value["state"]["obstacles"].append(std::move(state));
+            value["state"]["obstacles"].append(state);
         }
     }
     return Encode(value);
