@@ -13,7 +13,8 @@ class ChassisDomain;
 // batch. RT producers skip a contended gate; they never wait for management.
 class ChassisBinding {
   public:
-    ChassisBinding(gazebo::physics::WorldPtr world, std::string robot_id, void (*zero)(void*), void* context);
+    ChassisBinding(const gazebo::physics::WorldPtr& world, const std::string& robot_id, void (*zero)(void*),
+                   void* context);
     ~ChassisBinding();
     // Call only after native Load/Init has completed all required outputs.
     void Ready();

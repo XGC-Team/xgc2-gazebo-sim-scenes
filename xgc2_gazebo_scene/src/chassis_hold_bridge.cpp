@@ -10,21 +10,21 @@ std::mutex domains_mutex;
 std::map<gazebo::physics::World*, std::weak_ptr<detail::ChassisDomain>> domains;
 } // namespace
 namespace detail {
-void PublishChassisDomain(gazebo::physics::WorldPtr world, const std::shared_ptr<ChassisDomain>& domain) {
+void PublishChassisDomain(const gazebo::physics::WorldPtr& world, const std::shared_ptr<ChassisDomain>& domain) {
     std::lock_guard<std::mutex> lock(domains_mutex);
     auto& registered = domains[world.get()];
     if (!registered.expired())
         throw std::runtime_error("world already owns chassis hold");
     registered = domain;
 }
-void RetireChassisDomain(gazebo::physics::WorldPtr world, const std::shared_ptr<ChassisDomain>& domain) {
+void RetireChassisDomain(const gazebo::physics::WorldPtr& world, const std::shared_ptr<ChassisDomain>& domain) {
     std::lock_guard<std::mutex> lock(domains_mutex);
     const auto found = domains.find(world.get());
     if (found != domains.end() && found->second.lock() == domain)
         domains.erase(found);
 }
 } // namespace detail
-ChassisBinding::ChassisBinding(gazebo::physics::WorldPtr world, std::string robot_id, void (*zero)(void*),
+ChassisBinding::ChassisBinding(const gazebo::physics::WorldPtr& world, const std::string& robot_id, void (*zero)(void*),
                                void* context)
     : context_(context) {
     if (!world || !zero || !context)

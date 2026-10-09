@@ -65,6 +65,6 @@ class ChassisDomain {
     std::array<Binding, xgc2::chassis_hold::max_robots> bindings{};
     std::unique_ptr<xgc2::chassis_hold::Provider> provider;
 };
-void PublishChassisDomain(gazebo::physics::WorldPtr world, const std::shared_ptr<ChassisDomain>& domain);
-void RetireChassisDomain(gazebo::physics::WorldPtr world, const std::shared_ptr<ChassisDomain>& domain);
+void PublishChassisDomain(const gazebo::physics::WorldPtr& world, const std::shared_ptr<ChassisDomain>& domain);
+void RetireChassisDomain(const gazebo::physics::WorldPtr& world, const std::shared_ptr<ChassisDomain>& domain);
 } // namespace xgc2_gazebo_scene::detail
