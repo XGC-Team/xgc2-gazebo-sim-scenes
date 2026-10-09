@@ -114,10 +114,10 @@ bool ChassisRosCallbacks::current() const noexcept {
 }
 void ChassisRosCallbacks::drain() {
     invalidate();
-    auto value = state_->count.fetch_or(State::closed, std::memory_order_acq_rel) | State::closed;
-    while (value != State::closed) {
-        state_->count.wait(value, std::memory_order_acquire);
-        value = state_->count.load(std::memory_order_acquire);
-    }
+    state_->count.fetch_or(State::closed, std::memory_order_acq_rel);
+    std::unique_lock<std::mutex> lock(state_->drain_mutex);
+    state_->drained.wait(lock, [&] {
+        return state_->count.load(std::memory_order_acquire) == State::closed;
+    });
 }
 } // namespace xgc2_gazebo_scene

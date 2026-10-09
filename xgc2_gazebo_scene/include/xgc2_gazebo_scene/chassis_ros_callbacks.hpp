@@ -1,8 +1,10 @@
 #pragma once
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <gazebo/physics/PhysicsTypes.hh>
 #include <memory>
+#include <mutex>
 #include <ros/callback_queue.h>
 #include <utility>
 
@@ -37,8 +39,11 @@ class ChassisRosCallbacks {
             struct Exit {
                 std::shared_ptr<State> state;
                 ~Exit() {
-                    state->count.fetch_sub(1, std::memory_order_release);
-                    state->count.notify_all();
+                    const auto previous = state->count.fetch_sub(1, std::memory_order_release);
+                    if (previous == (State::closed | 1u)) {
+                        std::lock_guard<std::mutex> lock(state->drain_mutex);
+                        state->drained.notify_all();
+                    }
                 }
             } exit{state};
             action(std::forward<decltype(arguments)>(arguments)...);
@@ -51,6 +56,8 @@ class ChassisRosCallbacks {
         static constexpr unsigned closed = 1u << 31;
         std::atomic<unsigned> count{0};
         std::atomic<std::uint64_t> epoch{0};
+        std::mutex drain_mutex;
+        std::condition_variable drained;
         bool current() const noexcept;
     };
     std::shared_ptr<State> state_;
