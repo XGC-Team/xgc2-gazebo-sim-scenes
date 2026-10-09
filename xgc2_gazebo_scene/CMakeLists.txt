@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(xgc2_gazebo_scene VERSION 0.1.0 LANGUAGES CXX)
 
+# Clang does not enable the distribution compiler driver's as-needed default.
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--as-needed")
+
 find_package(catkin REQUIRED COMPONENTS
   gazebo_msgs
   geometry_msgs

@@ -169,7 +169,7 @@ EOF
   # fails the build; no guessed dependency list substitutes for this evidence.
   shlibdeps_output="$(cd "${BUILD_DIR}"; dpkg-shlibdeps "${arguments[@]}" 2>"${shlibdeps_stderr}")"
   grep -Ev \
-    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_contact|libxgc2_gazebo_scene_geometry|libxgc2_gazebo_scene_motion|libxgc2_scene_model|libxgc2_simulation_service|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_contact|libxgc2_gazebo_scene_geometry|libxgc2_gazebo_scene_motion|libxgc2_scene_model|libxgc2_simulation_service|libroscpp|librosconsole|libroscpp_serialization|librostime|libcpp_common|librosconsole_backend_interface|librosconsole_log4cxx|libxmlrpcpp)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
     "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
   if [[ -s "${unexpected_stderr}" ]]; then
     cat "${unexpected_stderr}" >&2
@@ -259,7 +259,7 @@ EOF
       2>"${shlibdeps_stderr}"
   )"
   grep -Ev \
-    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_simple_lidar|libxgc2_simple_lidar_cpu|libroscpp|librosconsole|libroscpp_serialization|librostime)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_simple_lidar|libxgc2_simple_lidar_cpu|libroscpp|librosconsole|libroscpp_serialization|librostime|libcpp_common|librosconsole_backend_interface|librosconsole_log4cxx|libxmlrpcpp)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
     "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
   if [[ -s "${unexpected_stderr}" ]]; then
     echo "dpkg-shlibdeps emitted an unexpected lidar warning:" >&2

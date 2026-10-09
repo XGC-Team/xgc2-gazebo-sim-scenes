@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(xgc2_gazebo_rendering VERSION 0.1.0 LANGUAGES CXX)
 
+# Clang does not enable the distribution compiler driver's as-needed default.
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--as-needed")
+
 find_package(catkin REQUIRED)
 find_package(gazebo REQUIRED)
 
