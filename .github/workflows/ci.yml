@@ -10,10 +10,10 @@ defaults:
   run:
     shell: bash
 env:
-  DOCKER_IMAGE: ${{ vars.XGC2_CLASSIC_BUILD_IMAGE }}
-  XGC2_PYTHON_EXECUTABLE: ${{ vars.XGC2_CLASSIC_PYTHON_EXECUTABLE }}
-  XGC2_XRPC_WHEEL_URL: ${{ vars.XGC2_XRPC_WHEEL_URL }}
-  XGC2_XRPC_WHEEL_SHA256: ${{ vars.XGC2_XRPC_WHEEL_SHA256 }}
+  DOCKER_IMAGE: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.8@sha256:fce2d76fddf4f6439bf0a188249b731650febdc163befc360bed186b269d252a
+  XGC2_PYTHON_EXECUTABLE: /usr/bin/python3
+  XGC2_XRPC_WHEEL_URL: https://github.com/XGC-Team/xgc2-xrpc/releases/download/v0.1.0-1/xgc2_xrpc-0.1.0-py3-none-any.whl
+  XGC2_XRPC_WHEEL_SHA256: 8e505ab2366eed198dcd4343e758fed5b7936990b2a72ba635d73d81b195187c
 jobs:
   build-debs:
     strategy:

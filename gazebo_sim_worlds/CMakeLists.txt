@@ -3,7 +3,7 @@ project(gazebo_sim_worlds)
 
 find_package(catkin REQUIRED)
 catkin_package()
-catkin_install_python(PROGRAMS scripts/native_world_start DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+catkin_install_python(PROGRAMS scripts/native_world_start scripts/native_obstacle.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 install(DIRECTORY worlds models

@@ -21,7 +21,7 @@ if [[ ! "${DOCKER_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]]; then
   echo "--image/DOCKER_IMAGE requires the approved immutable Classic/Noetic build image digest" >&2
   exit 1
 fi
-: "${XGC2_PYTHON_EXECUTABLE:?select the image Python interpreter >=3.10 explicitly}"
+: "${XGC2_PYTHON_EXECUTABLE:?select the image Python interpreter >=3.8 explicitly}"
 : "${XGC2_XRPC_WHEEL_URL:?supply the formal XRPC Python wheel URL}"
 : "${XGC2_XRPC_WHEEL_SHA256:?supply the formal wheel SHA256}"
 [[ "${XGC2_PYTHON_EXECUTABLE}" == /* ]]
@@ -45,12 +45,14 @@ docker run --rm --network "${DOCKER_NETWORK}" \
     set -euo pipefail
     trap '\''chown -R "${HOST_UID}:${HOST_GID}" /workspace/work'\'' EXIT
     unset DISPLAY WAYLAND_DISPLAY
+    export SETUPTOOLS_USE_DISTUTILS=stdlib
+    export CC=/usr/bin/clang-10 CXX=/usr/bin/clang++-10
     source /opt/ros/noetic/setup.bash
     test "$(. /etc/os-release; printf "%s" "$VERSION_CODENAME")" = focal
     cmake --version
-    "${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3, 10)"
+    "${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3, 8)"
     printf "#include <span>\nint main(){int a[1]{};return std::span<int>(a).size()!=1;}\n" > /workspace/work/toolchain.cpp
-    c++ -std=c++20 -fsyntax-only /workspace/work/toolchain.cpp
+    "${CXX}" -std=c++20 -fsyntax-only /workspace/work/toolchain.cpp
     # The image supplies third-party tools/official ROS. XGC2 products are
     # resolved here from production or the explicit release-train overlay.
     install -m 0755 -d /etc/apt/keyrings
@@ -86,7 +88,7 @@ docker run --rm --network "${DOCKER_NETWORK}" \
     rsync -a --delete --exclude=.git --exclude=.work --exclude=.ci --exclude=debs /workspace/gazebo-sim-scenes/ /workspace/work/src/xgc2_gazebo_sim_scenes/
     cd /workspace/work
     DESTDIR=/workspace/work/install-root catkin_make install -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
-      -DPYTHON_EXECUTABLE="${XGC2_PYTHON_EXECUTABLE}" -DCMAKE_SKIP_INSTALL_RPATH=ON -DCATKIN_ENABLE_TESTING=OFF
+      -DCMAKE_C_COMPILER="${CC}" -DCMAKE_CXX_COMPILER="${CXX}" -DPYTHON_EXECUTABLE="${XGC2_PYTHON_EXECUTABLE}" -DCMAKE_SKIP_INSTALL_RPATH=ON -DCATKIN_ENABLE_TESTING=OFF
     /workspace/gazebo-sim-scenes/.xgc2/scripts/package_debs.sh --install-root /workspace/work/install-root --output-dir /workspace/work/debs
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
       apt-get install -y --no-install-recommends /workspace/work/debs/*.deb
