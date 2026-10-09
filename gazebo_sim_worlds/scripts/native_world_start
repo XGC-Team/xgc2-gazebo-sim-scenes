@@ -27,7 +27,15 @@ def compose(arguments, environment):
     parser.add_argument('--vrpn-config', default='')
     parser.add_argument('--gazebo-bin', default='')
     parser.add_argument('--plugin-dir', action='append', default=[])
-    parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--verbose', nargs='?', const='true', default='false', choices=('true', 'false'))
+    parser.add_argument('--physics', choices=('ode', 'bullet', 'simbody', 'dart'), default='')
+    parser.add_argument('--allow-online-models', default='false', choices=('true', 'false'))
+    for name, kind in (('bind-address', str), ('port', int), ('publish-rate', float),
+                       ('scan-interval', float), ('stale-timeout', float),
+                       ('velocity-filter-cutoff', float), ('acceleration-filter-cutoff', float),
+                       ('derivative-reset-timeout', float), ('match-mode', str), ('tracker-patterns', str)):
+        parser.add_argument('--vrpn-'+name, type=kind)
+    parser.add_argument('--vrpn-auto-track-known-models', choices=('true', 'false'))
     parser.add_argument('--clock-rate-hz', type=float, default=None)
     args, remappings = parser.parse_known_args(arguments)
     mapped = {}
@@ -51,6 +59,7 @@ def compose(arguments, environment):
     if not math.isfinite(rate) or not 0 <= rate <= 1e6:
         raise ValueError('--clock-rate-hz must be finite in [0, 1000000]')
     env = dict(environment)
+    if args.allow_online_models == 'false': env['GAZEBO_MODEL_DATABASE_URI'] = 'http://127.0.0.1:9'
     for key in ('XGC_SIM_VRPN_CONFIG', 'XGC_SIM_ROS_NAME', 'XGC_SIM_ROS_NAMESPACE', 'XGC_SIM_ROS_LOG', 'XGC_SIM_ROS_CLOCK_RATE_HZ'):
         env.pop(key, None)
     for key, variable in (('__name', 'XGC_SIM_ROS_NAME'), ('__ns', 'XGC_SIM_ROS_NAMESPACE'), ('__log', 'XGC_SIM_ROS_LOG')):
@@ -61,7 +70,26 @@ def compose(arguments, environment):
         env['XGC_SIM_ROS_CLOCK_RATE_HZ'] = str(rate)
     if args.vrpn_config:
         if args.ros_data != 'true': raise ValueError('VRPN user data requires --ros-data true')
-        env['XGC_SIM_VRPN_CONFIG'] = str(absolute_file(args.vrpn_config, '--vrpn-config', 1024*1024))
+        vrpn_path = absolute_file(args.vrpn_config, '--vrpn-config', 1024*1024)
+        overrides = {}
+        for name in ('bind_address', 'port', 'publish_rate', 'scan_interval', 'stale_timeout',
+                     'velocity_filter_cutoff', 'acceleration_filter_cutoff', 'derivative_reset_timeout',
+                     'match_mode', 'auto_track_known_models'):
+            value = getattr(args, 'vrpn_'+name)
+            if value is not None:
+                if name == 'auto_track_known_models': value = value == 'true'
+                overrides[name] = value
+        if args.vrpn_tracker_patterns:
+            overrides['trackers'] = [part.strip() for part in args.vrpn_tracker_patterns.replace(';', ',').replace('\n', ',').split(',') if part.strip()]
+        if overrides:
+            import yaml
+            from xgc2_scene_runtime.prepare import atomic, read
+            config = yaml.safe_load(read(vrpn_path, 1024*1024))
+            if not isinstance(config, dict): raise ValueError('Native VRPN config must contain one mapping')
+            config.update(overrides)
+            vrpn_path = world.parent/'native-vrpn.yaml'
+            atomic(vrpn_path, yaml.safe_dump(config, allow_unicode=True).encode('utf-8'))
+        env['XGC_SIM_VRPN_CONFIG'] = str(vrpn_path)
         plugins.append('libgazebo_sim_vrpn_system_plugin.so')
     directories = []
     for value in args.plugin_dir:
@@ -75,7 +103,8 @@ def compose(arguments, environment):
     executable = str(absolute_file(executable, '--gazebo-bin', 256*1024*1024))
     if not os.access(executable, os.X_OK): raise ValueError('The selected native Gazebo binary is not executable')
     argv = [executable]
-    if args.verbose: argv.append('--verbose')
+    if args.verbose == 'true': argv.append('--verbose')
+    if args.physics: argv += ['-e', args.physics]
     if args.paused == 'true': argv.append('-u')
     for plugin in plugins: argv += ['-s', plugin]
     argv.append(str(world))
