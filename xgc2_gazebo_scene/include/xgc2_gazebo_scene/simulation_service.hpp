@@ -14,7 +14,8 @@ class SimulationService {
   public:
     SimulationService(gazebo::physics::WorldPtr world, std::string socket_path, std::string target_id,
                       std::string resource_root, std::vector<std::string> chassis_robot_ids = {},
-                      std::vector<std::string> required_components = {}, std::string configuration_revision = {});
+                      const std::vector<std::string>& required_components = {},
+                      std::string configuration_revision = {});
     ~SimulationService();
     SimulationService(const SimulationService&) = delete;
     SimulationService& operator=(const SimulationService&) = delete;

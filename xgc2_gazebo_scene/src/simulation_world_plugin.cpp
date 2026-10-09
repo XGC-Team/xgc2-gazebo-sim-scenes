@@ -17,13 +17,13 @@ class SimulationWorldPlugin final : public gazebo::WorldPlugin {
         if (config->HasElement("chassis_robot_id"))
             for (auto id = config->GetElement("chassis_robot_id"); id; id = id->GetNextElement("chassis_robot_id"))
                 chassis_ids.push_back(id->Get<std::string>());
-        std::vector<std::string> required_components;
+        const std::vector<std::string>& required_components;
         if (config->HasElement("required_component"))
             for (auto id = config->GetElement("required_component"); id; id = id->GetNextElement("required_component"))
                 required_components.push_back(id->Get<std::string>());
         service_ = std::make_unique<SimulationService>(
             std::move(world), config->Get<std::string>("socket_path"), config->Get<std::string>("target_id"),
-            config->Get<std::string>("resource_root"), std::move(chassis_ids), std::move(required_components),
+            config->Get<std::string>("resource_root"), std::move(chassis_ids), required_components,
             config->HasElement("configuration_revision") ? config->Get<std::string>("configuration_revision") : "");
         service_->Start();
     }

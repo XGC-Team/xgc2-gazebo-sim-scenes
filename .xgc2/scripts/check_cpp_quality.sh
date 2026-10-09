@@ -69,10 +69,12 @@ mapfile -t tidy_files < <(
 # The imported legacy per-model path plugin is retained without behavior
 # changes until its migration into the scene director. It is still formatted
 # and compiled above, but is intentionally outside clang-tidy for now.
+tidy_status=0
 for file in "${tidy_files[@]}"; do
   clang-tidy -p "${workspace}/build" \
     -header-filter="${workspace}/src/(xgc2_gazebo_scene|xgc2_simple_lidar)/(include|src|test)/.*" \
-    "${file}"
+    "${file}" || tidy_status=1
 done
+[[ "$tidy_status" == 0 ]] || exit "$tidy_status"
 
 echo "C++ quality checks passed."

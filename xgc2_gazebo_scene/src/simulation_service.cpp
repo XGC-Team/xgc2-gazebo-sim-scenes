@@ -275,7 +275,7 @@ struct Entity {
 class SimulationService::Impl {
   public:
     Impl(gazebo::physics::WorldPtr world, std::string path, std::string target, std::string root,
-         std::vector<std::string> chassis_ids, std::vector<std::string> required_components,
+         std::vector<std::string> chassis_ids, const std::vector<std::string>& required_components,
          std::string configuration_revision)
         : world_(std::move(world)), path_(std::move(path)), target_(std::move(target)),
           resource_root_(std::filesystem::canonical(root)), instance_(xgc2::xrpc::new_instance_id()),
@@ -525,7 +525,7 @@ class SimulationService::Impl {
             Json::Value entry;
             entry["id"] = component.id;
             entry["state"] = state == 2 ? "ready" : state == 3 ? "failed" : state == 1 ? "starting" : "missing";
-            v["components"].append(std::move(entry));
+            v["components"].append(entry);
         }
         v["lifecycle"] = stopping_ ? "stopping" : failed ? "failed" : ready ? "ready" : "starting";
         v["revision"] = Json::UInt64(revision);
@@ -1054,7 +1054,8 @@ class SimulationService::Impl {
                     it->reply.complete(Response(Operation(slot)));
                     it = slot.waiters.erase(it);
                     --waiters_;
-                } else if (it->reply.cancelled() || Clock::now() >= it->deadline) {
+                } else if (it->reply.cancelled() ||
+                           Clock::now().time_since_epoch().count() >= it->deadline.time_since_epoch().count()) {
                     it->reply.complete(
                         xgc2::xrpc::http_error(504, "deadline_exceeded", "observation deadline elapsed"));
                     it = slot.waiters.erase(it);
@@ -1063,7 +1064,8 @@ class SimulationService::Impl {
                     ++it;
             }
             if (slot.phase.load() == 4 && slot.waiters.empty() &&
-                Clock::now() - slot.terminal_at >= std::chrono::minutes(5)) {
+                (Clock::now() - slot.terminal_at).count() >=
+                    std::chrono::duration_cast<Clock::duration>(std::chrono::minutes(5)).count()) {
                 slot.fingerprint.clear();
                 slot.command = {};
                 slot.phase.store(0);
@@ -1076,7 +1078,8 @@ class SimulationService::Impl {
             if (health["revision"].asUInt64() != it->after) {
                 it->reply.complete(Response(health));
                 it = health_observers_.erase(it);
-            } else if (it->reply.cancelled() || Clock::now() >= it->deadline) {
+            } else if (it->reply.cancelled() ||
+                       Clock::now().time_since_epoch().count() >= it->deadline.time_since_epoch().count()) {
                 it->reply.complete(
                     xgc2::xrpc::http_error(504, "deadline_exceeded", "health observation deadline elapsed"));
                 it = health_observers_.erase(it);
@@ -1093,7 +1096,8 @@ class SimulationService::Impl {
             if (!observed.isNull() && observed["serial"].asUInt64() != it->after) {
                 it->reply.complete(Response(observed));
                 it = scene_observers_.erase(it);
-            } else if (it->reply.cancelled() || Clock::now() >= it->deadline) {
+            } else if (it->reply.cancelled() ||
+                       Clock::now().time_since_epoch().count() >= it->deadline.time_since_epoch().count()) {
                 it->reply.complete(
                     xgc2::xrpc::http_error(504, "deadline_exceeded", "scene observation deadline elapsed"));
                 it = scene_observers_.erase(it);
@@ -1220,7 +1224,7 @@ class SimulationService::Impl {
         auto& r = slot.result;
         if (slot.cancel.load())
             throw DomainError(409, "cancelled", "cancelled before native application");
-        if (Clock::now() >= c.expires)
+        if (Clock::now().time_since_epoch().count() >= c.expires.time_since_epoch().count())
             throw DomainError(504, "deadline_exceeded", "expired before native application");
         if (c.kind == Kind::QueryScene) {
             r.extension_result = SceneSnapshot();
@@ -1509,11 +1513,11 @@ class SimulationService::Impl {
 
 SimulationService::SimulationService(gazebo::physics::WorldPtr world, std::string path, std::string target,
                                      std::string root, std::vector<std::string> chassis_ids,
-                                     std::vector<std::string> required_components, std::string configuration_revision) {
+                                     const std::vector<std::string>& required_components,
+                                     std::string configuration_revision) {
     auto* identity = world.get();
     impl_ = std::make_unique<Impl>(std::move(world), std::move(path), std::move(target), std::move(root),
-                                   std::move(chassis_ids), std::move(required_components),
-                                   std::move(configuration_revision));
+                                   std::move(chassis_ids), required_components, std::move(configuration_revision));
     std::vector<std::shared_ptr<detail::WorldStartupState>> attached;
     {
         std::lock_guard<std::mutex> lock(registry_mutex);
@@ -1613,7 +1617,8 @@ WorldStartupBinding::~WorldStartupBinding() {
     state_->attach = {};
 }
 namespace detail {
-std::shared_ptr<NativeComponentState> AttachNativeComponent(gazebo::physics::WorldPtr world, const std::string& id) {
+std::shared_ptr<NativeComponentState> AttachNativeComponent(const gazebo::physics::WorldPtr& world,
+                                                            const std::string& id) {
     std::lock_guard<std::mutex> lock(registry_mutex);
     auto found = registry.find(world.get());
     if (found == registry.end())

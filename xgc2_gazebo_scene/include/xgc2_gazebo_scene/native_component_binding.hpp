@@ -12,14 +12,15 @@ struct NativeComponentState {
     std::atomic<std::uint64_t> revision{0};
     std::atomic<bool> attached{false};
 };
-std::shared_ptr<NativeComponentState> AttachNativeComponent(gazebo::physics::WorldPtr world, const std::string& id);
+std::shared_ptr<NativeComponentState> AttachNativeComponent(const gazebo::physics::WorldPtr& world,
+                                                            const std::string& id);
 } // namespace detail
 // Component owners report their own actual native initialization/failure.
 // No ROS/TCP probes or publisher are introduced by this lifecycle binding.
 class NativeComponentBinding {
   public:
-    NativeComponentBinding(gazebo::physics::WorldPtr world, const std::string& id)
-        : state_(detail::AttachNativeComponent(std::move(world), id)) {}
+    NativeComponentBinding(const gazebo::physics::WorldPtr& world, const std::string& id)
+        : state_(detail::AttachNativeComponent(world, id)) {}
     ~NativeComponentBinding() {
         Failed();
         state_->attached.store(false);
