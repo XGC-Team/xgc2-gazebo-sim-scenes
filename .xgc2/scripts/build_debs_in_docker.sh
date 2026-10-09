@@ -61,7 +61,7 @@ docker run --rm --network "${DOCKER_NETWORK}" \
     printf "deb [arch=%s signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main\n" "$(dpkg --print-architecture)" > /etc/apt/sources.list.d/xgc2.list
     if [[ -n "${XGC2_APT_OVERLAY_URL}" ]]; then
       [[ "${XGC2_DEPENDENCY_SET_DIGEST}" =~ ^[0-9a-f]{64}$ ]]
-      sed "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g" /etc/apt/sources.list.d/xgc2.list > /etc/apt/sources.list.d/00-xgc2-release-train.list
+      sed -i "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g" /etc/apt/sources.list.d/xgc2.list
     fi
     apt-get update -o Dir::Etc::sourcelist=sources.list.d/xgc2.list -o Dir::Etc::sourceparts="-"
     apt-get install -y --no-install-recommends libxgc2-xrpc-dev libxgc2-robotics-interfaces-dev \
