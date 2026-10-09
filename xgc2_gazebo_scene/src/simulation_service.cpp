@@ -1512,7 +1512,7 @@ class SimulationService::Impl {
 };
 
 SimulationService::SimulationService(gazebo::physics::WorldPtr world, std::string path, std::string target,
-                                     std::string root, std::vector<std::string> chassis_ids,
+                                     const std::string& root, std::vector<std::string> chassis_ids,
                                      const std::vector<std::string>& required_components,
                                      std::string configuration_revision) {
     auto* identity = world.get();

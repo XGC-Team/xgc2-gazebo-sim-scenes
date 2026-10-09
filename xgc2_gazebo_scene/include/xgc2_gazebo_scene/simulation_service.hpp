@@ -13,7 +13,7 @@ namespace xgc2_gazebo_scene {
 class SimulationService {
   public:
     SimulationService(gazebo::physics::WorldPtr world, std::string socket_path, std::string target_id,
-                      std::string resource_root, std::vector<std::string> chassis_robot_ids = {},
+                      const std::string& resource_root, std::vector<std::string> chassis_robot_ids = {},
                       const std::vector<std::string>& required_components = {},
                       std::string configuration_revision = {});
     ~SimulationService();
