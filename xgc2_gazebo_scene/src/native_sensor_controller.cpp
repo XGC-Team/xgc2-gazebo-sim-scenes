@@ -90,9 +90,9 @@ std::shared_ptr<AckState> FindAck(const std::string& token) {
     return it == registry.end() ? nullptr : it->second.lock();
 }
 } // namespace
-SensorControlError::SensorControlError(int status_, std::string code_, std::string message)
-    : std::runtime_error(std::move(message)), status(status_), code(std::move(code_)) {}
-void AcknowledgeSimulationSensor(const std::string& token, gazebo::sensors::SensorPtr sensor) {
+SensorControlError::SensorControlError(int status_, std::string code_, const std::string& message)
+    : std::runtime_error(message), status(status_), code(std::move(code_)) {}
+void AcknowledgeSimulationSensor(const std::string& token, const gazebo::sensors::SensorPtr& sensor) {
     if (auto ack = FindAck(token)) {
         {
             std::lock_guard<std::mutex> lock(ack->mutex);
@@ -267,7 +267,7 @@ class NativeSensorController::Impl {
             throw SensorControlError(503, "unavailable", "native sensor is unavailable");
         return sensor;
     }
-    Json::Value Config(gazebo::sensors::SensorPtr sensor) {
+    Json::Value Config(const gazebo::sensors::SensorPtr& sensor) {
         Json::Value result;
         result["active"] = sensor->IsActive();
         result["update_rate_hz"] = sensor->UpdateRate();
@@ -299,7 +299,7 @@ class NativeSensorController::Impl {
         result["configuration_schema"]["persist_supported"] = false;
         return result;
     }
-    void AppendAck(sdf::ElementPtr realization, const std::string& token) {
+    void AppendAck(const sdf::ElementPtr& realization, const std::string& token) {
         auto plugin = realization->AddElement("plugin");
         plugin->GetAttribute("name")->SetFromString("xgc_sensor_ack_" + token);
         plugin->GetAttribute("filename")->SetFromString(plugin_);
@@ -319,7 +319,7 @@ class NativeSensorController::Impl {
             std::string link;
         };
         std::vector<Authored> sensors;
-        const auto walk = [&](auto&& self, sdf::ElementPtr model, const std::string& prefix) -> void {
+        const auto walk = [&](auto&& self, const sdf::ElementPtr& model, const std::string& prefix) -> void {
             if (model->HasElement("link"))
                 for (auto link = model->GetElement("link"); link; link = link->GetNextElement("link")) {
                     const auto name = prefix + link->Get<std::string>("name");
@@ -423,7 +423,7 @@ class NativeSensorController::Impl {
     Json::Value Execute(const PreparedSensorCommand& command, bool* effects_started) {
         if (stopping_.load())
             throw SensorControlError(503, "unavailable", "world sensor controller stopped");
-        if (Clock::now() >= command.admission_deadline)
+        if (Clock::now().time_since_epoch().count() >= command.admission_deadline.time_since_epoch().count())
             throw SensorControlError(504, "deadline_exceeded", "sensor admission budget expired before effects");
         const auto deadline = Clock::now() + std::chrono::milliseconds(command.timeout_ms);
         Json::Value result;

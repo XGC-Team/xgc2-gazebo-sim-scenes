@@ -14,7 +14,7 @@ struct PreparedSensorCommand;
 using NativeSensorResolve = std::function<gazebo::physics::ModelPtr(const std::string&, std::uint64_t)>;
 class SensorControlError : public std::runtime_error {
   public:
-    SensorControlError(int status, std::string code, std::string message);
+    SensorControlError(int status, std::string code, const std::string& message);
     const int status;
     const std::string code;
 };
@@ -48,6 +48,6 @@ class NativeSensorController {
     std::unique_ptr<Impl> impl_;
 };
 // Ack plugin links the same shared scene domain library as the world service.
-void AcknowledgeSimulationSensor(const std::string& token, gazebo::sensors::SensorPtr sensor);
+void AcknowledgeSimulationSensor(const std::string& token, const gazebo::sensors::SensorPtr& sensor);
 void ReleaseSimulationSensor(const std::string& token);
 } // namespace xgc2_gazebo_scene
