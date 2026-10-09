@@ -82,7 +82,7 @@ Json::Value EffectivePolicy(const xgc2::xrpc::RuntimePolicy& policy) {
             record["value"] = std::get<std::string>(field.value);
         if (field.ceiling)
             record["ceiling"] = Json::Int64(*field.ceiling);
-        value["fields"].append(std::move(record));
+        value["fields"].append(record);
     }
     return value;
 }
@@ -115,7 +115,7 @@ std::string String(const Json::Value& v) {
     return v.asString();
 }
 std::string Id(const Json::Value& v) {
-    const auto id = String(v);
+    auto id = String(v);
     if (id.size() > 256)
         Invalid("entity ID exceeds 256 bytes");
     for (unsigned char c : id)
@@ -274,7 +274,7 @@ struct Entity {
 
 class SimulationService::Impl {
   public:
-    Impl(gazebo::physics::WorldPtr world, std::string path, std::string target, std::string root,
+    Impl(gazebo::physics::WorldPtr world, std::string path, std::string target, const std::string& root,
          std::vector<std::string> chassis_ids, const std::vector<std::string>& required_components,
          std::string configuration_revision)
         : world_(std::move(world)), path_(std::move(path)), target_(std::move(target)),
@@ -1174,7 +1174,7 @@ class SimulationService::Impl {
             plugin->GetAttribute("filename")->Set("libxgc2_simulation_entity_ack.so");
             artifacts.emplace(id, std::move(artifact));
         }
-        if (Clock::now() >= deadline)
+        if (Clock::now().time_since_epoch().count() >= deadline.time_since_epoch().count())
             throw DomainError(504, "deadline_exceeded", "scene expired before native application");
         for (auto& e : entities_)
             if (e.occupied && !e.scene_body.empty()) {
@@ -1516,8 +1516,8 @@ SimulationService::SimulationService(gazebo::physics::WorldPtr world, std::strin
                                      const std::vector<std::string>& required_components,
                                      std::string configuration_revision) {
     auto* identity = world.get();
-    impl_ = std::make_unique<Impl>(std::move(world), std::move(path), std::move(target), std::move(root),
-                                   std::move(chassis_ids), required_components, std::move(configuration_revision));
+    impl_ = std::make_unique<Impl>(std::move(world), std::move(path), std::move(target), root, std::move(chassis_ids),
+                                   required_components, std::move(configuration_revision));
     std::vector<std::shared_ptr<detail::WorldStartupState>> attached;
     {
         std::lock_guard<std::mutex> lock(registry_mutex);
