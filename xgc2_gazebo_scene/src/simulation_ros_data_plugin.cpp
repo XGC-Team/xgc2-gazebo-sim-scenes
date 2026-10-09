@@ -26,7 +26,7 @@
 namespace xgc2_gazebo_scene {
 namespace {
 std::string PublicName(const gazebo::physics::ModelPtr& model) {
-    const auto native = model->GetName();
+    auto native = model->GetName();
     if (IsSceneRuntimeModel(native))
         return native;
     const auto sdf = model->GetSDF();
@@ -175,9 +175,9 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
                 bool changed;
                 {
                     const std::int64_t nanoseconds = clock_ns_.load(std::memory_order_acquire);
-                    changed =
-                        last_clock < 0 || nanoseconds < last_clock ||
-                        (nanoseconds != last_clock && (rate_ == 0 || (nanoseconds - last_clock) * 1e-9 >= 1.0 / rate_));
+                    changed = last_clock < 0 || nanoseconds < last_clock ||
+                              (nanoseconds != last_clock &&
+                               (rate_ == 0 || static_cast<double>(nanoseconds - last_clock) * 1e-9 >= 1.0 / rate_));
                     if (changed) {
                         if (nanoseconds < 0 || nanoseconds / 1000000000LL > UINT32_MAX)
                             throw std::runtime_error("native clock exceeds ROS time range");
