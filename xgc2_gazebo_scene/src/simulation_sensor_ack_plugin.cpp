@@ -15,7 +15,7 @@ class SimulationSensorAckPlugin final : public gazebo::SensorPlugin {
     }
     void Init() override {
         if (auto sensor = sensor_.lock())
-            AcknowledgeSimulationSensor(token_, std::move(sensor));
+            AcknowledgeSimulationSensor(token_, sensor);
     }
 
   private:
