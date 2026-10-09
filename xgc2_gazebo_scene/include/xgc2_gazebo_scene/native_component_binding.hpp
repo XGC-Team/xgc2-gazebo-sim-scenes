@@ -18,7 +18,7 @@ std::shared_ptr<NativeComponentState> AttachNativeComponent(gazebo::physics::Wor
 // No ROS/TCP probes or publisher are introduced by this lifecycle binding.
 class NativeComponentBinding {
   public:
-    NativeComponentBinding(gazebo::physics::WorldPtr world, std::string id)
+    NativeComponentBinding(gazebo::physics::WorldPtr world, const std::string& id)
         : state_(detail::AttachNativeComponent(std::move(world), id)) {}
     ~NativeComponentBinding() {
         Failed();

@@ -13,8 +13,8 @@ struct PreparedWorldExtension {
 };
 class NativeExtensionError : public std::runtime_error {
   public:
-    NativeExtensionError(int status_, std::string code_, std::string message)
-        : std::runtime_error(std::move(message)), status(status_), code(std::move(code_)) {}
+    NativeExtensionError(int status_, std::string code_, const std::string& message)
+        : std::runtime_error(message), status(status_), code(std::move(code_)) {}
     const int status;
     const std::string code;
 };
