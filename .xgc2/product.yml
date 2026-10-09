@@ -160,4 +160,4 @@ release:
     xgc2-xrpc: rebuild
     libxgc2-robotics-interfaces-dev: rebuild
   apt_versions:
-    focal: 1.4.1-9
+    focal: 1.4.1-10
