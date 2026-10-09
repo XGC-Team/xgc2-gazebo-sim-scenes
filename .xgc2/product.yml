@@ -37,8 +37,8 @@ apt:
   - ros-noetic-rospy
   - ros-noetic-rostime
   - ros-noetic-rosgraph-msgs
-  - libxgc2-xrpc1 (>= 0.1.0-1)
-  - ros-noetic-xgc2-scene-runtime (>= 1.2.0-12)
+  - libxgc2-xrpc1 (>= 0.1.0-1~focal)
+  - ros-noetic-xgc2-scene-runtime (>= 1.2.0-13)
   - ros-noetic-sensor-msgs
   - ros-noetic-std-msgs
   - ros-noetic-xacro
