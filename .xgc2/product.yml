@@ -24,6 +24,8 @@ apt:
   - ros-noetic-xgc2-simple-lidar
   - ros-noetic-xgc2-gazebo-rendering
   depends:
+  - python3
+  - ros-noetic-roslaunch
   - libgazebo11
   - ros-noetic-gazebo-msgs
   - ros-noetic-gazebo-ros
@@ -141,6 +143,8 @@ ownership:
   - /opt/ros/noetic/lib/gazebo_sim_worlds
   - /opt/ros/noetic/lib/libxgc2_simple_lidar.so
   - /opt/ros/noetic/lib/libxgc2_simple_lidar_cpu.so
+  - /opt/ros/noetic/lib/xgc2_simple_lidar
+  - /opt/ros/noetic/lib/python3/dist-packages/xgc2_simple_lidar
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
   - /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
   - /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene

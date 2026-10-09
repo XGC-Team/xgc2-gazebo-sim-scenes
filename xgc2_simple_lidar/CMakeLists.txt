@@ -21,6 +21,9 @@ target_link_libraries(xgc2_simple_lidar_cpu PRIVATE ${catkin_LIBRARIES} ${GAZEBO
 install(TARGETS xgc2_simple_lidar xgc2_simple_lidar_cpu LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 install(DIRECTORY models/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/models)
+catkin_install_python(PROGRAMS scripts/launch_robot.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(DIRECTORY python/xgc2_simple_lidar DESTINATION ${CATKIN_GLOBAL_PYTHON_DESTINATION}
+  PATTERN "__pycache__" EXCLUDE)
 
 if(CATKIN_ENABLE_TESTING)
   catkin_add_gtest(scan_projection_test test/scan_projection_test.cpp)

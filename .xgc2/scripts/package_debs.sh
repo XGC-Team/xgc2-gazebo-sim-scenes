@@ -225,6 +225,8 @@ build_lidar_deb() {
   copy_path "${PREFIX_ROOT}/lib/libxgc2_simple_lidar.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/libxgc2_simple_lidar_cpu.so" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/pkgconfig/xgc2_simple_lidar.pc" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/xgc2_simple_lidar" "${pkg_root}"
+  copy_path "${PREFIX_ROOT}/lib/python3/dist-packages/xgc2_simple_lidar" "${pkg_root}"
 
   test -f "${pkg_root}${PREFIX}/share/xgc2_simple_lidar/package.xml"
   test -f "${pkg_root}${PREFIX}/share/xgc2_simple_lidar/models/sensor.xacro"
@@ -234,6 +236,8 @@ build_lidar_deb() {
   test -f "${pkg_root}${PREFIX}/lib/pkgconfig/xgc2_simple_lidar.pc"
   test -f "${lidar_library}"
   test -f "${cpu_library}"
+  test -x "${pkg_root}${PREFIX}/lib/xgc2_simple_lidar/launch_robot.py"
+  test -f "${pkg_root}${PREFIX}/lib/python3/dist-packages/xgc2_simple_lidar/configuration.py"
 
   mkdir -p "${BUILD_DIR}/debian"
   cat > "${BUILD_DIR}/debian/control" <<EOF
@@ -280,10 +284,11 @@ EOF
   write_control \
     "${pkg_root}" \
     "${package}" \
-    "${shlibdeps}, ros-${ROS_DISTRO}-gazebo-ros, ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-xacro" \
+    "${shlibdeps}, python3, ros-${ROS_DISTRO}-roslaunch, ros-${ROS_DISTRO}-gazebo-ros, ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-xacro" \
     "CPU/GPU ray simple lidar plugins and reusable sensor xacro for XGC2"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
+  chmod 0755 "${pkg_root}${PREFIX}/lib/xgc2_simple_lidar/launch_robot.py"
 
   if readelf -d "${lidar_library}" "${cpu_library}" | grep -Eq '(RPATH|RUNPATH)'; then
     echo "Lidar library contains a build-time RPATH/RUNPATH" >&2

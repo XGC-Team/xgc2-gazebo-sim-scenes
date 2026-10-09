@@ -27,27 +27,15 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
         std::mutex frame_mutex;
         ScanSchedule schedule{0.1};
         std::atomic<bool> closing{false};
-        // Kept by the connect and disconnect callbacks (ROS spinner threads),
-        // which read the count and store it as one step under the mutex.
-        // Frame() runs after every world update and reads only this flag:
-        // Publisher::getNumSubscribers searches every topic the gzserver
-        // process advertises under roscpp's global topic lock.
-        std::mutex subscriber_mutex;
-        std::atomic<bool> subscribed{false};
 
         void Stop() {
             closing = true;
-            const std::scoped_lock lock(frame_mutex, subscriber_mutex);
+            const std::lock_guard<std::mutex> lock(frame_mutex);
             publisher.shutdown();
         }
 
-        void UpdateSubscribed() {
-            const std::lock_guard<std::mutex> lock(subscriber_mutex);
-            subscribed = publisher.getNumSubscribers() > 0;
-        }
-
         void Frame() {
-            if (closing || !subscribed)
+            if (closing)
                 return;
             std::lock_guard<std::mutex> lock(frame_mutex);
             if (closing)
@@ -117,19 +105,7 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
             config->HasElement("robotNamespace") ? config->Get<std::string>("robotNamespace") : "";
         state->node = std::make_unique<ros::NodeHandle>(robot_namespace);
         const std::weak_ptr<State> weak = state;
-        const auto subscribers = [weak](const ros::SingleSubscriberPublisher&) {
-            if (auto current = weak.lock())
-                current->UpdateSubscribed();
-        };
-        auto options = ros::AdvertiseOptions::create<sensor_msgs::PointCloud2>(
-            "simple_lidar/points", 1, subscribers, subscribers, ros::VoidConstPtr(), nullptr);
-        {
-            // A subscriber may connect, and its callback run, before advertise
-            // returns; the callback reads the publisher under the same lock.
-            const std::lock_guard<std::mutex> lock(state->subscriber_mutex);
-            state->publisher = state->node->advertise(options);
-        }
-        state->UpdateSubscribed();
+        state->publisher = state->node->advertise<sensor_msgs::PointCloud2>("simple_lidar/points", 1);
         frame_connection_ = gazebo::event::Events::ConnectWorldUpdateEnd([weak]() {
             if (auto current = weak.lock())
                 current->Frame();
