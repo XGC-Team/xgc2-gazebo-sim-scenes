@@ -2,17 +2,23 @@
 #include "xgc2_gazebo_scene/chassis_hold_bridge.hpp"
 #include <array>
 #include <vector>
-#include <xgc2/chassis_hold/provider.hpp>
+#include <xgc2/chassis_hold/rpc_handler.hpp>
 
 namespace xgc2_gazebo_scene::detail {
 class ChassisDomain {
   public:
-    explicit ChassisDomain(xgc2::chassis_hold::Options options)
-        : ids(options.robot_ids), provider(std::make_unique<xgc2::chassis_hold::Provider>(std::move(options))) {}
+    explicit ChassisDomain(xgc2::chassis_hold::RpcOptions options)
+        : ids(options.robot_ids), provider(std::make_unique<xgc2::chassis_hold::HoldRpcHandler>(std::move(options))) {}
     void Tick() noexcept {
         std::lock_guard<std::mutex> lock(mutex);
-        if (alive)
+        if (alive) {
             provider->control_tick(&Zero, this, xgc2::chassis_hold::queue_capacity);
+            if (!provider->healthy()) {
+                for (std::size_t n = 0; n < ids.size(); ++n)
+                    Zero(this, n);
+                alive = false;
+            }
+        }
     }
     void Quiesce() noexcept {
         std::lock_guard<std::mutex> lock(mutex);
@@ -63,7 +69,7 @@ class ChassisDomain {
     bool alive = true;
     const std::vector<std::string> ids;
     std::array<Binding, xgc2::chassis_hold::max_robots> bindings{};
-    std::unique_ptr<xgc2::chassis_hold::Provider> provider;
+    std::unique_ptr<xgc2::chassis_hold::HoldRpcHandler> provider;
 };
 void PublishChassisDomain(const gazebo::physics::WorldPtr& world, const std::shared_ptr<ChassisDomain>& domain);
 void RetireChassisDomain(const gazebo::physics::WorldPtr& world, const std::shared_ptr<ChassisDomain>& domain);

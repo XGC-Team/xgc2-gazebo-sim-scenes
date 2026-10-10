@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.4.1-24
+version: 1.4.1-25
 kind: ros1-apt
 summary: Explicit Gazebo Classic worlds, native simulation-v1 service, ROS user data, simple lidar and rendering.
 ros:
@@ -37,7 +37,8 @@ apt:
   - ros-noetic-rospy
   - ros-noetic-rostime
   - ros-noetic-rosgraph-msgs
-  - libxgc2-xrpc1 (>= 0.1.0-1~focal)
+  - libxgc2-xrpc1 (>= 0.1.0-2~focal)
+  - libxgc2-chassis-hold0 (>= 0.1.0-1~focal)
   - ros-noetic-xgc2-scene-runtime (>= 1.2.0-13)
   - ros-noetic-sensor-msgs
   - ros-noetic-std-msgs
@@ -156,11 +157,11 @@ ownership:
   - /opt/ros/noetic/share/roseus/ros/xgc2_gazebo_scene
 release:
   requires:
-  - libxgc2-robotics-interfaces-dev
+  - libxgc2-chassis-hold-dev
   - xgc2-xrpc
   dependency_policy:
     xgc2-scene-generation: rebuild
     xgc2-xrpc: rebuild
-    libxgc2-robotics-interfaces-dev: rebuild
+    libxgc2-chassis-hold-dev: rebuild
   apt_versions:
-    focal: 1.4.1-24
+    focal: 1.4.1-25

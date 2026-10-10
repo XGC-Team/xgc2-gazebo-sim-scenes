@@ -52,7 +52,14 @@ constexpr std::size_t kArtifactBytes = 65536;
 std::shared_ptr<const xgc2::xrpc::RuntimePolicy> WorldPolicy() {
     static const auto policy = [] {
         xgc2::xrpc::RuntimePolicyOptions options;
-        options.environment = xgc2::chassis_hold::environment_snapshot(environ);
+        // The process composition root supplies one explicit XRPC snapshot.
+        for (auto entry = environ; entry && *entry; ++entry) {
+            const std::string value(*entry);
+            if (value.rfind("XGC2_XRPC_", 0) != 0) continue;
+            const auto equals = value.find('=');
+            options.environment.emplace_back(value.substr(0, equals),
+                equals == std::string::npos ? "" : value.substr(equals + 1));
+        }
         options.default_source = "gazebo.simulation.v1";
         options.defaults = {
             {"HOST_MAX_CONNECTIONS", "32"},  {"HOST_MAX_IN_FLIGHT", "32"},     {"MAX_HEADER_BYTES", "8192"},
@@ -297,8 +304,7 @@ class SimulationService::Impl {
         auto limits = xgc2::xrpc::http_limits(*policy_);
         std::vector<std::string> discovery{"/v1/describe"};
         if (!chassis_ids.empty()) {
-            xgc2::chassis_hold::Options options;
-            options.embedded = true;
+            xgc2::chassis_hold::RpcOptions options;
             options.host_policy = policy_;
             options.socket_path = path_;
             options.instance_id = instance_;

@@ -22,8 +22,8 @@
   <build_depend>libxgc2-xrpc-dev</build_depend>
   <build_export_depend>libxgc2-xrpc-dev</build_export_depend>
   <exec_depend>libxgc2-xrpc1</exec_depend>
-  <build_depend>libxgc2-robotics-interfaces-dev</build_depend>
-  <build_export_depend>libxgc2-robotics-interfaces-dev</build_export_depend>
+  <build_depend>libxgc2-chassis-hold-dev</build_depend>
+  <build_export_depend>libxgc2-chassis-hold-dev</build_export_depend>
   <build_depend>libjsoncpp-dev</build_depend>
   <build_export_depend>libjsoncpp-dev</build_export_depend>
   <exec_depend>message_runtime</exec_depend>
