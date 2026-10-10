@@ -160,6 +160,7 @@ release:
   - libxgc2-chassis-hold-dev
   - xgc2-xrpc
   dependency_policy:
+    xgc2-ros-msgs: rebuild
     xgc2-scene-generation: rebuild
     xgc2-xrpc: rebuild
     libxgc2-chassis-hold-dev: rebuild
