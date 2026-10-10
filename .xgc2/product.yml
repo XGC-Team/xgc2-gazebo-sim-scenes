@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-scenes
 name: XGC2 Gazebo Sim Scenes
-version: 1.4.1-20
+version: 1.4.1-21
 kind: ros1-apt
 summary: Explicit Gazebo Classic worlds, native simulation-v1 service, ROS user data, simple lidar and rendering.
 ros:
@@ -161,4 +161,4 @@ release:
     xgc2-xrpc: rebuild
     libxgc2-robotics-interfaces-dev: rebuild
   apt_versions:
-    focal: 1.4.1-20
+    focal: 1.4.1-21

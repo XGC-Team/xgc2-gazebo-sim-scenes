@@ -308,7 +308,7 @@ class SimulationService::Impl {
             discovery.emplace_back("/v1/chassis/descriptor");
         }
         server_ = std::make_unique<xgc2::xrpc::HttpServer>(
-            xgc2::xrpc::UnixOptions{path_},
+            xgc2::xrpc::UnixOptions{path_, 0600, xgc2::xrpc::ExistingPath::ReclaimUnreachable},
             [this](HttpRequest r, HttpReply reply) {
                 Handle(std::move(r), std::move(reply));
             },
