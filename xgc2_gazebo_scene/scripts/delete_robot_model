@@ -25,6 +25,12 @@ def main():
     launch_input = json.loads(raw)
     if not isinstance(launch_input, dict) or set(launch_input) != {'robot', 'simulationServiceRef'}:
         raise ValueError('launch input requires robot and simulationServiceRef')
+    robot = launch_input['robot']
+    if not isinstance(robot, dict) or robot.get('namespace') != args.namespace:
+        raise ValueError('robot namespace differs from the claimed namespace')
+    identity = robot.get('id')
+    if not isinstance(identity, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', identity):
+        raise ValueError('robot requires an explicit chassis identity')
     service_ref = launch_input['simulationServiceRef']
     if not isinstance(service_ref, dict) or not service_ref:
         raise ValueError('simulationServiceRef must be a nonempty object')
@@ -33,7 +39,7 @@ def main():
     try:
         client = SimulationClient(service_ref, runtime=runtime,
                                   local_target=args.target_id, timeout=5)
-        path = '/v1/entities/'+quote(args.namespace[1:], safe='')
+        path = '/v1/entities/'+quote(identity, safe='')
         deadline = time.monotonic()+5
         try:
             entities = client.client.json(path, method='GET')['entities']
@@ -44,7 +50,7 @@ def main():
         if len(entities) != 1:
             raise ValueError('world did not return one robot entity')
         reference = entities[0]['ref']
-        if reference['id'] != args.namespace[1:]:
+        if reference['id'] != identity:
             raise ValueError('world returned a different robot identity')
         client.timeout = max(.001, deadline-time.monotonic())
         client.operation(path, {'generation': reference['generation']}, method='DELETE')

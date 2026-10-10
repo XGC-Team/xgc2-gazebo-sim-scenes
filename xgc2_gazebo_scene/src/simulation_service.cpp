@@ -755,6 +755,12 @@ class SimulationService::Impl {
             public_id->SetName("public_entity_id");
             public_id->AddValue("string", c.id, true);
             plugin->InsertElement(public_id);
+            if (!ros_namespace.empty()) {
+                auto public_namespace = sdf::ElementPtr(new sdf::Element());
+                public_namespace->SetName("ros_namespace");
+                public_namespace->AddValue("string", ros_namespace, true);
+                plugin->InsertElement(public_namespace);
+            }
             return c;
         }
         if (r.target.starts_with("/v1/entities/")) {

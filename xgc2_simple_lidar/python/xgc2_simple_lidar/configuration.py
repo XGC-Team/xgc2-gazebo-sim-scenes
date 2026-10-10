@@ -9,11 +9,14 @@ def robot_parameters(robot, profile, namespace):
         raise ValueError('robot namespace differs from the claimed namespace')
     if not re.fullmatch(r'/[A-Za-z][A-Za-z0-9_]{0,127}', namespace):
         raise ValueError('robot requires one absolute ROS namespace segment')
+    identity = robot.get('id')
+    if not isinstance(identity, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', identity):
+        raise ValueError('robot requires an explicit chassis identity')
     name = namespace[1:]
     if robot.get('kind') != {'scout': 'scout_mini', 'mecanum': 'mecanum_ugv'}[profile]:
         raise ValueError('robot kind differs from the native launch profile')
     parameters = surface_parameters(robot['authoredSimulationSensors'])
-    parameters.update(ns=name, model_name=name)
+    parameters.update(ns=name, model_name=identity)
     for key in ('x', 'y', 'z', 'yaw'):
         value = robot['initialPose'][key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):

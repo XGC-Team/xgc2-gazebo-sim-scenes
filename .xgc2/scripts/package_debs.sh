@@ -193,7 +193,8 @@ EOF
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
   chmod 0755 "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/spawn_robot_model" \
-    "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/simulation_world_prepare"
+    "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/simulation_world_prepare" \
+    "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/delete_robot_model"
   if readelf -d "${objects[@]}" | grep -Eq '(RPATH|RUNPATH)'; then
     echo "Native scene libraries contain build-time RPATH/RUNPATH" >&2; exit 1
   fi
