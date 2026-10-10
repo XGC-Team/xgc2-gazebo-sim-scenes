@@ -55,10 +55,11 @@ std::shared_ptr<const xgc2::xrpc::RuntimePolicy> WorldPolicy() {
         // The process composition root supplies one explicit XRPC snapshot.
         for (auto entry = environ; entry && *entry; ++entry) {
             const std::string value(*entry);
-            if (value.rfind("XGC2_XRPC_", 0) != 0) continue;
+            if (value.rfind("XGC2_XRPC_", 0) != 0)
+                continue;
             const auto equals = value.find('=');
             options.environment.emplace_back(value.substr(0, equals),
-                equals == std::string::npos ? "" : value.substr(equals + 1));
+                                             equals == std::string::npos ? "" : value.substr(equals + 1));
         }
         options.default_source = "gazebo.simulation.v1";
         options.defaults = {
