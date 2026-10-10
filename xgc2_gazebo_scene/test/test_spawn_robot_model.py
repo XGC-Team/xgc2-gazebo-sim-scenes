@@ -70,9 +70,16 @@ class SpawnTest(unittest.TestCase):
                          'profile': 'http.v1', 'instance_id': 'world1',
                          'endpoint': {'kind': 'unix', 'address': path}}
             try:
-                argv = ['delete_robot_model', '--namespace', '/ugv7',
-                        '--simulation-service-ref-json', json.dumps(reference), '--target-id', 'fixture']
-                with patch.object(sys, 'argv', argv), patch(
+                argv = ['delete_robot_model', '--namespace', '/ugv7', '--target-id', 'fixture']
+                launch_input = {'robot': {'kind': 'scout_mini', 'namespace': '/ugv7',
+                                         'runMode': 'simulation',
+                                         'initialPose': {'x': 0, 'y': 0, 'z': .181, 'yaw': 0},
+                                         'authoredSimulationSensors': {'simpleLidar': False},
+                                         'scout': {'lidarSimulationEnabled': True,
+                                                   'imageSimulationEnabled': False}},
+                                'simulationServiceRef': reference}
+                stdin = types.SimpleNamespace(buffer=io.BytesIO(json.dumps(launch_input).encode()))
+                with patch.object(sys, 'argv', argv), patch.object(sys, 'stdin', stdin), patch(
                         'xgc2_scene_runtime.simulation_client.uuid.uuid4',
                         return_value=types.SimpleNamespace(hex='stop-one')):
                     delete_helper.main()
