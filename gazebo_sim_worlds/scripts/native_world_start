@@ -66,6 +66,7 @@ def compose(arguments, environment):
         if key in mapped: env[variable] = mapped[key]
     plugins = []
     if args.ros_data == 'true':
+        plugins.append('libgazebo_ros_paths_plugin.so')
         plugins.append('libxgc2_simulation_ros_data.so')
         env['XGC_SIM_ROS_CLOCK_RATE_HZ'] = str(rate)
     if args.vrpn_config:

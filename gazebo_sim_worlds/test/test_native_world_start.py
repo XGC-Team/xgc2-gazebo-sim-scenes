@@ -20,7 +20,8 @@ class NativeWorldStartTest(unittest.TestCase):
             binary, argv, env = entry.compose(['--world', str(world), '--paused', 'true', '--gui', 'false',
                 '--ros-data', 'true', '--gazebo-bin', '/usr/bin/true', '--vrpn-config', str(vrpn),
                 '--plugin-dir', directory, '__name:=fixture', '__ns:=/fixture'], environment)
-            self.assertEqual(argv, [binary, '-u', '-s', 'libxgc2_simulation_ros_data.so', '-s',
+            self.assertEqual(argv, [binary, '-u', '-s', 'libgazebo_ros_paths_plugin.so', '-s',
+                'libxgc2_simulation_ros_data.so', '-s',
                 'libgazebo_sim_vrpn_system_plugin.so', str(world)])
             self.assertEqual(env['XGC_SIM_VRPN_CONFIG'], str(vrpn))
             self.assertEqual(env['XGC_SIM_ROS_NAMESPACE'], '/fixture')
