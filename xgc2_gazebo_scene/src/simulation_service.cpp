@@ -274,8 +274,8 @@ class SimulationService::Impl {
         chassis_ = detail::ChassisHoldHost::Create(world_, instance_);
         server_ = std::make_unique<xgc2::xrpc::HttpServer>(
             xgc2::xrpc::UnixOptions{path_, 0600, xgc2::xrpc::ExistingPath::ReclaimUnreachable},
-            [this](HttpRequest r, HttpReply reply) {
-                Handle(std::move(r), std::move(reply));
+            [this](const HttpRequest& r, HttpReply reply) {
+                Handle(r, std::move(reply));
             },
             limits_, xgc2::xrpc::HttpIdentity{instance_, {"/v1/describe"}});
         server_->set_wakeup_handler([this] {
@@ -1059,10 +1059,11 @@ class SimulationService::Impl {
             }
         }
         const auto health = Health();
+        const auto now = Clock::now();
         for (auto it = describe_waiters_.begin(); it != describe_waiters_.end();) {
             if (it->reply.cancelled())
                 it = describe_waiters_.erase(it);
-            else if (health["lifecycle"] == "ready" || !(Clock::now() < it->deadline)) {
+            else if (health["lifecycle"] == "ready" || (it->deadline - now).count() <= 0) {
                 it->reply.complete(Response(Description()));
                 it = describe_waiters_.erase(it);
             } else
