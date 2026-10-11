@@ -41,13 +41,11 @@ for library in \
     libxgc2_gazebo_scene_system.so; do
   test -f "/opt/ros/${ROS_DISTRO}/lib/${library}"
 done
-test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/ObstacleDefinition.h"
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/obstacle_messages.hpp"
 test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/obstacle_path_plugin.hpp"
-test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/msg/ObstacleDefinition.msg"
 test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/ConfigureMotions.srv"
 test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/StopMotions.srv"
 test ! -e "/opt/ros/${ROS_DISTRO}/lib/libxgc2_scene_authoring_world.so"
-test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/xgc2_gazebo_scene/msg/_ObstacleDefinition.py"
 test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/spawn_robot_model"
 test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/simulation_world_prepare"
 test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/delete_robot_model"
@@ -96,7 +94,7 @@ if readelf -d "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" "/opt/ros/${R
   exit 1
 fi
 
-"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_gazebo_scene.msg import ObstacleDefinition, ObstacleStateArray'
+"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray'
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_scene_runtime.simulation_client import SimulationClient; from xgc2_scene_runtime.prepare import prepare'
 
 echo "Installed scene packages check passed"

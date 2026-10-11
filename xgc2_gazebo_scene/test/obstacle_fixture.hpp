@@ -1,6 +1,5 @@
 // Stand-ins for the managed obstacles of GazeboSceneSystemPlugin and random
-// scenes made of them, for obstacle_messages_test and
-// obstacle_messages_benchmark. Not part of the package interface.
+// scenes made of them, for obstacle_messages_test. Not part of the package interface.
 #pragma once
 
 #include "xgc2_gazebo_scene/motion_controller.hpp"
@@ -21,11 +20,9 @@ namespace fixture {
 
 /// The few members of a Gazebo model the 30 Hz publication reads.
 struct Model {
-    std::string name;
     ignition::math::Vector3d linear_velocity;
     ignition::math::Vector3d angular_velocity;
     bool is_static = true;
-    std::string GetName() const { return name; }
     ignition::math::Vector3d WorldLinearVel() const { return linear_velocity; }
     ignition::math::Vector3d WorldAngularVel() const { return angular_velocity; }
     bool IsStatic() const { return is_static; }
@@ -34,19 +31,17 @@ struct Model {
 /// GazeboSceneSystemPlugin::ManagedObstacle without the Gazebo.
 struct Obstacle {
     std::shared_ptr<Model> model;
-    std::uint64_t generation = 1;
-    ObstacleDefinition definition;
+    std::vector<xgc2_geometry_msgs::ConvexBodyInstance> parts;
     ignition::math::Pose3d observed_pose = ignition::math::Pose3d::Zero;
     MotionController controller;
     bool controlled = false;
-    std::uint64_t motion_revision = 0;
 };
 
 /// Reads an obstacle the way the 30 Hz publication reports it: the controller's
 /// sample while a motion drives it, Gazebo's velocities while it does not.
 /// `Obstacle` has `model` (WorldLinearVel, WorldAngularVel, IsStatic),
 /// `observed_pose`, `controlled`, `controller` (Sample, modeName) and
-/// `motion_revision`.
+/// the collision parts.
 template <class Obstacle>
 void SampleObstacle(const Obstacle& obstacle, double simulation_time, ObstacleDynamics* dynamics) {
     dynamics->pose = obstacle.observed_pose;
@@ -54,14 +49,12 @@ void SampleObstacle(const Obstacle& obstacle, double simulation_time, ObstacleDy
         const MotionSample sample = obstacle.controller.Sample(simulation_time);
         dynamics->linear_velocity = sample.linear_velocity;
         dynamics->angular_velocity = sample.angular_velocity;
-        dynamics->motion_mode = obstacle.controller.modeName();
     } else {
         dynamics->linear_velocity = obstacle.model->WorldLinearVel();
         dynamics->angular_velocity = obstacle.model->WorldAngularVel();
-        dynamics->motion_mode = "uncontrolled";
     }
-    dynamics->motion_revision = obstacle.motion_revision;
-    dynamics->is_static = obstacle.model->IsStatic() && (!obstacle.controlled || dynamics->motion_mode == "hold");
+    dynamics->is_static =
+        obstacle.model->IsStatic() && (!obstacle.controlled || obstacle.controller.mode() == MotionMode::kHold);
 }
 
 using Obstacles = std::map<std::string, Obstacle>;
@@ -80,13 +73,9 @@ class Scene {
             const std::string name = "scene_" + id;
             Obstacle obstacle;
             obstacle.model = std::make_shared<Model>();
-            obstacle.model->name = "xgc2_obstacle_" + name;
-            obstacle.generation = 1 + Integer(0, 3);
-            obstacle.definition.name = name;
-            obstacle.definition.model_name = obstacle.model->name;
             const int count_of_parts = parts > 0 ? parts : static_cast<int>(1 + Integer(0, 3));
             for (int part = 0; part < count_of_parts; ++part)
-                obstacle.definition.parts.push_back(MakePart(name, part));
+                obstacle.parts.push_back(MakePart(name, part));
             obstacles_.emplace(name, std::move(obstacle));
         }
     }
@@ -100,7 +89,7 @@ class Scene {
         }
     }
 
-    /// Moves everything: poses, velocities, motions, revisions. `fraction` of
+    /// Moves everything: poses, velocities and motions. `fraction` of
     /// the obstacles are driven by a motion of any mode, the rest are free.
     void Advance(double simulation_time, double fraction) {
         for (auto& item : obstacles_) {
@@ -109,8 +98,6 @@ class Scene {
             obstacle.model->linear_velocity = RandomVector(2.0);
             obstacle.model->angular_velocity = RandomVector(1.0);
             obstacle.model->is_static = Real(0.0, 1.0) < 0.8;
-            if (Real(0.0, 1.0) < 0.1)
-                ++obstacle.motion_revision;
             if (Real(0.0, 1.0) < 0.2)
                 Control(&obstacle, simulation_time, Real(0.0, 1.0) < fraction);
         }
@@ -147,32 +134,32 @@ class Scene {
         return size;
     }
 
-    ConvexPart MakePart(const std::string& name, int index) {
-        ConvexPart part;
-        part.part_id = "body/part_" + Hex(index) + name.substr(name.size() > 8 ? name.size() - 8 : 0);
-        part.local_pose = PoseMessage(RandomPose());
+    xgc2_geometry_msgs::ConvexBodyInstance MakePart(const std::string& name, int index) {
+        xgc2_geometry_msgs::ConvexBodyInstance part;
+        part.name = "body/part_" + Hex(index) + name.substr(name.size() > 8 ? name.size() - 8 : 0);
+        part.pose = PoseMessage(RandomPose());
         switch (Integer(0, 3)) {
         case 0:
-            part.shape = ConvexPart::SHAPE_BOX;
-            part.size = RandomSize();
+            part.geometry_type = "cube";
+            part.scale = RandomSize();
             break;
         case 1:
-            part.shape = ConvexPart::SHAPE_SPHERE;
-            part.radius = Real(0.1, 2.0);
+            part.geometry_type = "sphere";
+            part.scale.x = part.scale.y = part.scale.z = Real(0.1, 2.0);
             break;
         case 2:
-            part.shape = ConvexPart::SHAPE_CYLINDER;
-            part.radius = Real(0.1, 2.0);
-            part.length = Real(0.1, 4.0);
+            part.geometry_type = "cylinder";
+            part.scale.x = part.scale.y = Real(0.1, 2.0);
+            part.scale.z = Real(0.1, 4.0);
             break;
         default:
-            part.shape = ConvexPart::SHAPE_CONVEX_MESH;
-            part.mesh_uri = "file:///tmp/xgc2-scene-meshes-" + Hex(Integer(0, 1000)).substr(10, 6) + "/" + Hex(index) +
-                            Hex(index + 1) + ".obj";
+            part.geometry_type = "convex_mesh:file:///tmp/xgc2-scene-meshes-" + Hex(Integer(0, 1000)).substr(10, 6) +
+                                 "/" + Hex(index) + Hex(index + 1) + ".obj";
             if (Integer(0, 2) == 0)
-                part.mesh_submesh = "sub_" + std::to_string(Integer(0, 9));
-            part.mesh_center_submesh = Integer(0, 2) == 0;
-            part.mesh_scale = RandomSize();
+                part.geometry_type += "#submesh=sub_" + std::to_string(Integer(0, 9));
+            if (Integer(0, 2) == 0)
+                part.geometry_type += "#centered";
+            part.scale = RandomSize();
             break;
         }
         return part;

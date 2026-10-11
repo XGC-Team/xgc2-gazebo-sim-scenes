@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Isolated runtime/Gazebo acceptance. Takes the algorithm-owned scene as input.
 
-The legacy observer is loaded only to independently read actual collision shapes;
-its motion services must reject scene-owned targets. No planner or control node is started.
+The collision observer independently reads actual collision shapes through the
+planning geometry library and instances. No planner or control node is started.
 All processes, ROS/Gazebo masters, files and save targets belong to this run.
 """
 
@@ -27,9 +27,7 @@ import rospy
 import yaml
 from gazebo_msgs.srv import GetModelState
 from std_msgs.msg import String
-from xgc2_gazebo_scene.msg import ConvexPart, ObstacleDefinitionArray, MotionSpec
-from xgc2_gazebo_scene.srv import ConfigureMotions, StopMotions
-from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState
+from xgc2_geometry_msgs.msg import ConvexBodyArray, GeometryLibrary, SceneSnapshot, SceneState
 from xgc2_geometry_msgs.srv import SceneCommand
 
 
@@ -51,7 +49,14 @@ def free_ports():
     sockets = [socket.socket(), socket.socket()]
     try:
         for sock in sockets:
-            sock.bind(('127.0.0.1', 0))
+            for _ in range(100):
+                try:
+                    sock.bind(('127.0.0.1', 20000 + uuid.uuid4().int % 20001))
+                    break
+                except OSError:
+                    continue
+            else:
+                raise RuntimeError('No private master port available in 20000-40000')
         return [sock.getsockname()[1] for sock in sockets]
     finally:
         for sock in sockets:
@@ -153,36 +158,22 @@ class Integration:
         return envelope
 
     def verify_collisions(self, document):
-        """Use collision-derived native messages, independently of apply's receipt."""
+        """Use collision-derived planning messages, independently of apply's receipt."""
         with self.lock:
-            observed = self.samples.get('geometry')
-        assert observed is not None, 'no collision observer snapshot'
-        bodies = {item.model_name: item for item in observed.obstacles}
-        assert set(bodies) == {model_name(item['id']) for item in document['obstacles']}
-        shape_codes = {'box': ConvexPart.SHAPE_BOX, 'sphere': ConvexPart.SHAPE_SPHERE,
-                       'cylinder': ConvexPart.SHAPE_CYLINDER, 'convex': ConvexPart.SHAPE_CONVEX_MESH}
+            library = self.samples.get('geometry_library')
+            observed = self.samples.get('instances')
+        assert library is not None and observed is not None, 'no collision observer snapshot'
+        assert library.header.frame_id == observed.header.frame_id == 'world'
+        templates = {item.type: item for item in library.templates}
+        instances = {item.name: item for item in observed.instances}
+        expected_names = {
+            model_name(item['id'])[len('xgc2_obstacle_'):] + (
+                '/body/part_' + part['id'].encode('utf-8').hex() if len(item['parts']) != 1 else '')
+            for item in document['obstacles'] for part in item['parts']
+        }
+        assert set(instances) == expected_names
+        shape_types = {'box': 'cube', 'sphere': 'sphere', 'cylinder': 'cylinder'}
         for item in document['obstacles']:
-            body = bodies[model_name(item['id'])]
-            assert len(body.parts) == len(item['parts'])
-            parts = {part.part_id.rsplit('/', 1)[-1]: part for part in body.parts}
-            for expected in item['parts']:
-                actual = parts['part_' + expected['id'].encode('utf-8').hex()]
-                geometry = expected['geometry']
-                assert actual.shape == shape_codes[geometry['type']]
-                close(vector(actual.local_pose.position), expected['pose']['position'])
-                if geometry['type'] == 'box':
-                    close(vector(actual.size), geometry['size'])
-                elif geometry['type'] in ('sphere', 'cylinder'):
-                    close([actual.radius], [geometry['radius']])
-                    if geometry['type'] == 'cylinder':
-                        close([actual.length], [geometry['height']])
-                else:
-                    close(vector(actual.mesh_scale), [1, 1, 1])
-                    vertices = sorted(vector(vertex) for vertex in actual.conservative_vertices)
-                    expected_vertices = sorted(geometry['vertices'])
-                    assert len(vertices) == len(expected_vertices)
-                    for left, right in zip(vertices, expected_vertices):
-                        close(left, right)
             state = self.get_model(model_name(item['id']), 'world')
             assert state.success, state.status_message
             close(vector(state.pose.position), item['pose']['position'])
@@ -190,6 +181,44 @@ class Integration:
             actual_q = [q.x, q.y, q.z, q.w]
             expected_q = item['pose']['orientation']
             assert abs(abs(sum(a*b for a, b in zip(actual_q, expected_q))) - 1) < 1e-6
+            logical_name = model_name(item['id'])[len('xgc2_obstacle_'):]
+            for expected in item['parts']:
+                name = logical_name
+                if len(item['parts']) != 1:
+                    name += '/body/part_' + expected['id'].encode('utf-8').hex()
+                actual = instances[name]
+                local_pose = expected.get('pose', {'position': [0, 0, 0], 'orientation': [0, 0, 0, 1]})
+                # Compose the model and collision poses to check the published world pose.
+                x, y, z = local_pose['position']
+                qx, qy, qz, qw = actual_q
+                tx, ty, tz = 2*(qy*z-qz*y), 2*(qz*x-qx*z), 2*(qx*y-qy*x)
+                offset = [x+qw*tx+qy*tz-qz*ty, y+qw*ty+qz*tx-qx*tz, z+qw*tz+qx*ty-qy*tx]
+                close(vector(actual.pose.position), [a+b for a, b in zip(vector(state.pose.position), offset)])
+                lx, ly, lz, lw = local_pose['orientation']
+                rotation = [qw*lx+qx*lw+qy*lz-qz*ly, qw*ly-qx*lz+qy*lw+qz*lx,
+                            qw*lz+qx*ly-qy*lx+qz*lw, qw*lw-qx*lx-qy*ly-qz*lz]
+                orientation = actual.pose.orientation
+                assert abs(abs(sum(a*b for a, b in zip(
+                    [orientation.x, orientation.y, orientation.z, orientation.w], rotation))) - 1) < 1e-6
+                geometry = expected['geometry']
+                if geometry['type'] == 'convex':
+                    assert actual.geometry_type.startswith('convex_mesh:')
+                    assert actual.geometry_type in templates
+                    close(vector(actual.scale), [1, 1, 1])
+                    vertices = sorted(vector(vertex) for vertex in templates[actual.geometry_type].support_points)
+                    expected_vertices = sorted(geometry['vertices'])
+                    assert len(vertices) == len(expected_vertices)
+                    for left, right in zip(vertices, expected_vertices):
+                        close(left, right)
+                else:
+                    assert actual.geometry_type == shape_types[geometry['type']]
+                    assert actual.geometry_type in templates
+                    if geometry['type'] == 'box':
+                        close(vector(actual.scale), geometry['size'])
+                    elif geometry['type'] == 'sphere':
+                        close(vector(actual.scale), [geometry['radius']] * 3)
+                    else:
+                        close(vector(actual.scale), [geometry['radius'], geometry['radius'], geometry['height']])
         return True
 
     def verify_current(self):
@@ -205,8 +234,10 @@ class Integration:
         rospy.init_node('scene_integration', anonymous=True, disable_signals=True)
         rospy.set_param('/use_sim_time', True)
         self.subscribers = [
-            rospy.Subscriber('/xgc2/simulation/obstacles/geometry', ObstacleDefinitionArray,
-                             lambda value: self.sample('geometry', value), queue_size=1),
+            rospy.Subscriber('/xgc2/simulation/obstacles/geometry_library', GeometryLibrary,
+                             lambda value: self.sample('geometry_library', value), queue_size=1),
+            rospy.Subscriber('/xgc2/simulation/obstacles/instances', ConvexBodyArray,
+                             lambda value: self.sample('instances', value), queue_size=1),
             rospy.Subscriber('/xgc/scene/state', SceneState, lambda value: self.sample('state', value), queue_size=1),
         ]
         self.start_gazebo()
@@ -217,19 +248,9 @@ class Integration:
         self.verify_current()
         # Both late subscribers must receive the accepted initial scene immediately.
         late_document = json.loads(rospy.wait_for_message('/xgc/scene/document', String, timeout=3).data)
-        rospy.wait_for_service('/xgc2/gazebo/obstacles/configure_motions', timeout=5)
-        configure = rospy.ServiceProxy('/xgc2/gazebo/obstacles/configure_motions', ConfigureMotions)
-        stop = rospy.ServiceProxy('/xgc2/gazebo/obstacles/stop_motions', StopMotions)
-        logical_name = model_name(original['document']['obstacles'][0]['id'])[len('xgc2_obstacle_'):]
-        motion = MotionSpec()
-        motion.name = logical_name
-        denied = configure(command_id=uuid.uuid4().hex, expected_scene_revision=0, motions=[motion])
-        assert not denied.success and 'scene runtime' in denied.message, denied
-        denied = stop(command_id=uuid.uuid4().hex, expected_scene_revision=0, names=[logical_name])
-        assert not denied.success and 'scene runtime' in denied.message, denied
-        stopped = stop(command_id=uuid.uuid4().hex, expected_scene_revision=0, names=[])
-        assert stopped.success and not stopped.motion_revisions, stopped
-        self.events.append({'old_motion_authority': 'explicit configure/stop rejected; global stop owns no scene model'})
+        for service in ('configure_motions', 'stop_motions'):
+            assert master.lookupService('/scene_integration', '/xgc2/gazebo/obstacles/' + service)[0] != 1
+        self.events.append({'motion_authority': 'collision observer exposes no motion ROS services'})
 
         late_snapshot = rospy.wait_for_message('/xgc/scene/snapshot', SceneSnapshot, timeout=3)
         assert late_document['epoch'] == late_snapshot.epoch == original['epoch']

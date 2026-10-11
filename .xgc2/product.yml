@@ -30,7 +30,6 @@ apt:
   - ros-noetic-gazebo-msgs
   - ros-noetic-gazebo-ros
   - ros-noetic-geometry-msgs
-  - ros-noetic-message-runtime
   - ros-noetic-rosconsole
   - ros-noetic-roscpp
   - ros-noetic-roscpp-serialization
@@ -150,11 +149,7 @@ ownership:
   - /opt/ros/noetic/lib/python3/dist-packages/xgc2_simple_lidar
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
   - /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
-  - /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene
   - /opt/ros/noetic/lib/xgc2_gazebo_scene
-  - /opt/ros/noetic/share/common-lisp/ros/xgc2_gazebo_scene
-  - /opt/ros/noetic/share/gennodejs/ros/xgc2_gazebo_scene
-  - /opt/ros/noetic/share/roseus/ros/xgc2_gazebo_scene
 release:
   requires:
   - libxgc2-chassis-hold-dev

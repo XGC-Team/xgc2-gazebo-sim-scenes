@@ -26,8 +26,8 @@ their behavior:
 The catalog includes exact, algorithm-independent obstacle worlds for the
 six-UAV knot and four-UGV figure-eight experiments. Their physical collisions
 are source primitives or closed convex meshes. The global plugin discovers
-those collisions and publishes both its native truth messages and the shared
-`xgc2_geometry_msgs` planning contract; no planner-specific node is embedded in
+those collisions and publishes the shared `xgc2_geometry_msgs` geometry library
+and instances; no planner-specific node is embedded in
 the scene. It also reduces Gazebo's raw high-volume contact stream to a
 latched, platform-independent forbidden-contact verdict. Normal ground and
 self contacts are filtered before they leave the scene product.

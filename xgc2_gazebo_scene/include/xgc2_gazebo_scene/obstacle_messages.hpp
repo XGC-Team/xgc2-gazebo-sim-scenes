@@ -1,9 +1,5 @@
 #pragma once
 
-#include "xgc2_gazebo_scene/ConvexPart.h"
-#include "xgc2_gazebo_scene/ObstacleDefinition.h"
-#include "xgc2_gazebo_scene/ObstacleState.h"
-#include "xgc2_gazebo_scene/ObstacleStateArray.h"
 #include "xgc2_geometry_msgs/ConvexBodyArray.h"
 #include "xgc2_geometry_msgs/ConvexBodyInstance.h"
 
@@ -66,131 +62,57 @@ inline geometry_msgs::Vector3 VectorMessage(const ignition::math::Vector3d& valu
     return message;
 }
 
-inline std::string StandardGeometryType(const ConvexPart& part) {
-    switch (part.shape) {
-    case ConvexPart::SHAPE_BOX:
-        return "cube";
-    case ConvexPart::SHAPE_SPHERE:
-        return "sphere";
-    case ConvexPart::SHAPE_CYLINDER:
-        return "cylinder";
-    case ConvexPart::SHAPE_CONVEX_MESH: {
-        std::string type = "convex_mesh:" + part.mesh_uri;
-        if (!part.mesh_submesh.empty()) {
-            type += "#submesh=" + part.mesh_submesh;
-        }
-        if (part.mesh_center_submesh) {
-            type += "#centered";
-        }
-        return type;
-    }
-    default:
-        return "";
-    }
-}
-
-inline geometry_msgs::Vector3 StandardInstanceScale(const ConvexPart& part) {
-    switch (part.shape) {
-    case ConvexPart::SHAPE_BOX:
-        return part.size;
-    case ConvexPart::SHAPE_SPHERE:
-        return VectorMessage({part.radius, part.radius, part.radius});
-    case ConvexPart::SHAPE_CYLINDER:
-        return VectorMessage({part.radius, part.radius, part.length});
-    case ConvexPart::SHAPE_CONVEX_MESH:
-        return part.mesh_scale;
-    default:
-        return geometry_msgs::Vector3{};
-    }
-}
-
 /// What changes in an obstacle's messages from one publication to the next.
 struct ObstacleDynamics {
     ignition::math::Pose3d pose = ignition::math::Pose3d::Zero;
     ignition::math::Vector3d linear_velocity = ignition::math::Vector3d::Zero;
     ignition::math::Vector3d angular_velocity = ignition::math::Vector3d::Zero;
-    std::string motion_mode;
-    std::uint64_t motion_revision = 0;
     bool is_static = false;
 };
 
-/// The obstacle state and body instance messages published every 33 ms of
-/// simulation time, kept between publications.
-///
-/// An obstacle's name, model name, generation and its parts' instance ids,
-/// names, geometry types and scales change only when the set of obstacles or
-/// a definition does, which is when Reset() is called. Building them anew for
-/// every publication copied about two strings per obstacle and one per part
-/// (about 1,000 at 500 obstacles), grew two vectors and destroyed both
-/// messages again. Set() writes only the numbers that move, and the motion
-/// mode when it differs, so publishing an unchanged set allocates nothing.
-/// The messages hold the same values the rebuilt ones did: the arithmetic is
-/// the same expressions on the same doubles.
+/// The body instance message published every 33 ms of simulation time, kept
+/// between publications. Reset() caches names, ids, geometry types, scales
+/// and local collision poses. Set() writes only the dynamic fields, so
+/// publishing an unchanged set allocates nothing.
 class ObstacleMessages {
   public:
     /// The fixed data of one obstacle, in publication order.
     struct Obstacle {
         std::string name;
-        std::string model_name;
-        std::uint64_t generation = 0;
-        const ObstacleDefinition* definition = nullptr;
+        const std::vector<xgc2_geometry_msgs::ConvexBodyInstance>* parts = nullptr;
     };
 
     ObstacleMessages() {
-        state_.header.frame_id = "world";
         instances_.header.frame_id = "world";
     }
 
     /// Replaces the set of obstacles. Everything it keeps is copied: the
-    /// definitions are read here only.
+    /// local parts are read here only.
     void Reset(const std::vector<Obstacle>& obstacles) {
-        state_.obstacles.clear();
-        state_.obstacles.reserve(obstacles.size());
         instances_.instances.clear();
         first_instance_.clear();
         first_instance_.reserve(obstacles.size() + 1);
         local_poses_.clear();
         std::int32_t instance_id = 1;
         for (const auto& obstacle : obstacles) {
-            ObstacleState state;
-            state.name = obstacle.name;
-            state.model_name = obstacle.model_name;
-            state.generation = obstacle.generation;
-            state_.obstacles.push_back(std::move(state));
             first_instance_.push_back(instances_.instances.size());
-            const bool single_part = obstacle.definition->parts.size() == 1;
-            for (const auto& part : obstacle.definition->parts) {
-                xgc2_geometry_msgs::ConvexBodyInstance instance;
+            const bool single_part = obstacle.parts->size() == 1;
+            for (const auto& part : *obstacle.parts) {
+                xgc2_geometry_msgs::ConvexBodyInstance instance = part;
                 instance.id = instance_id++;
-                instance.name = single_part ? obstacle.name : obstacle.name + "/" + part.part_id;
-                instance.geometry_type = StandardGeometryType(part);
-                instance.scale = StandardInstanceScale(part);
+                instance.name = single_part ? obstacle.name : obstacle.name + "/" + part.name;
                 instances_.instances.push_back(std::move(instance));
-                local_poses_.push_back(IgnitionPose(part.local_pose));
+                local_poses_.push_back(IgnitionPose(part.pose));
             }
         }
         first_instance_.push_back(instances_.instances.size());
     }
 
     /// Starts a publication.
-    void Begin(const ros::Time& stamp, const std::string& scene_epoch, std::uint64_t scene_revision) {
-        state_.header.stamp = stamp;
-        if (state_.scene_epoch != scene_epoch) {
-            state_.scene_epoch = scene_epoch;
-        }
-        state_.scene_revision = scene_revision;
-        instances_.header = state_.header;
-    }
+    void Begin(const ros::Time& stamp) { instances_.header.stamp = stamp; }
 
     /// Writes the dynamic fields of obstacle `index` (publication order).
     void Set(std::size_t index, const ObstacleDynamics& dynamics) {
-        ObstacleState& state = state_.obstacles[index];
-        state.pose = PoseMessage(dynamics.pose);
-        state.twist = TwistMessage(dynamics.linear_velocity, dynamics.angular_velocity);
-        if (state.motion_mode != dynamics.motion_mode) {
-            state.motion_mode = dynamics.motion_mode;
-        }
-        state.motion_revision = dynamics.motion_revision;
         for (std::size_t part = first_instance_[index]; part < first_instance_[index + 1]; ++part) {
             const ignition::math::Pose3d& local_pose = local_poses_[part];
             const ignition::math::Pose3d world_pose = dynamics.pose * local_pose;
@@ -204,13 +126,11 @@ class ObstacleMessages {
     }
 
     /// The number of obstacles the messages were last reset to.
-    std::size_t size() const { return state_.obstacles.size(); }
+    std::size_t size() const { return first_instance_.empty() ? 0 : first_instance_.size() - 1; }
 
-    const ObstacleStateArray& state() const { return state_; }
     const xgc2_geometry_msgs::ConvexBodyArray& instances() const { return instances_; }
 
   private:
-    ObstacleStateArray state_;
     xgc2_geometry_msgs::ConvexBodyArray instances_;
     std::vector<std::size_t> first_instance_;
     std::vector<ignition::math::Pose3d> local_poses_;

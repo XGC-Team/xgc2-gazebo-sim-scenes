@@ -7,7 +7,6 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--as-needed")
 find_package(catkin REQUIRED COMPONENTS
   gazebo_msgs
   geometry_msgs
-  message_generation
   roscpp
   rosgraph_msgs
   std_msgs
@@ -20,16 +19,6 @@ find_package(XgcChassisHold 0.2.0 CONFIG REQUIRED COMPONENTS http)
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
-
-add_message_files(FILES
-  ConvexPart.msg
-  MotionSpec.msg
-  ObstacleDefinition.msg
-  ObstacleDefinitionArray.msg
-  ObstacleState.msg
-  ObstacleStateArray.msg
-)
-generate_messages(DEPENDENCIES geometry_msgs std_msgs)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -45,7 +34,7 @@ catkin_package(
     xgc2_simulation_entity_ack
     xgc2_simulation_sensor_ack
     xgc2_simulation_ros_data
-  CATKIN_DEPENDS gazebo_msgs geometry_msgs message_runtime roscpp rosgraph_msgs std_msgs xgc2_geometry_msgs
+  CATKIN_DEPENDS gazebo_msgs geometry_msgs roscpp rosgraph_msgs std_msgs xgc2_geometry_msgs
 )
 
 add_library(xgc2_gazebo_scene_contact
@@ -89,7 +78,7 @@ target_compile_features(xgc2_gazebo_scene_system PUBLIC cxx_std_17)
 target_compile_options(xgc2_gazebo_scene_system PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_include_directories(xgc2_gazebo_scene_system PRIVATE include)
 target_include_directories(xgc2_gazebo_scene_system SYSTEM PRIVATE ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
-add_dependencies(xgc2_gazebo_scene_system ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(xgc2_gazebo_scene_system ${catkin_EXPORTED_TARGETS})
 target_link_libraries(xgc2_gazebo_scene_system
   PRIVATE
     xgc2_gazebo_scene_contact
@@ -194,7 +183,7 @@ if(CATKIN_ENABLE_TESTING)
     target_compile_options(xgc2_gazebo_scene_obstacle_messages_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_include_directories(xgc2_gazebo_scene_obstacle_messages_test
       PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
-    add_dependencies(xgc2_gazebo_scene_obstacle_messages_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+    add_dependencies(xgc2_gazebo_scene_obstacle_messages_test ${catkin_EXPORTED_TARGETS})
     target_link_libraries(xgc2_gazebo_scene_obstacle_messages_test xgc2_gazebo_scene_motion)
   endif()
 
