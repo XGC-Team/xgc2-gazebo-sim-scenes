@@ -196,7 +196,7 @@ class Integration:
             envelope = self.scene_client.json('/v1/scene', method='GET')
         else:
             envelope = self.scene_client.json('/v1/commands', command,
-                                              request_id=request_id or uuid.uuid4().hex)
+                                              request_id=request_id or uuid.uuid4().hex, timeout=60)
         succeeded = True if operation == 'get' else envelope['success']
         self.events.append({'operation': operation, 'success': succeeded,
                             'revision': envelope.get('revision'), 'seconds': time.monotonic() - started,
