@@ -9,6 +9,7 @@
 #include <gazebo/physics/physics.hh>
 #include <gazebo/sensors/RaySensor.hh>
 #include <ros/ros.h>
+#include <xgc2_gazebo_scene/ros_master_registration.hpp>
 
 #include "xgc2_simple_lidar/scan_projection.hpp"
 #include "xgc2_simple_lidar/scan_schedule.hpp"
@@ -21,21 +22,23 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
         gazebo::physics::WorldPtr world;
         std::unique_ptr<ros::NodeHandle> node;
         ros::Publisher publisher;
+        std::unique_ptr<xgc2_gazebo_scene::RosMasterRegistration> registration;
         std::unique_ptr<ScanProjection> projection;
         std::vector<double> native_ranges;
         std::vector<float> ranges;
         std::mutex frame_mutex;
         ScanSchedule schedule{0.1};
-        std::atomic<bool> closing{false};
+        std::atomic<bool> closing{false}, ready{false};
 
         void Stop() {
             closing = true;
+            registration.reset();
             const std::lock_guard<std::mutex> lock(frame_mutex);
             publisher.shutdown();
         }
 
         void Frame() {
-            if (closing)
+            if (closing || !ready.load(std::memory_order_acquire))
                 return;
             std::lock_guard<std::mutex> lock(frame_mutex);
             if (closing)
@@ -83,7 +86,7 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
     void Load(gazebo::sensors::SensorPtr sensor, sdf::ElementPtr config) override {
         auto cpu = std::dynamic_pointer_cast<gazebo::sensors::RaySensor>(sensor);
         if (!cpu || !ros::isInitialized()) {
-            gzerr << "simple CPU lidar requires a ray sensor and gazebo_ros_api_plugin\n";
+            gzerr << "simple CPU lidar requires a ray sensor and an initialized ROS data owner\n";
             return;
         }
         cpu->SetActive(false);
@@ -103,9 +106,16 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
         state->ranges.resize(static_cast<std::size_t>(width) * height);
         const auto robot_namespace =
             config->HasElement("robotNamespace") ? config->Get<std::string>("robotNamespace") : "";
-        state->node = std::make_unique<ros::NodeHandle>(robot_namespace);
         const std::weak_ptr<State> weak = state;
-        state->publisher = state->node->advertise<sensor_msgs::PointCloud2>("simple_lidar/points", 1);
+        state->registration = std::make_unique<xgc2_gazebo_scene::RosMasterRegistration>([weak, robot_namespace] {
+            if (auto current = weak.lock()) {
+                current->node = std::make_unique<ros::NodeHandle>(robot_namespace);
+                current->publisher = current->node->advertise<sensor_msgs::PointCloud2>("simple_lidar/points", 1);
+                if (!current->publisher)
+                    throw std::runtime_error("simple CPU lidar ROS registration failed");
+                current->ready.store(true, std::memory_order_release);
+            }
+        });
         frame_connection_ = gazebo::event::Events::ConnectWorldUpdateEnd([weak]() {
             if (auto current = weak.lock())
                 current->Frame();

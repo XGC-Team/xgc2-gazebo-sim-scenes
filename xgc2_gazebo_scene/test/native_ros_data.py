@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import random
 import socket
 import signal
 import subprocess
@@ -14,9 +15,15 @@ import time
 
 
 def free_port():
-    with socket.socket() as reserved:
-        reserved.bind(('127.0.0.1', 0))
-        return reserved.getsockname()[1]
+    for _ in range(100):
+        port = random.randrange(20000, 40001)
+        with socket.socket() as reserved:
+            try:
+                reserved.bind(('127.0.0.1', port))
+                return port
+            except OSError:
+                pass
+    raise RuntimeError('No private fixture port available')
 
 
 def stop(process):
@@ -190,6 +197,12 @@ def main():
                 count = len(clocks)
                 time.sleep(.05)
                 assert len(clocks) == count, 'paused source invented clock ticks'
+                clock_subscriber.unregister()
+                with lock:
+                    clocks.clear()
+                clock_subscriber = rospy.Subscriber('/clock', Clock, clock_callback, queue_size=1)
+                await_data(lambda: clocks and clocks[-1] == stamp)
+                assert query('/v1/world')['time']['nanoseconds'] == str(stamp), 'clock reconnect advanced time'
                 mutate('/v1/world/reset', {'scope': 'all_entities', 'reset_time': True})
                 await_data(lambda: clocks and clocks[-1] == 0)
                 services = rosgraph.Master('/native_data_fixture').getSystemState()[2]

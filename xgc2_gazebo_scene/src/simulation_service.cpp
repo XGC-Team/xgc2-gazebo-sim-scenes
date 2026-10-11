@@ -1,4 +1,5 @@
 #include "xgc2_gazebo_scene/simulation_service.hpp"
+#include "xgc2_gazebo_scene/ros_master_registration.hpp"
 #include "chassis_hold_host.hpp"
 #include "xgc2_gazebo_scene/native_entity_motion.hpp"
 #include "xgc2_gazebo_scene/native_scene_controller.hpp"
@@ -505,6 +506,12 @@ class SimulationService::Impl {
         v["instance_id"] = instance_;
         v["ready"] = health["lifecycle"] == "ready";
         v["facts"]["health"] = health;
+        const auto master = CurrentRosMasterStatus();
+        v["facts"]["ros_master"]["state"] = master.state;
+        v["facts"]["ros_master"]["uri"] = master.uri;
+        v["facts"]["ros_master"]["pid"] = master.pid;
+        v["facts"]["ros_master"]["run_id"] = master.run_id;
+        v["facts"]["ros_master"]["attempts"] = Json::UInt64(master.attempts);
         auto& ref = v["service_ref"];
         ref["target_id"] = target_;
         ref["service"] = "xgc2.simulation";

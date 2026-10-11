@@ -12,9 +12,37 @@ readiness gates the world's health. HOLD has no parameters: chassis model plugin
 themselves through `xgc2_gazebo_scene/chassis_hold.hpp`. It builds against `libxgc2-xrpc-dev` and
 `libxgc2-chassis-hold-dev` 0.2 or later.
 
+The native world starts in parallel with ROS and its consumers. ROS data, legacy
+ground truth and simple lidar register through one shared master watcher outside
+the Gazebo initialization and update threads. Missing masters use exponential
+backoff with full jitter from 250 ms to a 30 s cap, with a single identity read in
+flight and at most one failure summary per 10 s. A different bound master PID or
+run ID ends the process through SIGINT. The world's `ready` remains a statement
+about its native resources; `facts.ros_master` reports the ROS binding separately.
+Topic consumers are discovered through ROS updates. Data queues keep one current
+sample, and a new clock subscriber receives the current time even while paused.
+Robot creation needs the bound world service and its ROS asset parameter; it does
+not wait for a scene adapter or controller.
+
 Python consumers use `xgc2_gazebo_scene.simulation_client.SimulationClient` with
 the formal `xgc2_xrpc` 0.2.0 wheel and an explicit simulation-v1 ServiceRef.
 The client submits once and waits for the world's terminal operation result.
+
+The start-order fixtures need ROS but do not run Gazebo. From the repository root:
+
+```bash
+. /home/node/workspace/underlay/setup.sh
+nice -n 19 cmake -S xgc2_gazebo_scene/test/start_order -B build/start_order
+nice -n 19 cmake --build build/start_order -j2
+cd build/start_order
+nice -n 19 ctest -LE long --output-on-failure
+nice -n 19 ctest -L long -V
+```
+
+The `long` cell holds the master and a topic consumer down for separate 60 s
+windows and checks CPU, connect attempts, logs, threads and descriptors. It then
+checks registration, the latest desired revision and consumer restart. Every
+fixture uses a private master port in 20000-40000 and its own ROS home.
 
 Gazebo world preparation is provided by `xgc2-scene-prepare` from the
 `xgc_scene_ros1_adapter` package (`ros-noetic-xgc2-scene-adapter` >= 0.7.0-1).

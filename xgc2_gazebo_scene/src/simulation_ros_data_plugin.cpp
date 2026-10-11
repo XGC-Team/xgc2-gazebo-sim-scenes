@@ -1,4 +1,5 @@
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
+#include "xgc2_gazebo_scene/ros_master_registration.hpp"
 #include <atomic>
 #include <cerrno>
 #include <cmath>
@@ -52,12 +53,15 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
         close(wake_fd_);
     }
     void Start() {
-        worker_ = std::thread([this] {
-            try {
-                Work();
-            } catch (const std::exception& error) {
-                ROS_ERROR("native ROS data source stopped: %s", error.what());
-            }
+        registration_ = std::make_unique<RosMasterRegistration>([this] {
+            Register();
+            worker_ = std::thread([this] {
+                try {
+                    Work();
+                } catch (const std::exception& error) {
+                    ROS_ERROR("native ROS data source stopped: %s", error.what());
+                }
+            });
         });
     }
     void Attach(const std::string& name) {
@@ -113,6 +117,7 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
     void Stop() {
         if (stopping_.exchange(true))
             return;
+        registration_.reset();
         {
             std::lock_guard<std::mutex> lock(mutex_);
             update_.reset();
@@ -125,6 +130,11 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
         (void)ignored;
         if (worker_.joinable())
             worker_.join();
+        if (spinner_)
+            spinner_->stop();
+        clock_.shutdown();
+        models_.shutdown();
+        node_.reset();
         {
             std::lock_guard<std::mutex> lock(mutex_);
             world_.reset();
@@ -132,16 +142,31 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
     }
 
   private:
-    void Work() {
-        ros::NodeHandle node;
-        const auto clock = node.advertise<rosgraph_msgs::Clock>("/clock", 10);
+    void Register() {
+        node_ = std::make_unique<ros::NodeHandle>();
         const std::weak_ptr<DataSource> weak = shared_from_this();
+        clock_ = node_->advertise<rosgraph_msgs::Clock>("/clock", 1,
+            [weak](const ros::SingleSubscriberPublisher&) {
+                if (auto self = weak.lock()) {
+                    self->clock_requested_.store(true, std::memory_order_release);
+                    self->Wake();
+                }
+            }, ros::SubscriberStatusCallback{});
         const ros::SubscriberStatusCallback connected = [weak](const ros::SingleSubscriberPublisher&) {
             if (auto self = weak.lock())
                 self->Wake();
         };
-        const auto models = node.advertise<gazebo_msgs::ModelStates>("/gazebo/model_states", 10, connected,
+        models_ = node_->advertise<gazebo_msgs::ModelStates>("/gazebo/model_states", 1, connected,
                                                                      ros::SubscriberStatusCallback{});
+        if (!clock_ || !models_) {
+            clock_.shutdown();
+            models_.shutdown();
+            throw std::runtime_error("native ROS data registration failed");
+        }
+        spinner_ = std::make_unique<ros::AsyncSpinner>(1);
+        spinner_->start();
+    }
+    void Work() {
         std::map<std::string, std::string> aliases;
         // Identity only: never keep a World alive across data frames or shutdown.
         const gazebo::physics::World* initialized = nullptr;
@@ -175,7 +200,8 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
                 bool changed;
                 {
                     const std::int64_t nanoseconds = clock_ns_.load(std::memory_order_acquire);
-                    changed = last_clock < 0 || nanoseconds < last_clock ||
+                    changed = clock_requested_.exchange(false, std::memory_order_acq_rel) ||
+                              last_clock < 0 || nanoseconds < last_clock ||
                               (nanoseconds != last_clock &&
                                (rate_ == 0 || static_cast<double>(nanoseconds - last_clock) * 1e-9 >= 1.0 / rate_));
                     if (changed) {
@@ -187,11 +213,11 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
                     }
                 }
                 if (changed)
-                    clock.publish(time);
+                    clock_.publish(time);
             } catch (const std::exception& error) {
                 ROS_ERROR_THROTTLE(1.0, "native ROS clock refused: %s", error.what());
             }
-            if (!models.getNumSubscribers())
+            if (!models_.getNumSubscribers())
                 continue;
             try {
                 gazebo_msgs::ModelStates states;
@@ -240,7 +266,7 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
                             ++entry;
                 }
                 // ROS serialization/socket work belongs only to this fixed data worker.
-                models.publish(states);
+                models_.publish(states);
             } catch (const std::exception& error) {
                 ROS_ERROR_THROTTLE(1.0, "native ROS model-state snapshot refused: %s", error.what());
             }
@@ -249,12 +275,17 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
     double rate_;
     int wake_fd_;
     std::atomic<bool> stopping_{false}, requested_{false};
+    std::atomic<bool> clock_requested_{false};
     std::atomic<std::int64_t> clock_ns_{0};
     std::mutex mutex_;
     boost::weak_ptr<gazebo::physics::World> world_;
     bool attached_ = false;
     gazebo::event::ConnectionPtr update_, reset_, created_, deleted_;
     std::thread worker_;
+    std::unique_ptr<RosMasterRegistration> registration_;
+    std::unique_ptr<ros::NodeHandle> node_;
+    std::unique_ptr<ros::AsyncSpinner> spinner_;
+    ros::Publisher clock_, models_;
 };
 } // namespace
 
@@ -279,8 +310,6 @@ class SimulationRosDataPlugin final : public gazebo::SystemPlugin {
             if (errno || end == configured || *end || !std::isfinite(rate) || rate < 0 || rate > 1e6)
                 throw std::invalid_argument("native ROS clock rate must be finite in [0, 1000000]");
         }
-        spinner_ = std::make_unique<ros::AsyncSpinner>(1);
-        spinner_->start();
         data_ = std::make_shared<DataSource>(rate);
         data_->Start();
         const std::weak_ptr<DataSource> weak = data_;
@@ -296,8 +325,6 @@ class SimulationRosDataPlugin final : public gazebo::SystemPlugin {
         // postpone World release until DiagnosticManager static destruction.
         if (data_)
             data_->Stop();
-        if (spinner_)
-            spinner_->stop();
         if (owns_ros_)
             ros::shutdown();
         data_.reset();
@@ -305,7 +332,6 @@ class SimulationRosDataPlugin final : public gazebo::SystemPlugin {
 
   private:
     bool owns_ros_ = false;
-    std::unique_ptr<ros::AsyncSpinner> spinner_;
     std::shared_ptr<DataSource> data_;
     gazebo::event::ConnectionPtr created_;
 };

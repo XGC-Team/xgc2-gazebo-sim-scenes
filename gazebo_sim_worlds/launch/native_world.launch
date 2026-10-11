@@ -7,6 +7,6 @@
   <arg name="gazebo_bin" default=""/>
   <arg name="clock_rate_hz" default=""/>
   <arg name="clock_rate_args" value="$(eval '--clock-rate-hz '+str(arg('clock_rate_hz')) if str(arg('clock_rate_hz')) else '')"/>
-  <node pkg="gazebo_sim_worlds" type="native_world_start" name="native_world" output="screen" required="true"
+  <node pkg="gazebo_sim_worlds" type="native_world_start" name="native_world" output="screen"
         args="--world &quot;$(arg world)&quot; --paused $(arg paused) --gui $(arg gui) --ros-data $(arg ros_data) --vrpn-config &quot;$(arg vrpn_config)&quot; --gazebo-bin &quot;$(arg gazebo_bin)&quot; $(arg clock_rate_args)"/>
 </launch>

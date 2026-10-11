@@ -34,6 +34,7 @@ catkin_package(
     xgc2_simulation_entity_ack
     xgc2_simulation_sensor_ack
     xgc2_simulation_ros_data
+    xgc2_simulation_ros_master
   CATKIN_DEPENDS gazebo_msgs geometry_msgs roscpp rosgraph_msgs std_msgs xgc2_geometry_msgs
 )
 
@@ -96,6 +97,14 @@ target_include_directories(xgc2_scene_model SYSTEM PUBLIC ${catkin_INCLUDE_DIRS}
 add_dependencies(xgc2_scene_model ${catkin_EXPORTED_TARGETS})
 target_link_libraries(xgc2_scene_model PUBLIC xgc2_gazebo_scene_geometry ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 
+add_library(xgc2_simulation_ros_master SHARED src/ros_master_registration.cpp)
+target_compile_features(xgc2_simulation_ros_master PUBLIC cxx_std_17)
+target_compile_options(xgc2_simulation_ros_master PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_include_directories(xgc2_simulation_ros_master PUBLIC include)
+target_include_directories(xgc2_simulation_ros_master SYSTEM PUBLIC ${catkin_INCLUDE_DIRS})
+target_link_libraries(xgc2_simulation_ros_master PRIVATE Threads::Threads ${catkin_LIBRARIES})
+target_link_libraries(xgc2_gazebo_scene_system PRIVATE xgc2_simulation_ros_master)
+
 add_library(xgc2_simulation_service SHARED
   src/simulation_service.cpp
   src/chassis_hold.cpp
@@ -111,7 +120,7 @@ target_include_directories(xgc2_simulation_service SYSTEM PUBLIC ${catkin_INCLUD
 add_dependencies(xgc2_simulation_service ${catkin_EXPORTED_TARGETS})
 target_link_libraries(xgc2_simulation_service PUBLIC xgc2_scene_model xgc2_gazebo_scene_motion
   PkgConfig::JSONCPP ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES}
-  PRIVATE XgcChassisHold::http XgcXrpc::http)
+  PRIVATE XgcChassisHold::http XgcXrpc::http xgc2_simulation_ros_master)
 foreach(plugin simulation_world simulation_entity_ack simulation_sensor_ack)
   add_library(xgc2_${plugin} SHARED src/${plugin}_plugin.cpp)
   target_compile_features(xgc2_${plugin} PUBLIC cxx_std_20)
@@ -123,7 +132,7 @@ target_compile_options(xgc2_simulation_ros_data PRIVATE -Wall -Wextra -Wpedantic
 target_include_directories(xgc2_simulation_ros_data PRIVATE include)
 target_include_directories(xgc2_simulation_ros_data SYSTEM PRIVATE ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
 add_dependencies(xgc2_simulation_ros_data ${catkin_EXPORTED_TARGETS})
-target_link_libraries(xgc2_simulation_ros_data PRIVATE Threads::Threads Eigen3::Eigen ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+target_link_libraries(xgc2_simulation_ros_data PRIVATE xgc2_simulation_ros_master Threads::Threads Eigen3::Eigen ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 
 install(TARGETS
   obstaclePathPlugin
@@ -137,6 +146,7 @@ install(TARGETS
   xgc2_simulation_entity_ack
   xgc2_simulation_sensor_ack
   xgc2_simulation_ros_data
+  xgc2_simulation_ros_master
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

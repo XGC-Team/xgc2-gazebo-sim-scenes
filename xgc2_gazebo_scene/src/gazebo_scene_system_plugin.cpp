@@ -14,6 +14,7 @@
 #include <gazebo/physics/WorldState.hh>
 #include <gazebo/transport/transport.hh>
 #include <ros/ros.h>
+#include "xgc2_gazebo_scene/ros_master_registration.hpp"
 #include <std_msgs/Bool.h>
 #include <std_msgs/String.h>
 
@@ -105,6 +106,7 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     GazeboSceneSystemPlugin() = default;
 
     ~GazeboSceneSystemPlugin() override {
+        registration_.reset();
         contact_subscriber_.reset();
         gazebo_transport_node_.reset();
         world_reset_connection_.reset();
@@ -143,6 +145,11 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             return;
         }
 
+        registration_ = std::make_unique<RosMasterRegistration>([this, world_name] { AttachRos(world_name); });
+    }
+
+    void AttachRos(const std::string& world_name) {
+        std::lock_guard<std::mutex> lock(mutex_);
         node_ = std::make_unique<ros::NodeHandle>("xgc2_gazebo_scene");
         node_->param<std::string>("managed_obstacle_prefix", managed_obstacle_prefix_, kDefaultManagedPrefix);
         if (managed_obstacle_prefix_.empty()) {
@@ -156,10 +163,14 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         geometry_library_publisher_ =
             node_->advertise<xgc2_geometry_msgs::GeometryLibrary>(kGeometryLibraryTopic, 1, true);
         instances_publisher_ = node_->advertise<xgc2_geometry_msgs::ConvexBodyArray>(kInstancesTopic, 1, true);
+        if (!geometry_library_publisher_ || !instances_publisher_)
+            throw std::runtime_error("scene ROS ground-truth registration failed");
         if (physical_contact_monitor_enabled_) {
             physical_collision_publisher_ = node_->advertise<std_msgs::Bool>(kPhysicalCollisionTopic, 1, true);
             physical_collision_detail_publisher_ =
                 node_->advertise<std_msgs::String>(kPhysicalCollisionDetailTopic, 1, true);
+            if (!physical_collision_publisher_ || !physical_collision_detail_publisher_)
+                throw std::runtime_error("scene ROS contact registration failed");
             PublishPhysicalCollision(false, "");
             // A Gazebo transport subscriber makes ContactManager retain the
             // engine contacts without forcing every consumer to ingest the
@@ -471,6 +482,7 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     gazebo::transport::NodePtr gazebo_transport_node_;
     gazebo::transport::SubscriberPtr contact_subscriber_;
     std::unique_ptr<ros::NodeHandle> node_;
+    std::unique_ptr<RosMasterRegistration> registration_;
     ros::Publisher geometry_library_publisher_;
     ros::Publisher instances_publisher_;
     ros::Publisher physical_collision_publisher_;

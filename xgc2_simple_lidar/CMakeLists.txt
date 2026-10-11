@@ -4,11 +4,11 @@ project(xgc2_simple_lidar VERSION 0.1.0 LANGUAGES CXX)
 # Clang does not enable the distribution compiler driver's as-needed default.
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--as-needed")
 
-find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs xgc2_gazebo_scene)
 find_package(gazebo REQUIRED)
 
 catkin_package(INCLUDE_DIRS include LIBRARIES xgc2_simple_lidar xgc2_simple_lidar_cpu
-  CATKIN_DEPENDS roscpp sensor_msgs)
+  CATKIN_DEPENDS roscpp sensor_msgs xgc2_gazebo_scene)
 
 add_library(xgc2_simple_lidar SHARED src/gpu_lidar_plugin.cpp)
 target_compile_features(xgc2_simple_lidar PUBLIC cxx_std_17)
