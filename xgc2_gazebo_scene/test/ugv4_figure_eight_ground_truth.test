@@ -1,6 +1,4 @@
 <launch>
-  <env name="GAZEBO_MASTER_URI" value="http://127.0.0.1:11457"/>
-
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name"
          value="$(find gazebo_sim_worlds)/worlds/ugv4_figure_eight_obstacles/ugv4_figure_eight_obstacles.world"/>
