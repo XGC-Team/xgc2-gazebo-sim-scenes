@@ -12,7 +12,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 from xgc2_xrpc.runtime import Runtime
-from xgc2_scene_runtime.simulation_client import SimulationClient
+from xgc2_gazebo_scene.simulation_client import SimulationClient
 
 
 def quaternion_from_rpy(roll, pitch, yaw):

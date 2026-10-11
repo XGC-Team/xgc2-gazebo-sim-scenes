@@ -29,7 +29,7 @@ loader.exec_module(delete_helper)
 
 class SpawnTest(unittest.TestCase):
     def test_native_robot_input_owns_names_pose_and_sensor_switches(self):
-        robot = {'kind': 'scout_mini', 'namespace': '/ugv7', 'runMode': 'simulation',
+        robot = {'id': 'ugv7', 'kind': 'scout_mini', 'namespace': '/ugv7', 'runMode': 'simulation',
                  'initialPose': {'x': 1, 'y': 2, 'z': .181, 'yaw': .3},
                  'authoredSimulationSensors': {'simpleLidar': False},
                  'scout': {'lidarSimulationEnabled': True, 'imageSimulationEnabled': False}}
@@ -71,7 +71,7 @@ class SpawnTest(unittest.TestCase):
                          'endpoint': {'kind': 'unix', 'address': path}}
             try:
                 argv = ['delete_robot_model', '--namespace', '/ugv7', '--target-id', 'fixture']
-                launch_input = {'robot': {'kind': 'scout_mini', 'namespace': '/ugv7',
+                launch_input = {'robot': {'id': 'ugv7', 'kind': 'scout_mini', 'namespace': '/ugv7',
                                          'runMode': 'simulation',
                                          'initialPose': {'x': 0, 'y': 0, 'z': .181, 'yaw': 0},
                                          'authoredSimulationSensors': {'simpleLidar': False},
@@ -80,7 +80,7 @@ class SpawnTest(unittest.TestCase):
                                 'simulationServiceRef': reference}
                 stdin = types.SimpleNamespace(buffer=io.BytesIO(json.dumps(launch_input).encode()))
                 with patch.object(sys, 'argv', argv), patch.object(sys, 'stdin', stdin), patch(
-                        'xgc2_scene_runtime.simulation_client.uuid.uuid4',
+                        'xgc2_gazebo_scene.simulation_client.uuid.uuid4',
                         return_value=types.SimpleNamespace(hex='stop-one')):
                     delete_helper.main()
                 self.assertEqual(calls, ['get', ('delete', 73), 'terminal'])

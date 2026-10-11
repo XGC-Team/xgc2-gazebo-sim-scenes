@@ -157,7 +157,7 @@ if(CATKIN_ENABLE_TESTING)
   catkin_install_python(PROGRAMS
     test/physical_contact_ground_truth_test.py
     test/scene_ground_truth_test.py
-    test/scene_runtime_gazebo_integration.py
+    test/scene_adapter_gazebo_integration.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
   )
   add_rostest(test/physical_contact_ground_truth.test)
