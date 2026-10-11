@@ -80,3 +80,29 @@ With NVIDIA containers, enable the graphics/display driver capabilities and
 NVIDIA GLX vendor; a working X display alone is insufficient. The Experiment
 exposes the observation/acceleration/scan settings, not an independent mount
 pose. Model-owned internal offsets remain responsible for chassis clearance.
+
+## Scout runtime launcher and shared configuration
+
+`/opt/ros/noetic/lib/xgc2_simple_lidar/launch_robot.py` starts only the Scout
+simulation runtime. It consumes one frozen robot row on stdin as
+`{"robot": {...}}`, with a 64 KiB input bound:
+
+```bash
+/opt/ros/noetic/lib/xgc2_simple_lidar/launch_robot.py \
+  --profile scout --namespace /ugv1 \
+  /opt/ros/noetic/share/gazebo_sim_scout/launch/spawn_accurate.launch \
+  dynamics_mode:=unicycle < /path/to/robot-input.json
+```
+
+`--profile scout`, `--namespace /ugvN` and the launch file are required. Extra
+`name:=value` arguments may select launch settings but cannot override the
+parameters lowered from the frozen row. The launcher replaces itself with
+`roslaunch --wait`; the runtime waits for the session master and the placed
+model's topics. Entity placement is a separate finite command after Core
+awaits the world. World references and target IDs are absent from this input.
+
+The Python module `xgc2_simple_lidar.configuration` remains installed and
+importable. `robot_parameters(robot, profile, namespace)` continues to lower
+Scout and Mecanum rows, and `surface_parameters(sensors)` lowers authored
+simple-lidar settings for Scout, Mecanum and FS150 placement CLIs. Restricting
+the runtime launcher to Scout does not remove those shared functions.

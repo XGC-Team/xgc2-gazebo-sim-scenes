@@ -51,7 +51,10 @@ test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/ConfigureMotions.s
 test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/StopMotions.srv"
 test ! -e "/opt/ros/${ROS_DISTRO}/lib/libxgc2_scene_authoring_world.so"
 test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/spawn_robot_model"
-test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/delete_robot_model"
+env -i PATH=/usr/bin:/bin "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/spawn_robot_model" --help >/dev/null
+test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/xgc2_gazebo_scene/placement.py"
+test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_simple_lidar/launch_robot.py"
+test -f "/opt/ros/${ROS_DISTRO}/lib/python3/dist-packages/xgc2_simple_lidar/configuration.py"
 test -x "/opt/ros/${ROS_DISTRO}/lib/gazebo_sim_worlds/native_world_start"
 test -f "${world_root}/launch/native_world.launch"
 test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_simple_lidar/package.xml"
@@ -103,5 +106,6 @@ dpkg-query -W -f '${Depends}\n' "ros-${ROS_DISTRO}-xgc2-simple-lidar" \
 
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray'
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_gazebo_scene.simulation_client import SimulationClient'
+"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_gazebo_scene.placement import discover_world, place_entity; from xgc2_simple_lidar.configuration import robot_parameters, surface_parameters'
 
 echo "Installed scene packages check passed"

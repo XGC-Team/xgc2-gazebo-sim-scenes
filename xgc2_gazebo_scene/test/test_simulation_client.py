@@ -152,6 +152,30 @@ class SimulationClientTest(unittest.TestCase):
                                      local_target='fixture')
                 factory.assert_not_called()
 
+    def test_expired_shared_deadline_sends_no_extra_request(self):
+        client, transport = self.client([])
+        with patch('xgc2_gazebo_scene.simulation_client.time.monotonic', return_value=101):
+            with self.assertRaisesRegex(SimulationError, 'deadline exceeded'):
+                client.operation('/v1/entities', {}, request_id='create-one', deadline=100)
+        self.assertEqual(transport.calls, [])
+        client, transport = self.client([{'id': 'create-one', 'state': 'accepted'}])
+        with patch('xgc2_gazebo_scene.simulation_client.time.monotonic', side_effect=[99, 101]):
+            with self.assertRaisesRegex(SimulationError, 'deadline exceeded'):
+                client.operation('/v1/entities', {}, request_id='create-one', deadline=100)
+        self.assertEqual(len(transport.calls), 1)
+
+    def test_discovered_reference_owns_runtime_even_if_client_close_fails(self):
+        from unittest.mock import Mock
+        transport, runtime = Mock(), Mock()
+        reference = ServiceRef.from_dict(REFERENCE)
+        with patch('xgc2_gazebo_scene.simulation_client.Client.from_service', return_value=transport):
+            client = SimulationClient(reference, runtime=runtime, local_target='fixture', owns_runtime=True)
+        self.assertIs(client.reference, reference)
+        transport.close.side_effect = RuntimeError('close failed')
+        with self.assertRaisesRegex(RuntimeError, 'close failed'):
+            client.close()
+        runtime.close.assert_called_once_with()
+
 
 if __name__ == '__main__':
     unittest.main()

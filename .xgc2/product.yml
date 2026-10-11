@@ -84,7 +84,13 @@ usage:
 
     test -x /opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model
 
-    test -x /opt/ros/noetic/lib/xgc2_gazebo_scene/delete_robot_model
+    env -i PATH=/usr/bin:/bin /opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model --help
+
+    test -f /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene/placement.py
+
+    test -x /opt/ros/noetic/lib/xgc2_simple_lidar/launch_robot.py
+
+    test -f /opt/ros/noetic/lib/python3/dist-packages/xgc2_simple_lidar/configuration.py
 
     test -f /opt/ros/noetic/share/xgc2_simple_lidar/package.xml
 
@@ -151,9 +157,10 @@ ownership:
   - /opt/ros/noetic/lib/xgc2_simple_lidar
   - /opt/ros/noetic/lib/python3/dist-packages/xgc2_simple_lidar
   - /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene
+  - /opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene/placement.py
   - /opt/ros/noetic/lib/pkgconfig/xgc2_gazebo_scene.pc
   - /opt/ros/noetic/lib/pkgconfig/xgc2_simple_lidar.pc
-  - /opt/ros/noetic/lib/xgc2_gazebo_scene
+  - /opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model
 release:
   requires:
   - libxgc2-chassis-hold-dev

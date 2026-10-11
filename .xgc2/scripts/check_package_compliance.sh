@@ -85,7 +85,13 @@ required_files=(
   xgc2_gazebo_scene/src/simulation_ros_data_plugin.cpp
   xgc2_gazebo_scene/src/ros_master_registration.cpp
   xgc2_gazebo_scene/python/xgc2_gazebo_scene/simulation_client.py
+  xgc2_gazebo_scene/python/xgc2_gazebo_scene/placement.py
+  xgc2_gazebo_scene/scripts/spawn_robot_model
   xgc2_gazebo_scene/test/test_simulation_client.py
+  xgc2_gazebo_scene/test/test_placement.py
+  xgc2_gazebo_scene/test/test_spawn_robot_model.py
+  xgc2_simple_lidar/python/xgc2_simple_lidar/configuration.py
+  xgc2_simple_lidar/scripts/launch_robot.py
   xgc2_simple_lidar/test/test_launch_robot.py
   gazebo_sim_worlds/scripts/native_world_start
   gazebo_sim_worlds/launch/native_world.launch
@@ -112,6 +118,9 @@ for file in "${required_files[@]}"; do
     exit 1
   fi
 done
+
+test -x xgc2_gazebo_scene/scripts/spawn_robot_model
+env -i PATH=/usr/bin:/bin xgc2_gazebo_scene/scripts/spawn_robot_model --help >/dev/null
 
 xmllint --noout \
   gazebo_sim_worlds/package.xml \

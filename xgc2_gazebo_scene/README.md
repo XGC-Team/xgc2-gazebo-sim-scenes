@@ -211,14 +211,70 @@ every triangle belongs to one closed convex body. Unsupported, open, concave,
 degenerate, or multi-body mesh collisions reject the entire managed obstacle
 instead of publishing partial or approximated planning geometry.
 
-## Robot spawn helper
+## Robot placement CLI
 
-`spawn_robot_model` replaces `gazebo_ros spawn_model` in robot launch files
-(`-urdf|-sdf -param P -model M -x ... -Y ...`, plus `-hold`). It holds the
-host-wide `/tmp/xgc2-gazebo-spawn.lock`, which Core's FS150 spawn Job also
-takes, only across the insert and its check in the world model list, so robots
-start their interpreters and read their models in parallel. It waits for
-Gazebo with bounded timeouts: exit 5 when no Gazebo is registered on the ROS
-master, 6 when the master does not answer, 1 for other failures. A model that
-already exists is reused. With `-hold` a successful run becomes `sleep`, so the
-launch can mark the node `required="true"` and end as soon as a spawn fails.
+`/opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model` places one supplied
+robot model and exits. Core runs it after awaiting the world, with a 60-second
+command bound. It accepts UTF-8 XML from a file or stdin without a ROS
+environment, a ROS master or `HOME`. `--help` works without the placement module
+or XRPC SDK being importable.
+
+| Argument | Required / default | Validation |
+| --- | --- | --- |
+| `--world-endpoint PATH` | Required | Canonical absolute Unix socket path, at most 107 filesystem bytes |
+| `--target-id ID` | Required | Nonempty canonical target ID |
+| `--model-name NAME` | Required | Entity ID: 1–256 ASCII letters, digits, `_`, `.`, `:`, `-` |
+| `--model-file PATH` | One model source required | UTF-8, well-formed XML, at most 8 MiB |
+| `--model-stdin` | Mutually exclusive with `--model-file` | Raw UTF-8 XML, at most 8 MiB; input must finish within the deadline |
+| `--model-format urdf\|sdf` | Required | Selects `application/urdf+xml` or `application/sdf+xml` |
+| `--robot-namespace /ns` | `/` | Absolute ROS namespace, at most 128 characters |
+| `--x X` | `0` | Finite position in metres |
+| `--y Y` | `0` | Finite position in metres |
+| `--z Z` | `0` | Finite position in metres |
+| `--roll R` | `0` | Finite angle in radians |
+| `--pitch P` | `0` | Finite angle in radians |
+| `--yaw YAW` | `0` | Finite angle in radians |
+| `--timeout S` | `50` | Finite seconds in `(0, 55]`, shared by input, discovery and creation |
+| `--help` | Optional | Show arguments and exit 0 without contacting a world |
+
+```bash
+/opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model \
+  --world-endpoint /run/xgc2/session/world.sock --target-id local \
+  --model-name ugv1 --model-file /path/to/robot.urdf --model-format urdf \
+  --robot-namespace /ugv1 --x 1 --y 2 --z 0.181 --yaw 0.5 --timeout 50
+```
+
+The entity has role `robot`, the model text in its asset realization, the
+position and RPY quaternion, and `parameters.ros_namespace`. Success prints
+exactly one JSON line:
+
+```json
+{"schema":"xgc2.placement.v1","kind":"robot","id":"ugv1","entity":{"entity":{"id":"ugv1","generation":7}},"instance":"world-instance"}
+```
+
+The `entity` field preserves the native operation result object. Exit codes are
+0 for success, 2 for usage or model/argument validation errors before world
+contact, and 1 for discovery or creation failures. Failures print one stderr
+line, `spawn_robot_model: <reason>`. A repeated entity ID fails with the world's
+conflict error; placement never replaces or replays a creation.
+
+## Shared Python placement API
+
+The installed module is
+`/opt/ros/noetic/lib/python3/dist-packages/xgc2_gazebo_scene/placement.py`.
+`discover_world(endpoint, target_id, timeout)` returns a bound `SimulationClient`.
+It waits for socket appearance through inotify, performs one unbound
+`GET /v1/describe?wait_ready_ms=<remaining budget, capped at 30000>`, and requires
+readiness inside that call. It validates the simulation service, API version,
+HTTP profile, Unix endpoint, target and instance identity. The caller must close
+the returned client; closing it also closes its owned runtime.
+
+`place_entity(endpoint, target_id, entity, timeout)` returns
+`(result_dict, instance_id)`. Discovery, one `POST /v1/entities` and at most one
+notification-driven operation wait share the same deadline. It always closes
+the bound client and runtime, including on failure. Both functions accept a
+finite timeout in `(0, 55]` seconds. Other callers can continue using
+`SimulationClient` with their own explicitly owned runtime.
+
+The CLI's 8 MiB validation bound does not increase the native world's current
+64 KiB artifact and 128 KiB request limits; the world can refuse a larger model.

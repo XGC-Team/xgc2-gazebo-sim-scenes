@@ -11,6 +11,10 @@ workspace="${XGC2_GAZEBO_SIM_SCENES_TEST_WS:-${repo_root}/.ci/package-tests}"
 
 PYTHONPATH="${repo_root}/xgc2_gazebo_scene/python:${PYTHONPATH:-}" \
   "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_simulation_client.py -v
+PYTHONPATH="${repo_root}/xgc2_gazebo_scene/python:${PYTHONPATH:-}" \
+  "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_placement.py -v
+PYTHONPATH="${repo_root}/xgc2_gazebo_scene/python:${PYTHONPATH:-}" \
+  "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_spawn_robot_model.py -v
 PYTHONPATH="${repo_root}/xgc2_simple_lidar/python:${PYTHONPATH:-}" \
   "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_simple_lidar/test" -p test_launch_robot.py -v
 
@@ -37,8 +41,8 @@ ln -s "${repo_root}/gazebo_sim_worlds" "${workspace}/src/gazebo_sim_worlds"
 export GAZEBO_MODEL_PATH="${repo_root}/gazebo_sim_worlds/models:${GAZEBO_MODEL_PATH:-}"
 export GAZEBO_MODEL_DATABASE_URI=""
 
-catkin_make -C "${workspace}" -DPYTHON_EXECUTABLE="${XGC2_PYTHON_EXECUTABLE}" -DCATKIN_ENABLE_TESTING=ON
-catkin_make -C "${workspace}" run_tests_xgc2_gazebo_scene
-catkin_make -C "${workspace}" run_tests_xgc2_simple_lidar
+catkin_make -C "${workspace}" -j2 -DPYTHON_EXECUTABLE="${XGC2_PYTHON_EXECUTABLE}" -DCATKIN_ENABLE_TESTING=ON
+catkin_make -C "${workspace}" -j2 run_tests_xgc2_gazebo_scene
+catkin_make -C "${workspace}" -j2 run_tests_xgc2_simple_lidar
 catkin_test_results "${workspace}/build/test_results"
 echo "Package tests passed."

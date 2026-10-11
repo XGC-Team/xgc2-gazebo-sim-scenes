@@ -104,7 +104,11 @@ def main(argv=None):
         return 2
     try:
         # Help and validation work without ROS or the placement SDK installed.
+        sys.path.append('/opt/ros/noetic/lib/python3/dist-packages')
         from xgc2_gazebo_scene.placement import place_entity
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Placement deadline exceeded before world contact')
         result, instance = place_entity(args.world_endpoint, args.target_id, value, remaining)
         print(json.dumps({'schema': 'xgc2.placement.v1', 'kind': 'robot', 'id': args.model_name,
                           'entity': result, 'instance': instance}, separators=(',', ':')), flush=True)
