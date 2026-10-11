@@ -1,5 +1,17 @@
 # XGC2 Gazebo Scene
 
+## World host
+
+`libxgc2_simulation_world.so` is the native `xgc2.simulation` v1 service of one world. It serves simulation-v1
+on an `http.v1` Unix socket, the chassis HOLD capability of the world (`xgc2.chassis.hold`, built on the
+`libxgc2-chassis-hold1` domain; see [docs/chassis-hold.md](docs/chassis-hold.md)) and the parts of the service
+that exist only in Gazebo: the scene extension and the native health notes
+([docs/scene-extension.md](docs/scene-extension.md)). Its parameters are `socket_path`, `target_id` and
+`resource_root` (required), `configuration_revision`, and one `required_component` per native component whose
+readiness gates the world's health. HOLD has no parameters: chassis model plugins join and leave its roster by
+themselves through `xgc2_gazebo_scene/chassis_hold.hpp`. It builds against `libxgc2-xrpc-dev` and
+`libxgc2-chassis-hold-dev` 0.2 or later.
+
 The editable scene entry point is `libxgc2_scene_authoring_world.so`, loaded by
 `gazebo_sim_worlds/worlds/scene_editable/scene_editable.world`. It is an adapter
 for the independent scene runtime, not an algorithm launcher. Select the world
