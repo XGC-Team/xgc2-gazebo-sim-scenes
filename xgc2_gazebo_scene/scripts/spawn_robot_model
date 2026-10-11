@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Read a user model asset and submit one bound simulation-v1 creation.
-
-ROS is only the launch-time asset input. The world owns serialization, native
-realization and completion; this client never probes or replays a spawn.
-"""
+"""Place one robot model through a bounded simulation-v1 world call."""
 import argparse
 import json
 import math
 import os
+import re
+import select
 import sys
+import time
 import xml.etree.ElementTree as ET
 
-from xgc2_xrpc.runtime import Runtime
-from xgc2_gazebo_scene.simulation_client import SimulationClient
+MAX_MODEL_BYTES = 8 * 1024 * 1024
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.exit(2, self.prog + ': ' + ' '.join(message.splitlines()) + '\n')
 
 
 def quaternion_from_rpy(roll, pitch, yaw):
@@ -22,64 +25,95 @@ def quaternion_from_rpy(roll, pitch, yaw):
     return [sr*cp*cy-cr*sp*sy, cr*sp*cy+sr*cp*sy, cr*cp*sy-sr*sp*cy, cr*cp*cy+sr*sp*sy]
 
 
-def parse_arguments(argv):
-    parser = argparse.ArgumentParser(prog='spawn_robot_model')
+def parse_arguments(argv=None):
+    parser = ArgumentParser(prog='spawn_robot_model', description=__doc__, allow_abbrev=False)
+    parser.add_argument('--world-endpoint', required=True)
+    parser.add_argument('--target-id', required=True)
+    parser.add_argument('--model-name', required=True)
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument('-urdf', action='store_true')
-    source.add_argument('-sdf', action='store_true')
-    parser.add_argument('-param', required=True)
-    parser.add_argument('-model', required=True)
-    parser.add_argument('-simulation_service_ref_json', required=True)
-    parser.add_argument('-target_id', required=True)
-    parser.add_argument('-robot_namespace', default=None)
-    for axis in ('x', 'y', 'z', 'R', 'P', 'Y'):
-        parser.add_argument('-'+axis, type=float, default=0.0)
-    parser.add_argument('-operation_timeout', type=float, default=30.0)
-    parser.add_argument('-hold', action='store_true')
-    return parser.parse_args([value for value in argv[1:] if ':=' not in value])
+    source.add_argument('--model-file')
+    source.add_argument('--model-stdin', action='store_true')
+    parser.add_argument('--model-format', choices=('urdf', 'sdf'), required=True)
+    parser.add_argument('--robot-namespace', default='/')
+    for axis in ('x', 'y', 'z', 'roll', 'pitch', 'yaw'):
+        parser.add_argument('--'+axis, type=float, default=0.0)
+    parser.add_argument('--timeout', type=float, default=50.0)
+    return parser.parse_args(argv)
+
+
+def read_model(args, deadline):
+    if args.model_file is not None:
+        with open(args.model_file, 'rb') as stream:
+            raw = stream.read(MAX_MODEL_BYTES + 1)
+    else:
+        chunks, size = [], 0
+        while size <= MAX_MODEL_BYTES:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([sys.stdin], [], [], remaining)[0]:
+                raise ValueError('Model stdin did not finish before the placement deadline')
+            chunk = os.read(sys.stdin.fileno(), min(65536, MAX_MODEL_BYTES + 1 - size))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        raw = b''.join(chunks)
+    if len(raw) > MAX_MODEL_BYTES:
+        raise ValueError('Robot model exceeds 8 MiB')
+    return raw.decode('utf-8')
 
 
 def entity(args, model_xml, namespace):
-    if not all(math.isfinite(getattr(args, axis)) for axis in ('x', 'y', 'z', 'R', 'P', 'Y')):
+    if not all(math.isfinite(getattr(args, axis)) for axis in ('x', 'y', 'z', 'roll', 'pitch', 'yaw')):
         raise ValueError('Robot pose must be finite')
     if not isinstance(model_xml, str) or not model_xml.strip():
-        raise ValueError('Robot asset parameter is empty')
+        raise ValueError('Robot model is empty')
     ET.fromstring(model_xml)
-    return {'id': args.model, 'role': 'robot',
-            'asset': {'id': args.model, 'realization': {
-                'media_type': 'application/urdf+xml' if args.urdf else 'application/sdf+xml',
+    return {'id': args.model_name, 'role': 'robot',
+            'asset': {'id': args.model_name, 'realization': {
+                'media_type': 'application/urdf+xml' if args.model_format == 'urdf' else 'application/sdf+xml',
                 'content': model_xml}},
             'pose': {'position': [args.x, args.y, args.z],
-                     'orientation': quaternion_from_rpy(args.R, args.P, args.Y)},
+                     'orientation': quaternion_from_rpy(args.roll, args.pitch, args.yaw)},
             'parameters': {'ros_namespace': namespace}}
 
 
 def main(argv=None):
-    args = parse_arguments(sys.argv if argv is None else argv)
-    if not math.isfinite(args.operation_timeout) or not 0 < args.operation_timeout <= 60:
-        raise SystemExit('operation_timeout must be in (0, 60] seconds')
-    import rospy
-    rospy.init_node('spawn_'+args.model, anonymous=True, disable_signals=True, disable_rostime=True)
-    runtime = Runtime(blocking_workers=1, max_calls=2)
-    client = None
+    started = time.monotonic()
+    args = parse_arguments(argv)
     try:
-        value = entity(args, rospy.get_param(args.param),
-                       rospy.get_namespace() if args.robot_namespace is None else args.robot_namespace)
-        client = SimulationClient(json.loads(args.simulation_service_ref_json), runtime=runtime,
-                                  local_target=args.target_id, timeout=args.operation_timeout)
-        result = client.operation('/v1/entities', {'entity': value})
-        print('SPAWN_ROBOT_MODEL_RESULT '+json.dumps(result), flush=True)
-    except (ValueError, OSError, KeyError, ET.ParseError) as error:
-        print('spawn_robot_model: '+str(error), file=sys.stderr, flush=True)
-        raise SystemExit(1)
-    finally:
-        if client is not None:
-            client.close()
-        runtime.close()
-        rospy.signal_shutdown('native entity creation finished')
-    if args.hold:
-        os.execvp('sleep', ['sleep', '2147483647'])
+        if not math.isfinite(args.timeout) or not 0 < args.timeout <= 55:
+            raise ValueError('Timeout must be in (0, 55] seconds')
+        if (not os.path.isabs(args.world_endpoint) or os.path.normpath(args.world_endpoint) != args.world_endpoint
+                or '\0' in args.world_endpoint or len(os.fsencode(args.world_endpoint)) > 107):
+            raise ValueError('World endpoint must be a canonical absolute Unix socket path')
+        if (not args.target_id or args.target_id.strip() != args.target_id
+                or any(ord(character) < 32 for character in args.target_id)):
+            raise ValueError('Target ID must be a nonempty canonical string')
+        if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,256}', args.model_name):
+            raise ValueError('Model name must be a URL-safe ASCII entity ID of at most 256 characters')
+        if (len(args.robot_namespace) > 128 or not re.fullmatch(
+                r'/(?:[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)*/?)?', args.robot_namespace)):
+            raise ValueError('Robot namespace must be an absolute ROS namespace of at most 128 characters')
+        deadline = started + args.timeout
+        value = entity(args, read_model(args, deadline), args.robot_namespace)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError('Placement deadline exceeded before world contact')
+    except (ValueError, OSError, ET.ParseError) as error:
+        print('spawn_robot_model: ' + ' '.join(str(error).splitlines()), file=sys.stderr)
+        return 2
+    try:
+        # Help and validation work without ROS or the placement SDK installed.
+        from xgc2_gazebo_scene.placement import place_entity
+        result, instance = place_entity(args.world_endpoint, args.target_id, value, remaining)
+        print(json.dumps({'schema': 'xgc2.placement.v1', 'kind': 'robot', 'id': args.model_name,
+                          'entity': result, 'instance': instance}, separators=(',', ':')), flush=True)
+    except Exception as error:
+        print('spawn_robot_model: {}: {}'.format(args.model_name, ' '.join(str(error).splitlines())),
+              file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
