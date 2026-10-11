@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the retained checkerboard and field-matched AprilGrid worlds."""
+"""Verify profile-owned AprilGrid targets and the retained checkerboard world."""
 
 from __future__ import annotations
 
@@ -59,11 +59,11 @@ def test_calibration_worlds_keep_independent_targets() -> None:
     aprilgrid = _included_models(APRILGRID_WORLD)
     assert legacy["intrinsic_checkerboard"].findtext("uri") == "model://checkerboard_8x6"
     assert "intrinsic_aprilgrid" not in legacy
-    assert aprilgrid["intrinsic_aprilgrid"].findtext("uri") == (
-        "model://aprilgrid_6x6_tag36h11_88mm"
-    )
+    # The runtime selects one exact profile. Do not bake a second, unowned
+    # Field target into the world where it would occlude the A4 target.
+    assert not any("aprilgrid" in include.findtext("uri", "")
+                   for include in ET.parse(str(APRILGRID_WORLD)).findall(".//include"))
     assert "intrinsic_checkerboard" not in aprilgrid
-    assert aprilgrid["intrinsic_aprilgrid"].findtext("pose") == "2 0 2.2 0 0 0"
     world = ET.parse(str(APRILGRID_WORLD)).getroot().find("world")
     assert world is not None
     assert world.findtext("./gui/camera/pose") == "-1.5 -2.5 3.3 0 0.25 0.62"

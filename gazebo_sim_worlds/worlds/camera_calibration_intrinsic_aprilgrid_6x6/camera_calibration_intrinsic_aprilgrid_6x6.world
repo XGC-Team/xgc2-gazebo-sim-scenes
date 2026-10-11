@@ -20,12 +20,8 @@
       <max_step_size>0.001</max_step_size>
       <real_time_update_rate>1000</real_time_update_rate>
     </physics>
-    <include>
-      <uri>model://aprilgrid_6x6_tag36h11_88mm</uri>
-      <name>intrinsic_aprilgrid</name>
-      <!-- Match the calibrator's board centre and keep every automatic camera
-           pose comfortably above the ground. -->
-      <pose>2 0 2.2 0 0 0</pose>
-    </include>
+    <!-- The calibrator creates the selected Field or A4 target through the
+         simulation service. A baked-in target is outside that entity registry
+         and would remain in front of the selected board. -->
   </world>
 </sdf>
