@@ -82,7 +82,8 @@ required_files=(
   xgc2_gazebo_scene/src/simulation_entity_ack_plugin.cpp
   xgc2_gazebo_scene/src/simulation_sensor_ack_plugin.cpp
   xgc2_gazebo_scene/src/simulation_ros_data_plugin.cpp
-  xgc2_gazebo_scene/scripts/simulation_world_prepare
+  xgc2_gazebo_scene/python/xgc2_gazebo_scene/simulation_client.py
+  xgc2_gazebo_scene/test/test_simulation_client.py
   gazebo_sim_worlds/scripts/native_world_start
   gazebo_sim_worlds/launch/native_world.launch
   xgc2_gazebo_scene/src/scene_model.cpp

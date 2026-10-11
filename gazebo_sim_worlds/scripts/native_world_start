@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 
@@ -17,6 +18,33 @@ def absolute_file(value, label, maximum):
     if path.stat().st_size <= 0 or path.stat().st_size > maximum:
         raise ValueError(label+' exceeds its bounded input size or is empty')
     return path
+
+
+def read(path, limit):
+    with Path(path).open('rb') as stream:
+        data = stream.read(limit+1)
+    if not data or len(data) > limit:
+        raise ValueError('Input {} exceeds its {} byte limit or is empty'.format(path, limit))
+    return data
+
+
+def atomic(path, data):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=str(path.parent), prefix='.'+path.name+'.', delete=False) as stream:
+            temporary = stream.name
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, str(path))
+        directory = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def compose(arguments, environment):
@@ -93,7 +121,6 @@ def compose(arguments, environment):
             overrides['trackers'] = [part.strip() for part in args.vrpn_tracker_patterns.replace(';', ',').replace('\n', ',').split(',') if part.strip()]
         if overrides:
             import yaml
-            from xgc2_scene_runtime.prepare import atomic, read
             config = yaml.safe_load(read(vrpn_path, 1024*1024))
             if not isinstance(config, dict): raise ValueError('Native VRPN config must contain one mapping')
             config.update(overrides)

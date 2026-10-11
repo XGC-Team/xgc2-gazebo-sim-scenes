@@ -148,7 +148,7 @@ install(FILES README.md DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 install(DIRECTORY docs DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 install(DIRECTORY python/xgc2_gazebo_scene DESTINATION ${CATKIN_GLOBAL_PYTHON_DESTINATION}
   PATTERN "__pycache__" EXCLUDE)
-catkin_install_python(PROGRAMS scripts/spawn_robot_model scripts/simulation_world_prepare scripts/delete_robot_model
+catkin_install_python(PROGRAMS scripts/spawn_robot_model scripts/delete_robot_model
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

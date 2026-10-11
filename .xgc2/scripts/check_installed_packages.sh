@@ -50,7 +50,6 @@ test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/ConfigureMotions.s
 test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/StopMotions.srv"
 test ! -e "/opt/ros/${ROS_DISTRO}/lib/libxgc2_scene_authoring_world.so"
 test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/spawn_robot_model"
-test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/simulation_world_prepare"
 test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_gazebo_scene/delete_robot_model"
 test -x "/opt/ros/${ROS_DISTRO}/lib/gazebo_sim_worlds/native_world_start"
 test -f "${world_root}/launch/native_world.launch"

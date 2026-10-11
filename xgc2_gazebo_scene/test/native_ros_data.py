@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Actual ROS user data from an explicitly started, isolated Classic world."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -39,21 +40,38 @@ def main():
     gzserver = Path(args.gzserver).resolve(strict=True)
     scene = Path(__file__).resolve().parents[1]
     entry = scene.parent/'gazebo_sim_worlds/scripts/native_world_start'
+    import roslib.packages
+    import rospkg
+    try:
+        tools = roslib.packages.find_node('xgc_scene_ros1_adapter', 'xgc2-scene-prepare',
+                                         rospack=rospkg.RosPack())
+    except rospkg.ResourceNotFound:
+        tools = []
+    if not tools:
+        raise SystemExit('Install ros-noetic-xgc2-scene-adapter (>= 0.7.0-1) and source its overlay: '
+                         'xgc2-scene-prepare is absent from xgc_scene_ros1_adapter')
     with tempfile.TemporaryDirectory(prefix='xgc2-native-data-') as directory:
         root = Path(directory)
         root.chmod(0o700)
-        source = root/'source.world'
+        asset = root/'Shared/Scenes/user-data'
+        asset.mkdir(parents=True)
+        source = asset/'source.world'
         source.write_text('<sdf version="1.6"><world name="user_data"><gravity>0 0 0</gravity>'
                           '<physics type="ode"><max_step_size>0.001</max_step_size>'
                           '<real_time_update_rate>1000</real_time_update_rate></physics></world></sdf>')
         output = root/'prepared'
         output.mkdir()
         endpoint = root/'world.sock'
-        from xgc2_scene_runtime.prepare import prepare
-        prepared = prepare({'schema': 'xgc2.simulation.prepare.v1', 'configuration_revision': 13,
-            'world_file': str(source), 'resource_root': str(root), 'socket_path': str(endpoint),
-            'target_id': 'data-fixture', 'parameters': {'clock_rate_hz': 0},
-            'output_grant': {'directory': str(output), 'max_bytes': 1024*1024}})
+        (asset/'manifest.json').write_text(json.dumps({
+            'schemaVersion': 1, 'kind': 'xgc.scene-replay-asset.v1',
+            'simulators': {'gazebo': {'geometry': 'native'}},
+            'gazeboWorld': {'file': source.name, 'sha256': hashlib.sha256(source.read_bytes()).hexdigest()}}))
+        request = {'openingRunId': 'data-fixture', 'scene': {
+            'asset': 'user-data', 'simulator': 'gazebo', 'parameters': {'clock_rate_hz': 0}}}
+        prepared = json.loads(subprocess.check_output([
+            tools[0], '--context-json', json.dumps(request), '--resource-root', str(root),
+            '--workspace-root', str(output), '--prepare-world', '--socket-path', str(endpoint),
+            '--target-id', 'data-fixture', '--configuration-revision', '13'], text=True, timeout=30))
         os.environ.pop('DISPLAY', None)
         os.environ.pop('WAYLAND_DISPLAY', None)
         os.environ.pop('ROS_HOSTNAME', None)
