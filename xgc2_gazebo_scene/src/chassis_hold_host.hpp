@@ -55,7 +55,8 @@ struct ChassisSeat {
 class ChassisHoldHost : public std::enable_shared_from_this<ChassisHoldHost> {
   public:
     // `instance_id` is the instance of the world's http.v1 server: HOLD bodies and the transport agree on it.
-    static std::shared_ptr<ChassisHoldHost> Create(gazebo::physics::WorldPtr world, const std::string& instance_id);
+    static std::shared_ptr<ChassisHoldHost> Create(const gazebo::physics::WorldPtr& world,
+                                                   const std::string& instance_id);
     // The running host of a world, or null.
     static std::shared_ptr<ChassisHoldHost> Of(const gazebo::physics::World* world);
     ~ChassisHoldHost();
@@ -85,7 +86,7 @@ class ChassisHoldHost : public std::enable_shared_from_this<ChassisHoldHost> {
     std::shared_ptr<CommandQueue> Queue();
 
   private:
-    ChassisHoldHost(gazebo::physics::WorldPtr world, const std::string& instance_id);
+    ChassisHoldHost(const gazebo::physics::WorldPtr& world, const std::string& instance_id);
     class Sink;
     std::shared_ptr<ChassisSeat> Find(const std::string& id) const;
     void Wake();

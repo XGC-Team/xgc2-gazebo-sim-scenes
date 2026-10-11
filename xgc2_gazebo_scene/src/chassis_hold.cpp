@@ -63,7 +63,7 @@ class ChassisHoldHost::Sink final : public xgc2::chassis_hold::ZeroSink {
     ChassisHoldHost& host_;
 };
 
-std::shared_ptr<ChassisHoldHost> ChassisHoldHost::Create(gazebo::physics::WorldPtr world,
+std::shared_ptr<ChassisHoldHost> ChassisHoldHost::Create(const gazebo::physics::WorldPtr& world,
                                                          const std::string& instance_id) {
     std::shared_ptr<ChassisHoldHost> host(new ChassisHoldHost(world, instance_id));
     std::lock_guard<std::mutex> lock(hosts_mutex);
@@ -80,7 +80,7 @@ std::shared_ptr<ChassisHoldHost> ChassisHoldHost::Of(const gazebo::physics::Worl
     return found == hosts.end() ? nullptr : found->second.lock();
 }
 
-ChassisHoldHost::ChassisHoldHost(gazebo::physics::WorldPtr world, const std::string& instance_id)
+ChassisHoldHost::ChassisHoldHost(const gazebo::physics::WorldPtr& world, const std::string& instance_id)
     : world_(world), domain_(DomainOptions(instance_id,
                                            [this] {
                                                Wake();

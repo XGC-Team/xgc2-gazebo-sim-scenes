@@ -853,7 +853,7 @@ class SimulationService::Impl {
         }
         return v;
     }
-    void Handle(HttpRequest r, HttpReply reply) {
+    void Handle(const HttpRequest& r, HttpReply reply) {
         try {
             Drain();
             if (r.method == "GET" && (r.target == "/v1/describe" || r.target.starts_with("/v1/describe?"))) {
@@ -1062,7 +1062,7 @@ class SimulationService::Impl {
         for (auto it = describe_waiters_.begin(); it != describe_waiters_.end();) {
             if (it->reply.cancelled())
                 it = describe_waiters_.erase(it);
-            else if (health["lifecycle"] == "ready" || Clock::now() >= it->deadline) {
+            else if (health["lifecycle"] == "ready" || !(Clock::now() < it->deadline)) {
                 it->reply.complete(Response(Description()));
                 it = describe_waiters_.erase(it);
             } else
