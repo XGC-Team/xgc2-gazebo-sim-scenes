@@ -85,7 +85,9 @@ pose. Model-owned internal offsets remain responsible for chassis clearance.
 
 `/opt/ros/noetic/lib/xgc2_simple_lidar/launch_robot.py` starts only the Scout
 simulation runtime. It consumes one frozen robot row on stdin as
-`{"robot": {...}}`, with a 64 KiB input bound:
+`{"robot": <$session.robots[i] verbatim>, "runMode": "<$session.runMode>"}`,
+with exactly these two top-level keys and a 64 KiB input bound. `runMode` must
+be a nonempty string:
 
 ```bash
 /opt/ros/noetic/lib/xgc2_simple_lidar/launch_robot.py \
@@ -94,7 +96,8 @@ simulation runtime. It consumes one frozen robot row on stdin as
   dynamics_mode:=unicycle < /path/to/robot-input.json
 ```
 
-`--profile scout`, `--namespace /ugvN` and the launch file are required. Extra
+`--profile scout`, `--namespace /ugvN` and the launch file are required. The
+claimed namespace must equal the row's top-level `namespace`. Extra
 `name:=value` arguments may select launch settings but cannot override the
 parameters lowered from the frozen row. The launcher replaces itself with
 `roslaunch --wait`; the runtime waits for the session master and the placed
@@ -102,7 +105,18 @@ model's topics. Entity placement is a separate finite command after Core
 awaits the world. World references and target IDs are absent from this input.
 
 The Python module `xgc2_simple_lidar.configuration` remains installed and
-importable. `robot_parameters(robot, profile, namespace)` continues to lower
-Scout and Mecanum rows, and `surface_parameters(sensors)` lowers authored
-simple-lidar settings for Scout, Mecanum and FS150 placement CLIs. Restricting
-the runtime launcher to Scout does not remove those shared functions.
+importable. `robot_parameters(row, profile, run_mode)` lowers freezer rows for
+the `scout` (`scout_mini`) and `mecanum` (`mecanum_ugv`) native profiles. It uses
+top-level `slotId` as `model_name`, top-level `namespace` for ROS names, and
+`binding.initialPose` for `x`, `y`, `z` and `yaw`. Lidar settings come from
+`binding.simulationSensors`; omission uses the surface defaults with the
+sensor disabled. Scout's `enable_lidar` and `enable_camera` come from
+`binding.scout.lidarSimulationEnabled` and
+`binding.scout.imageSimulationEnabled`, each defaulting to false when omitted.
+The Scout `run_mode` launch parameter comes from the session wrapper's `runMode`.
+Rows without the required freezer fields are rejected with a usage error
+(exit 2) naming the missing field.
+
+`surface_parameters(sensors)` continues to lower authored simple-lidar settings
+for Scout, Mecanum and FS150 placement CLIs. Restricting the runtime launcher to
+Scout does not remove those shared functions.

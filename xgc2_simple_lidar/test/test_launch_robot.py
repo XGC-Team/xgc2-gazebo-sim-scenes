@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scout runtime lowering and reusable roster configuration without a ROS master."""
+"""Scout runtime lowering without a ROS master."""
 import copy
 import importlib.machinery
 import importlib.util
@@ -10,8 +10,6 @@ from pathlib import Path
 import sys
 import unittest
 from unittest import mock
-
-from xgc2_simple_lidar.configuration import robot_parameters, surface_parameters
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/launch_robot.py'
 ROBOT = {
@@ -109,47 +107,43 @@ class LaunchRobotTest(unittest.TestCase):
 
     def test_namespace_and_frozen_parameter_overrides_are_rejected(self):
         for options in ({'namespace': '/ugv8'}, {'extra': ('ns:=other',)},
-                        {'extra': ('enable_lidar:=false',)}, {'extra': ('model_name:=other',)}):
+                        {'extra': ('enable_lidar:=false',)}, {'extra': ('model_name:=other',)},
+                        {'extra': ('run_mode:=physical',)}):
             with self.subTest(options=options), redirect_stderr(io.StringIO()), \
                     self.assertRaises(SystemExit) as raised:
                 self.launch(**options)
             self.assertEqual(raised.exception.code, 2)
 
     def test_oversized_or_malformed_robot_input_is_rejected(self):
-        for raw in (b' ' * 65537, b'{'):
+        for raw in (b' ' * 65537, b'{', b'\xff'):
             with self.subTest(size=len(raw)), redirect_stderr(io.StringIO()), \
                     self.assertRaises(SystemExit) as raised:
                 self.launch(raw=raw)
             self.assertEqual(raised.exception.code, 2)
 
-    def test_scout_configuration_keeps_sensor_switches_names_and_pose(self):
-        parameters = robot_parameters(ROBOT, 'scout', 'simulation')
-        self.assertEqual(parameters['tf_prefix'], 'ugv7')
-        self.assertEqual(parameters['robot_state_publisher_ns'], 'ugv7')
-        self.assertEqual(parameters['sensor_ns'], 'ugv7')
-        self.assertEqual(parameters['run_mode'], 'simulation')
-        self.assertEqual(parameters['yaw'], .3)
-        robot = copy.deepcopy(ROBOT)
-        robot['binding']['initialPose']['x'] = float('nan')
-        with self.assertRaises(ValueError):
-            robot_parameters(robot, 'scout', 'simulation')
+    def test_exact_input_limit_is_accepted(self):
+        raw = json.dumps({'robot': ROBOT, 'runMode': 'simulation'}).encode()
+        self.launch(raw=raw + b' ' * (65536 - len(raw)))
 
-    def test_mecanum_and_surface_configuration_remain_importable(self):
+    def test_omitted_sensor_overrides_disable_the_scout_sensors(self):
         robot = copy.deepcopy(ROBOT)
-        robot['kind'] = robot['asset']['kind'] = 'mecanum_ugv'
+        del robot['binding']['simulationSensors']
         del robot['binding']['scout']
-        robot['binding']['mecanum'] = {}
-        robot['profile'].update(id='profile-mecanum_ugv', digest='digest-mecanum_ugv',
-                                providerDefinitionId='mecanum-provider')
-        parameters = robot_parameters(robot, 'mecanum', 'simulation')
-        self.assertEqual((parameters['ns'], parameters['model_name'], parameters['x']), ('ugv7', 'slot-07', 1))
-        self.assertNotIn('robot_description_param', parameters)
-        parameters = surface_parameters({'simpleLidar': {'enabled': True, 'acceleration': 'cpu',
-                                                        'rateHz': 12, 'rangeMeters': 30}})
-        self.assertTrue(parameters['enable_simple_lidar'])
-        self.assertEqual(parameters['simple_lidar_acceleration'], 'cpu')
-        self.assertEqual(parameters['simple_lidar_rate_hz'], 12)
-        self.assertEqual(parameters['simple_lidar_range_meters'], 30)
+        _, arguments = self.launch(value={'robot': robot, 'runMode': 'simulation'})
+        for assignment in ('enable_simple_lidar:=false', 'enable_lidar:=false', 'enable_camera:=false'):
+            self.assertIn(assignment, arguments)
+
+    def test_kind_mismatch_and_bad_pose_are_usage_errors(self):
+        for field, value in (('kind', 'mecanum_ugv'), ('x', float('nan'))):
+            robot = copy.deepcopy(ROBOT)
+            if field == 'kind':
+                robot['kind'] = value
+            else:
+                robot['binding']['initialPose'][field] = value
+            with self.subTest(field=field), redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit) as raised:
+                self.launch(value={'robot': robot, 'runMode': 'simulation'})
+            self.assertEqual(raised.exception.code, 2)
 
 
 if __name__ == '__main__':
