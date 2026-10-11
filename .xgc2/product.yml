@@ -78,6 +78,8 @@ usage:
 
     test -f /opt/ros/noetic/lib/libxgc2_simulation_ros_data.so
 
+    test -f /opt/ros/noetic/lib/libxgc2_simulation_ros_master.so
+
     test -x /opt/ros/noetic/lib/gazebo_sim_worlds/native_world_start
 
     test -x /opt/ros/noetic/lib/xgc2_gazebo_scene/spawn_robot_model
@@ -142,6 +144,7 @@ ownership:
   - /opt/ros/noetic/lib/libxgc2_simulation_entity_ack.so
   - /opt/ros/noetic/lib/libxgc2_simulation_sensor_ack.so
   - /opt/ros/noetic/lib/libxgc2_simulation_ros_data.so
+  - /opt/ros/noetic/lib/libxgc2_simulation_ros_master.so
   - /opt/ros/noetic/lib/gazebo_sim_worlds
   - /opt/ros/noetic/lib/libxgc2_simple_lidar.so
   - /opt/ros/noetic/lib/libxgc2_simple_lidar_cpu.so

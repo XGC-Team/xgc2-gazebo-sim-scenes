@@ -41,6 +41,7 @@ for library in \
     libxgc2_simulation_entity_ack.so \
     libxgc2_simulation_sensor_ack.so \
     libxgc2_simulation_ros_data.so \
+    libxgc2_simulation_ros_master.so \
     libxgc2_gazebo_scene_system.so; do
   test -f "/opt/ros/${ROS_DISTRO}/lib/${library}"
 done
@@ -83,6 +84,7 @@ if readelf -d \
     "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simulation_entity_ack.so" \
     "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simulation_sensor_ack.so" \
     "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simulation_ros_data.so" \
+    "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simulation_ros_master.so" \
     | grep -Eq '(RPATH|RUNPATH)'; then
   echo "Installed Gazebo Scene libraries contain RPATH/RUNPATH" >&2
   exit 1
@@ -95,6 +97,9 @@ if readelf -d "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" "/opt/ros/${R
   echo "Installed simple lidar library contains RPATH/RUNPATH" >&2
   exit 1
 fi
+# The lidar plugins link the scene package's shared ROS master watcher.
+dpkg-query -W -f '${Depends}\n' "ros-${ROS_DISTRO}-xgc2-simple-lidar" \
+  | grep -Eq "(^|, )ros-${ROS_DISTRO}-xgc2-gazebo-scene \(= "
 
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray'
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_gazebo_scene.simulation_client import SimulationClient'

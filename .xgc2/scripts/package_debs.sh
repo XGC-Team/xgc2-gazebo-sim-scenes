@@ -124,7 +124,7 @@ build_scene_deb() {
     libxgc2_gazebo_scene_system.so libxgc2_scene_model.so
     libxgc2_simulation_service.so libxgc2_simulation_world.so
     libxgc2_simulation_entity_ack.so libxgc2_simulation_sensor_ack.so
-    libxgc2_simulation_ros_data.so
+    libxgc2_simulation_ros_data.so libxgc2_simulation_ros_master.so
   )
   local plugins=(libobstaclePathPlugin.so libxgc2_gazebo_scene_system.so
     libxgc2_simulation_world.so libxgc2_simulation_entity_ack.so
@@ -172,7 +172,7 @@ EOF
   # fails the build; no guessed dependency list substitutes for this evidence.
   shlibdeps_output="$(cd "${BUILD_DIR}"; dpkg-shlibdeps "${arguments[@]}" 2>"${shlibdeps_stderr}")"
   grep -Ev \
-    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_contact|libxgc2_gazebo_scene_geometry|libxgc2_gazebo_scene_motion|libxgc2_scene_model|libxgc2_simulation_service|libroscpp|librosconsole|libroscpp_serialization|librostime|libcpp_common|librosconsole_backend_interface|librosconsole_log4cxx|libxmlrpcpp)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_gazebo_scene_contact|libxgc2_gazebo_scene_geometry|libxgc2_gazebo_scene_motion|libxgc2_scene_model|libxgc2_simulation_service|libxgc2_simulation_ros_master|libroscpp|librosconsole|libroscpp_serialization|librostime|libcpp_common|librosconsole_backend_interface|librosconsole_log4cxx|libxmlrpcpp)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
     "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
   if [[ -s "${unexpected_stderr}" ]]; then
     cat "${unexpected_stderr}" >&2
@@ -215,6 +215,7 @@ EOF
 build_lidar_deb() {
   local package="ros-${ROS_DISTRO}-xgc2-simple-lidar"
   local pkg_root="${BUILD_DIR}/${package}"
+  local scene_lib="${BUILD_DIR}/ros-${ROS_DISTRO}-xgc2-gazebo-scene${PREFIX}/lib"
   local lidar_library="${pkg_root}${PREFIX}/lib/libxgc2_simple_lidar.so"
   local cpu_library="${pkg_root}${PREFIX}/lib/libxgc2_simple_lidar_cpu.so"
   local shlibdeps_output
@@ -257,12 +258,13 @@ EOF
     dpkg-shlibdeps \
       -O \
       "-l${pkg_root}${PREFIX}/lib" \
+      "-l${scene_lib}" \
       "-e${lidar_library}" \
       "-e${cpu_library}" \
       2>"${shlibdeps_stderr}"
   )"
   grep -Ev \
-    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_simple_lidar|libxgc2_simple_lidar_cpu|libroscpp|librosconsole|libroscpp_serialization|librostime|libcpp_common|librosconsole_backend_interface|librosconsole_log4cxx|libxmlrpcpp)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
+    "^dpkg-shlibdeps: warning: can't extract name and version from library name '(libxgc2_simple_lidar|libxgc2_simple_lidar_cpu|libxgc2_simulation_ros_master|libroscpp|librosconsole|libroscpp_serialization|librostime|libcpp_common|librosconsole_backend_interface|librosconsole_log4cxx|libxmlrpcpp)\\.so'$|^dpkg-shlibdeps: warning: binaries to analyze should already be installed in their package's directory$" \
     "${shlibdeps_stderr}" >"${unexpected_stderr}" || true
   if [[ -s "${unexpected_stderr}" ]]; then
     echo "dpkg-shlibdeps emitted an unexpected lidar warning:" >&2
@@ -287,7 +289,7 @@ EOF
   write_control \
     "${pkg_root}" \
     "${package}" \
-    "${shlibdeps}, python3, ros-${ROS_DISTRO}-roslaunch, ros-${ROS_DISTRO}-gazebo-ros, ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-xacro" \
+    "${shlibdeps}, ros-${ROS_DISTRO}-xgc2-gazebo-scene (= ${VERSION}), python3, ros-${ROS_DISTRO}-roslaunch, ros-${ROS_DISTRO}-gazebo-ros, ros-${ROS_DISTRO}-roscpp, ros-${ROS_DISTRO}-sensor-msgs, ros-${ROS_DISTRO}-xacro" \
     "CPU/GPU ray simple lidar plugins and reusable sensor xacro for XGC2"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
@@ -297,7 +299,7 @@ EOF
     echo "Lidar library contains a build-time RPATH/RUNPATH" >&2
     exit 1
   fi
-  if LD_LIBRARY_PATH="${pkg_root}${PREFIX}/lib:${PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+  if LD_LIBRARY_PATH="${pkg_root}${PREFIX}/lib:${scene_lib}:${PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
       ldd "${lidar_library}" "${cpu_library}" | grep -q 'not found'; then
     echo "Lidar library has unresolved shared libraries" >&2
     exit 1

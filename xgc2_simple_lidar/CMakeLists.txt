@@ -4,22 +4,36 @@ project(xgc2_simple_lidar VERSION 0.1.0 LANGUAGES CXX)
 # Clang does not enable the distribution compiler driver's as-needed default.
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--as-needed")
 
-find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs xgc2_gazebo_scene)
+find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs)
 find_package(gazebo REQUIRED)
 
+# The plugins share the process-wide ROS master watcher of the scene package and link only that helper library. The
+# scene package's other libraries are built as C++20, which the Ogre headers of the rendering plugin do not accept,
+# so they must not arrive through catkin_LIBRARIES.
+find_package(xgc2_gazebo_scene REQUIRED)
+set(scene_ros_master "")
+foreach(library IN LISTS xgc2_gazebo_scene_LIBRARIES)
+  if(library MATCHES "(^|/)(lib)?xgc2_simulation_ros_master(\\.so)?$")
+    list(APPEND scene_ros_master "${library}")
+  endif()
+endforeach()
+if(NOT scene_ros_master)
+  message(FATAL_ERROR "xgc2_gazebo_scene does not export xgc2_simulation_ros_master")
+endif()
+
 catkin_package(INCLUDE_DIRS include LIBRARIES xgc2_simple_lidar xgc2_simple_lidar_cpu
-  CATKIN_DEPENDS roscpp sensor_msgs xgc2_gazebo_scene)
+  CATKIN_DEPENDS roscpp sensor_msgs)
 
 add_library(xgc2_simple_lidar SHARED src/gpu_lidar_plugin.cpp)
 target_compile_features(xgc2_simple_lidar PUBLIC cxx_std_17)
 target_compile_options(xgc2_simple_lidar PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(xgc2_simple_lidar PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
-target_link_libraries(xgc2_simple_lidar PRIVATE ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+target_include_directories(xgc2_simple_lidar PRIVATE include ${catkin_INCLUDE_DIRS} ${xgc2_gazebo_scene_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
+target_link_libraries(xgc2_simple_lidar PRIVATE ${catkin_LIBRARIES} ${scene_ros_master} ${GAZEBO_LIBRARIES})
 add_library(xgc2_simple_lidar_cpu SHARED src/cpu_lidar_plugin.cpp)
 target_compile_features(xgc2_simple_lidar_cpu PUBLIC cxx_std_17)
 target_compile_options(xgc2_simple_lidar_cpu PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(xgc2_simple_lidar_cpu PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
-target_link_libraries(xgc2_simple_lidar_cpu PRIVATE ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+target_include_directories(xgc2_simple_lidar_cpu PRIVATE include ${catkin_INCLUDE_DIRS} ${xgc2_gazebo_scene_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
+target_link_libraries(xgc2_simple_lidar_cpu PRIVATE ${catkin_LIBRARIES} ${scene_ros_master} ${GAZEBO_LIBRARIES})
 
 install(TARGETS xgc2_simple_lidar xgc2_simple_lidar_cpu LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})

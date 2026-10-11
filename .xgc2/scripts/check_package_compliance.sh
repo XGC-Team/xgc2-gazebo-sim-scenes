@@ -74,6 +74,7 @@ required_files=(
   xgc2_gazebo_scene/package.xml
   xgc2_gazebo_scene/include/xgc2_gazebo_scene/motion_controller.hpp
   xgc2_gazebo_scene/include/xgc2_gazebo_scene/obstacle_path_plugin.hpp
+  xgc2_gazebo_scene/include/xgc2_gazebo_scene/ros_master_registration.hpp
   xgc2_gazebo_scene/src/gazebo_scene_system_plugin.cpp
   xgc2_gazebo_scene/src/motion_controller.cpp
   xgc2_gazebo_scene/src/obstacle_path_plugin.cpp
@@ -82,6 +83,7 @@ required_files=(
   xgc2_gazebo_scene/src/simulation_entity_ack_plugin.cpp
   xgc2_gazebo_scene/src/simulation_sensor_ack_plugin.cpp
   xgc2_gazebo_scene/src/simulation_ros_data_plugin.cpp
+  xgc2_gazebo_scene/src/ros_master_registration.cpp
   xgc2_gazebo_scene/python/xgc2_gazebo_scene/simulation_client.py
   xgc2_gazebo_scene/test/test_simulation_client.py
   xgc2_simple_lidar/test/test_launch_robot.py
@@ -236,6 +238,7 @@ grep -q 'add_library(obstaclePathPlugin SHARED' xgc2_gazebo_scene/CMakeLists.txt
 grep -q 'add_library(xgc2_gazebo_scene_system SHARED' xgc2_gazebo_scene/CMakeLists.txt
 grep -q 'add_library(xgc2_simulation_service SHARED' xgc2_gazebo_scene/CMakeLists.txt
 grep -q 'add_library(xgc2_simulation_ros_data SHARED' xgc2_gazebo_scene/CMakeLists.txt
+grep -q 'add_library(xgc2_simulation_ros_master SHARED' xgc2_gazebo_scene/CMakeLists.txt
 test ! -e xgc2_gazebo_scene/src/scene_authoring_world_plugin.cpp
 test ! -e xgc2_gazebo_scene/srv/ConfigureMotions.srv
 test ! -e xgc2_gazebo_scene/srv/StopMotions.srv
