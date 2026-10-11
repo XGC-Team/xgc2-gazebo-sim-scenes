@@ -18,7 +18,6 @@
 #include <std_msgs/String.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <map>
@@ -30,11 +29,6 @@
 #include <utility>
 #include <vector>
 
-#include "xgc2_gazebo_scene/ConvexPart.h"
-#include "xgc2_gazebo_scene/ObstacleDefinition.h"
-#include "xgc2_gazebo_scene/ObstacleDefinitionArray.h"
-#include "xgc2_gazebo_scene/ObstacleState.h"
-#include "xgc2_gazebo_scene/ObstacleStateArray.h"
 #include "xgc2_gazebo_scene/convex_mesh_geometry.hpp"
 #include "xgc2_gazebo_scene/model_snapshot.hpp"
 #include "xgc2_gazebo_scene/obstacle_messages.hpp"
@@ -49,14 +43,11 @@ namespace xgc2_gazebo_scene {
 namespace {
 
 constexpr char kDefaultManagedPrefix[] = "xgc2_obstacle_";
-constexpr char kGeometryTopic[] = "/xgc2/simulation/obstacles/geometry";
-constexpr char kStateTopic[] = "/xgc2/simulation/obstacles/state";
 constexpr char kGeometryLibraryTopic[] = "/xgc2/simulation/obstacles/geometry_library";
 constexpr char kInstancesTopic[] = "/xgc2/simulation/obstacles/instances";
 constexpr char kPhysicalCollisionTopic[] = "/xgc2/simulation/physical_collision";
 constexpr char kPhysicalCollisionDetailTopic[] = "/xgc2/simulation/physical_collision_detail";
 constexpr double kPublishPeriod = 1.0 / 30.0;
-constexpr int kCylinderVertexCount = 16;
 
 void AppendBoxVertices(const ignition::math::Vector3d& size, std::vector<geometry_msgs::Point>* vertices) {
     const ignition::math::Vector3d half = size * 0.5;
@@ -66,30 +57,6 @@ void AppendBoxVertices(const ignition::math::Vector3d& size, std::vector<geometr
                 vertices->push_back(PointMessage({x, y, z}));
             }
         }
-    }
-}
-
-void AppendSphereVertices(double radius, std::vector<geometry_msgs::Point>* vertices) {
-    // An octahedron whose inradius equals the sphere radius is a conservative
-    // outer approximation. Analytical consumers should use radius directly.
-    const double extent = radius * std::sqrt(3.0);
-    vertices->push_back(PointMessage({extent, 0, 0}));
-    vertices->push_back(PointMessage({-extent, 0, 0}));
-    vertices->push_back(PointMessage({0, extent, 0}));
-    vertices->push_back(PointMessage({0, -extent, 0}));
-    vertices->push_back(PointMessage({0, 0, extent}));
-    vertices->push_back(PointMessage({0, 0, -extent}));
-}
-
-void AppendCylinderVertices(double radius, double length, std::vector<geometry_msgs::Point>* vertices) {
-    constexpr double kPi = 3.14159265358979323846;
-    const double outer_radius = radius / std::cos(kPi / kCylinderVertexCount);
-    for (int index = 0; index < kCylinderVertexCount; ++index) {
-        const double angle = 2.0 * kPi * index / kCylinderVertexCount;
-        const double x = outer_radius * std::cos(angle);
-        const double y = outer_radius * std::sin(angle);
-        vertices->push_back(PointMessage({x, y, -length * 0.5}));
-        vertices->push_back(PointMessage({x, y, length * 0.5}));
     }
 }
 
@@ -108,19 +75,14 @@ std::string ModelNameFromScopedCollision(const std::string& collision_name) {
     return collision_name.substr(0, separator);
 }
 
-std::string VPolytopeGeometryTypeAlias(const ConvexPart& part) {
-    if (part.shape != ConvexPart::SHAPE_CONVEX_MESH || part.mesh_uri.empty() || !part.mesh_submesh.empty() ||
-        part.mesh_center_submesh) {
-        return "";
-    }
-
+std::string VPolytopeGeometryTypeAlias(const std::string& mesh_uri) {
     // The GeometryLibrary contract names a V-polytope template after its
     // source template (for example "v_polytope:ugv_hexagon_1"). Gazebo
     // collision meshes carry the same stable name in the asset filename. Keep
     // the URI type canonical for obstacle instances, and publish this semantic
     // alias so non-obstacle consumers can share the exact collision-derived
     // support points.
-    std::string filename = part.mesh_uri;
+    std::string filename = mesh_uri;
     const std::string::size_type suffix = filename.find_first_of("?#");
     if (suffix != std::string::npos) {
         filename.erase(suffix);
@@ -134,30 +96,6 @@ std::string VPolytopeGeometryTypeAlias(const ConvexPart& part) {
         filename.erase(extension);
     }
     return filename.empty() ? "" : "v_polytope:" + filename;
-}
-
-xgc2_geometry_msgs::GeometryTemplate StandardGeometryTemplate(const ConvexPart& part) {
-    xgc2_geometry_msgs::GeometryTemplate geometry_template;
-    geometry_template.type = StandardGeometryType(part);
-    geometry_template.resolution = 0;
-    if (part.shape == ConvexPart::SHAPE_BOX) {
-        for (const auto& vertex : part.conservative_vertices) {
-            geometry_msgs::Point point;
-            point.x = vertex.x / part.size.x;
-            point.y = vertex.y / part.size.y;
-            point.z = vertex.z / part.size.z;
-            geometry_template.support_points.push_back(point);
-        }
-    } else if (part.shape == ConvexPart::SHAPE_CONVEX_MESH) {
-        for (const auto& vertex : part.conservative_vertices) {
-            geometry_msgs::Point point;
-            point.x = vertex.x / part.mesh_scale.x;
-            point.y = vertex.y / part.mesh_scale.y;
-            point.z = vertex.z / part.mesh_scale.z;
-            geometry_template.support_points.push_back(point);
-        }
-    }
-    return geometry_template;
 }
 
 } // namespace
@@ -183,8 +121,8 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
   private:
     struct ManagedObstacle {
         gazebo::physics::ModelPtr model;
-        uint64_t generation = 0;
-        ObstacleDefinition definition;
+        std::vector<xgc2_geometry_msgs::ConvexBodyInstance> parts;
+        std::vector<std::pair<xgc2_geometry_msgs::GeometryTemplate, std::string>> geometry_templates;
         ignition::math::Pose3d observed_pose = ignition::math::Pose3d::Zero;
     };
 
@@ -205,7 +143,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             return;
         }
 
-        scene_epoch_ = world_name + ":" + std::to_string(ros::WallTime::now().toNSec());
         node_ = std::make_unique<ros::NodeHandle>("xgc2_gazebo_scene");
         node_->param<std::string>("managed_obstacle_prefix", managed_obstacle_prefix_, kDefaultManagedPrefix);
         if (managed_obstacle_prefix_.empty()) {
@@ -216,8 +153,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         if (!node_->getParam("physical_contacts/tracked_model_prefixes", tracked_model_prefixes_)) {
             tracked_model_prefixes_.clear();
         }
-        geometry_publisher_ = node_->advertise<ObstacleDefinitionArray>(kGeometryTopic, 1, true);
-        state_publisher_ = node_->advertise<ObstacleStateArray>(kStateTopic, 1, true);
         geometry_library_publisher_ =
             node_->advertise<xgc2_geometry_msgs::GeometryLibrary>(kGeometryLibraryTopic, 1, true);
         instances_publisher_ = node_->advertise<xgc2_geometry_msgs::ConvexBodyArray>(kInstancesTopic, 1, true);
@@ -308,36 +243,28 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         }
     }
 
-    bool BuildDefinition(const std::string& logical_name, uint64_t generation, const gazebo::physics::ModelPtr& model,
-                         ObstacleDefinition* definition, std::string* error) {
-        *definition = ObstacleDefinition{};
+    bool BuildGeometry(ManagedObstacle* obstacle, std::string* error) {
         error->clear();
-        definition->name = logical_name;
-        definition->model_name = model->GetName();
-        definition->generation = generation;
 
-        for (const auto& link : model->GetLinks()) {
+        for (const auto& link : obstacle->model->GetLinks()) {
             for (const auto& collision : link->GetCollisions()) {
-                ConvexPart part;
-                part.part_id = link->GetName() + "/" + collision->GetName();
-                part.local_pose = PoseMessage(link->RelativePose() * collision->RelativePose());
+                xgc2_geometry_msgs::ConvexBodyInstance part;
+                xgc2_geometry_msgs::GeometryTemplate geometry_template;
+                std::string v_polytope_alias;
+                part.name = link->GetName() + "/" + collision->GetName();
+                part.pose = PoseMessage(link->RelativePose() * collision->RelativePose());
                 const gazebo::physics::ShapePtr shape = collision->GetShape();
                 if (const auto box = boost::dynamic_pointer_cast<gazebo::physics::BoxShape>(shape)) {
-                    part.shape = ConvexPart::SHAPE_BOX;
-                    const ignition::math::Vector3d size = box->Size();
-                    part.size.x = size.X();
-                    part.size.y = size.Y();
-                    part.size.z = size.Z();
-                    AppendBoxVertices(size, &part.conservative_vertices);
+                    part.geometry_type = "cube";
+                    part.scale = VectorMessage(box->Size());
+                    AppendBoxVertices(ignition::math::Vector3d::One, &geometry_template.support_points);
                 } else if (const auto sphere = boost::dynamic_pointer_cast<gazebo::physics::SphereShape>(shape)) {
-                    part.shape = ConvexPart::SHAPE_SPHERE;
-                    part.radius = sphere->GetRadius();
-                    AppendSphereVertices(part.radius, &part.conservative_vertices);
+                    part.geometry_type = "sphere";
+                    const double radius = sphere->GetRadius();
+                    part.scale = VectorMessage({radius, radius, radius});
                 } else if (const auto cylinder = boost::dynamic_pointer_cast<gazebo::physics::CylinderShape>(shape)) {
-                    part.shape = ConvexPart::SHAPE_CYLINDER;
-                    part.radius = cylinder->GetRadius();
-                    part.length = cylinder->GetLength();
-                    AppendCylinderVertices(part.radius, part.length, &part.conservative_vertices);
+                    part.geometry_type = "cylinder";
+                    part.scale = VectorMessage({cylinder->GetRadius(), cylinder->GetRadius(), cylinder->GetLength()});
                 } else if (const auto mesh = boost::dynamic_pointer_cast<gazebo::physics::MeshShape>(shape)) {
                     gazebo::msgs::Geometry geometry_message;
                     mesh->FillMsg(geometry_message);
@@ -359,27 +286,35 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
                     std::string mesh_error;
                     if (!LoadConvexMeshGeometry(mesh->GetMeshURI(), collision_scale, submesh_name, center_submesh,
                                                 &mesh_geometry, &mesh_error)) {
-                        *error = "collision " + part.part_id + " is not a publishable convex mesh: " + mesh_error;
+                        *error = "collision " + part.name + " is not a publishable convex mesh: " + mesh_error;
                         return false;
                     }
-                    part.shape = ConvexPart::SHAPE_CONVEX_MESH;
-                    part.mesh_uri = mesh_geometry.uri;
-                    part.mesh_submesh = submesh_name;
-                    part.mesh_center_submesh = center_submesh;
-                    part.mesh_scale.x = mesh_geometry.scale.X();
-                    part.mesh_scale.y = mesh_geometry.scale.Y();
-                    part.mesh_scale.z = mesh_geometry.scale.Z();
+                    part.geometry_type = "convex_mesh:" + mesh_geometry.uri;
+                    if (!submesh_name.empty()) {
+                        part.geometry_type += "#submesh=" + submesh_name;
+                    }
+                    if (center_submesh) {
+                        part.geometry_type += "#centered";
+                    }
+                    if (submesh_name.empty() && !center_submesh) {
+                        v_polytope_alias = VPolytopeGeometryTypeAlias(mesh_geometry.uri);
+                    }
+                    part.scale = VectorMessage(mesh_geometry.scale);
                     for (const auto& vertex : mesh_geometry.vertices) {
-                        part.conservative_vertices.push_back(PointMessage(vertex));
+                        geometry_template.support_points.push_back(PointMessage(
+                            {vertex.X() / part.scale.x, vertex.Y() / part.scale.y, vertex.Z() / part.scale.z}));
                     }
                 } else {
-                    *error = "collision " + part.part_id + " has an unsupported shape";
+                    *error = "collision " + part.name + " has an unsupported shape";
                     return false;
                 }
-                definition->parts.push_back(std::move(part));
+                geometry_template.type = part.geometry_type;
+                geometry_template.resolution = 0;
+                obstacle->parts.push_back(std::move(part));
+                obstacle->geometry_templates.emplace_back(std::move(geometry_template), std::move(v_polytope_alias));
             }
         }
-        if (definition->parts.empty()) {
+        if (obstacle->parts.empty()) {
             *error = "managed obstacle contains no collision geometry";
             return false;
         }
@@ -401,7 +336,6 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             const auto found = current.find(iterator->first);
             if (found == current.end() || found->second != iterator->second.model) {
                 iterator = obstacles_.erase(iterator);
-                ++scene_revision_;
                 changed = true;
             } else {
                 ++iterator;
@@ -413,19 +347,16 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             }
             ManagedObstacle obstacle;
             obstacle.model = item.second;
-            obstacle.generation = generation_counters_[item.first] + 1;
             obstacle.observed_pose = item.second->WorldPose();
             std::string error;
-            if (!BuildDefinition(item.first, obstacle.generation, item.second, &obstacle.definition, &error)) {
+            if (!BuildGeometry(&obstacle, &error)) {
                 ROS_ERROR_THROTTLE(5.0, "Managed obstacle %s was rejected: %s", item.second->GetName().c_str(),
                                    error.c_str());
                 // Retried, and reported, on every update while it is present.
                 rediscover_ = true;
                 continue;
             }
-            generation_counters_[item.first] = obstacle.generation;
             obstacles_.emplace(item.first, std::move(obstacle));
-            ++scene_revision_;
             changed = true;
         }
         return changed;
@@ -462,35 +393,26 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         }
         if (last_publish_time_ < 0.0 || simulation_time + 1e-9 >= last_publish_time_ + kPublishPeriod ||
             simulation_time < last_publish_time_) {
-            PublishState(info.simTime);
+            PublishInstances(info.simTime);
             last_publish_time_ = simulation_time;
         }
     }
 
     void PublishGeometry(const gazebo::common::Time& simulation_time) {
-        ObstacleDefinitionArray message;
-        message.header.stamp = ros::Time(simulation_time.sec, simulation_time.nsec);
-        message.header.frame_id = "world";
-        message.scene_epoch = scene_epoch_;
-        message.scene_revision = scene_revision_;
-        for (const auto& item : obstacles_) {
-            message.obstacles.push_back(item.second.definition);
-        }
-        geometry_publisher_.publish(message);
-
         xgc2_geometry_msgs::GeometryLibrary library;
-        library.header = message.header;
+        library.header.stamp = ros::Time(simulation_time.sec, simulation_time.nsec);
+        library.header.frame_id = "world";
         std::map<std::string, xgc2_geometry_msgs::GeometryTemplate> templates;
         std::map<std::string, std::string> v_polytope_alias_sources;
         std::set<std::string> ambiguous_v_polytope_aliases;
         for (const auto& item : obstacles_) {
-            for (const auto& part : item.second.definition.parts) {
-                const std::string type = StandardGeometryType(part);
+            for (const auto& geometry : item.second.geometry_templates) {
+                const auto& standard_template = geometry.first;
+                const std::string& type = standard_template.type;
                 if (!type.empty()) {
-                    const xgc2_geometry_msgs::GeometryTemplate standard_template = StandardGeometryTemplate(part);
                     templates.emplace(type, standard_template);
 
-                    const std::string v_polytope_alias = VPolytopeGeometryTypeAlias(part);
+                    const std::string& v_polytope_alias = geometry.second;
                     if (!v_polytope_alias.empty() && ambiguous_v_polytope_aliases.count(v_polytope_alias) == 0) {
                         const auto alias_source = v_polytope_alias_sources.emplace(v_polytope_alias, type);
                         if (!alias_source.second && alias_source.first->second != type) {
@@ -515,20 +437,19 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
         geometry_published_ = true;
     }
 
-    void PublishState(const gazebo::common::Time& simulation_time) {
+    void PublishInstances(const gazebo::common::Time& simulation_time) {
         // Discovery marks the messages stale whenever the set changes; the count
         // check keeps Set() inside the messages should that ever be missed.
         if (obstacle_messages_stale_ || obstacle_messages_.size() != obstacles_.size()) {
             std::vector<ObstacleMessages::Obstacle> fixed;
             fixed.reserve(obstacles_.size());
             for (const auto& item : obstacles_) {
-                fixed.push_back(
-                    {item.first, item.second.model->GetName(), item.second.generation, &item.second.definition});
+                fixed.push_back({item.first, &item.second.parts});
             }
             obstacle_messages_.Reset(fixed);
             obstacle_messages_stale_ = false;
         }
-        obstacle_messages_.Begin(ros::Time(simulation_time.sec, simulation_time.nsec), scene_epoch_, scene_revision_);
+        obstacle_messages_.Begin(ros::Time(simulation_time.sec, simulation_time.nsec));
         ObstacleDynamics dynamics;
         std::size_t index = 0;
         for (const auto& item : obstacles_) {
@@ -536,12 +457,9 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             dynamics.pose = obstacle.observed_pose;
             dynamics.linear_velocity = obstacle.model->WorldLinearVel();
             dynamics.angular_velocity = obstacle.model->WorldAngularVel();
-            dynamics.motion_mode = "uncontrolled";
-            dynamics.motion_revision = 0;
             dynamics.is_static = obstacle.model->IsStatic();
             obstacle_messages_.Set(index++, dynamics);
         }
-        state_publisher_.publish(obstacle_messages_.state());
         instances_publisher_.publish(obstacle_messages_.instances());
     }
 
@@ -553,23 +471,18 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
     gazebo::transport::NodePtr gazebo_transport_node_;
     gazebo::transport::SubscriberPtr contact_subscriber_;
     std::unique_ptr<ros::NodeHandle> node_;
-    ros::Publisher geometry_publisher_;
-    ros::Publisher state_publisher_;
     ros::Publisher geometry_library_publisher_;
     ros::Publisher instances_publisher_;
     ros::Publisher physical_collision_publisher_;
     ros::Publisher physical_collision_detail_publisher_;
     std::map<std::string, ManagedObstacle> obstacles_;
-    std::map<std::string, uint64_t> generation_counters_;
     std::map<std::string, ContactModelDescriptor> contact_models_;
     ObstacleMessages obstacle_messages_;
     bool obstacle_messages_stale_ = true;
     ModelSnapshot<gazebo::physics::ModelPtr, boost::weak_ptr<gazebo::physics::Model>> model_snapshot_;
     bool rediscover_ = true;
-    std::string scene_epoch_;
     std::string managed_obstacle_prefix_ = kDefaultManagedPrefix;
     std::vector<std::string> tracked_model_prefixes_;
-    uint64_t scene_revision_ = 0;
     double last_publish_time_ = -1.0;
     bool geometry_published_ = false;
     bool physical_contact_monitor_enabled_ = true;
