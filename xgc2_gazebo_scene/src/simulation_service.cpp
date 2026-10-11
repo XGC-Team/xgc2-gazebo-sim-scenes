@@ -1,5 +1,5 @@
 #include "xgc2_gazebo_scene/simulation_service.hpp"
-#include "chassis_hold_domain.hpp"
+#include "chassis_hold_host.hpp"
 #include "xgc2_gazebo_scene/native_entity_motion.hpp"
 #include "xgc2_gazebo_scene/native_scene_controller.hpp"
 #include "xgc2_gazebo_scene/native_sensor_controller.hpp"
@@ -22,8 +22,6 @@
 #include <sys/stat.h>
 #include <thread>
 #include <xgc2/xrpc/http.hpp>
-
-extern char** environ;
 
 namespace xgc2_gazebo_scene {
 namespace detail {
@@ -49,50 +47,20 @@ using xgc2::xrpc::HttpRequest;
 using xgc2::xrpc::HttpResponse;
 constexpr std::size_t kQueue = 32, kEntities = 256, kReceipts = 128, kWaiters = 32;
 constexpr std::size_t kArtifactBytes = 65536;
-std::shared_ptr<const xgc2::xrpc::RuntimePolicy> WorldPolicy() {
-    static const auto policy = [] {
-        xgc2::xrpc::RuntimePolicyOptions options;
-        // The process composition root supplies one explicit XRPC snapshot.
-        for (auto entry = environ; entry && *entry; ++entry) {
-            const std::string value(*entry);
-            if (value.rfind("XGC2_XRPC_", 0) != 0)
-                continue;
-            const auto equals = value.find('=');
-            options.environment.emplace_back(value.substr(0, equals),
-                                             equals == std::string::npos ? "" : value.substr(equals + 1));
-        }
-        options.default_source = "gazebo.simulation.v1";
-        options.defaults = {
-            {"HOST_MAX_CONNECTIONS", "32"},  {"HOST_MAX_IN_FLIGHT", "32"},     {"MAX_HEADER_BYTES", "8192"},
-            {"MAX_REQUEST_BYTES", "131072"}, {"MAX_RESPONSE_BYTES", "262144"}, {"CALL_TIMEOUT_MS", "60000"},
-            {"HEADER_TIMEOUT_MS", "5000"},   {"IDLE_TIMEOUT_MS", "5000"},      {"SHUTDOWN_TIMEOUT_MS", "1000"}};
-        options.ceilings = {
-            {"HOST_MAX_CONNECTIONS", 32},  {"HOST_MAX_IN_FLIGHT", 32},     {"MAX_HEADER_BYTES", 8192},
-            {"MAX_REQUEST_BYTES", 131072}, {"MAX_RESPONSE_BYTES", 262144}, {"CALL_TIMEOUT_MS", 60000},
-            {"HEADER_TIMEOUT_MS", 5000},   {"IDLE_TIMEOUT_MS", 5000},      {"SHUTDOWN_TIMEOUT_MS", 1000}};
-        return std::make_shared<xgc2::xrpc::RuntimePolicy>(xgc2::xrpc::resolve_runtime_policy(options));
-    }();
-    return policy;
-}
-Json::Value EffectivePolicy(const xgc2::xrpc::RuntimePolicy& policy) {
-    Json::Value value;
-    value["revision"] = Json::UInt64(policy.revision());
-    value["fields"] = Json::Value(Json::arrayValue);
-    for (const auto& field : policy.fields()) {
-        Json::Value record;
-        record["name"] = std::string(field.name);
-        record["source"] = std::string(field.source);
-        record["source_detail"] = field.source_detail;
-        record["dynamic"] = false;
-        if (const auto* integer = std::get_if<std::int64_t>(&field.value))
-            record["value"] = Json::Int64(*integer);
-        else
-            record["value"] = std::get<std::string>(field.value);
-        if (field.ceiling)
-            record["ceiling"] = Json::Int64(*field.ceiling);
-        value["fields"].append(record);
-    }
-    return value;
+// Bounds of the world's http.v1 server (the SDK reads no environment).
+xgc2::xrpc::HttpLimits WorldLimits() {
+    using std::chrono::milliseconds;
+    xgc2::xrpc::HttpLimits limits;
+    limits.connections = 32;
+    limits.header_bytes = 8192;
+    limits.request_bytes = 131072;
+    limits.response_bytes = 262144;
+    limits.inflight = 32;
+    limits.request_timeout = milliseconds(60000);
+    limits.idle_timeout = milliseconds(5000);
+    limits.header_timeout = milliseconds(5000);
+    limits.shutdown_timeout = milliseconds(1000);
+    return limits;
 }
 std::mutex registry_mutex;
 std::map<gazebo::physics::World*, SimulationService*> registry;
@@ -247,6 +215,7 @@ struct Command {
     ignition::math::Vector3d linear, angular;
     bool has_pose = false, has_twist = false, has_enabled = false, enabled = true;
     bool reset_time = false;
+    bool chassis = false; // the asset carries a chassis plugin: HOLD binds it under the entity ID
     unsigned steps = 0;
     std::vector<std::pair<std::string, std::uint64_t>> refs;
     sdf::SDFPtr artifact;
@@ -283,8 +252,7 @@ struct Entity {
 class SimulationService::Impl {
   public:
     Impl(gazebo::physics::WorldPtr world, std::string path, std::string target, const std::string& root,
-         std::vector<std::string> chassis_ids, const std::vector<std::string>& required_components,
-         std::string configuration_revision)
+         const std::vector<std::string>& required_components, std::string configuration_revision)
         : world_(std::move(world)), path_(std::move(path)), target_(std::move(target)),
           resource_root_(std::filesystem::canonical(root)), instance_(xgc2::xrpc::new_instance_id()),
           configuration_revision_(std::move(configuration_revision)) {
@@ -301,25 +269,15 @@ class SimulationService::Impl {
                     Invalid("duplicate native component");
             components_.push_back({id, std::make_shared<detail::NativeComponentState>()});
         }
-        policy_ = WorldPolicy();
-        auto limits = xgc2::xrpc::http_limits(*policy_);
-        std::vector<std::string> discovery{"/v1/describe"};
-        if (!chassis_ids.empty()) {
-            xgc2::chassis_hold::RpcOptions options;
-            options.host_policy = policy_;
-            options.socket_path = path_;
-            options.instance_id = instance_;
-            options.target_id = target_;
-            options.robot_ids = std::move(chassis_ids);
-            chassis_ = std::make_shared<detail::ChassisDomain>(std::move(options));
-            discovery.emplace_back("/v1/chassis/descriptor");
-        }
+        limits_ = WorldLimits();
+        // One HOLD host per world: the domain shares the instance of the http.v1 server.
+        chassis_ = detail::ChassisHoldHost::Create(world_, instance_);
         server_ = std::make_unique<xgc2::xrpc::HttpServer>(
             xgc2::xrpc::UnixOptions{path_, 0600, xgc2::xrpc::ExistingPath::ReclaimUnreachable},
             [this](HttpRequest r, HttpReply reply) {
                 Handle(std::move(r), std::move(reply));
             },
-            limits, xgc2::xrpc::HttpIdentity{instance_, std::move(discovery)});
+            limits_, xgc2::xrpc::HttpIdentity{instance_, {"/v1/describe"}});
         server_->set_wakeup_handler([this] {
             Drain();
         });
@@ -358,6 +316,9 @@ class SimulationService::Impl {
             ++gate->readers;
             if (auto* owner = gate->owner.load()) {
                 owner->native_clock_ns_.store(std::int64_t(info.simTime.sec) * 1000000000LL + info.simTime.nsec);
+                // First among the update callbacks: the control steps of the chassis models that connect
+                // later see the zero of this tick.
+                owner->chassis_->Tick();
                 const auto serial = owner->scene_->serial();
                 owner->scene_->Update(info.simTime.Double());
                 owner->motion_->Update(info.simTime.Double());
@@ -377,11 +338,10 @@ class SimulationService::Impl {
             }
             --gate->readers;
         });
-        if (chassis_)
-            detail::PublishChassisDomain(world_, chassis_);
     }
     ~Impl() { Stop(); }
     void Start() {
+        chassis_->Start();
         worker_ = std::thread([this] {
             Work();
         });
@@ -414,10 +374,6 @@ class SimulationService::Impl {
         ack_cv_.notify_all();
         if (worker_.joinable())
             worker_.join();
-        if (chassis_) {
-            detail::RetireChassisDomain(world_, chassis_);
-            chassis_->Quiesce();
-        }
         server_->request_stop();
         if (io_.joinable())
             io_.join();
@@ -429,10 +385,8 @@ class SimulationService::Impl {
         }
         health_observers_.clear();
         scene_observers_.clear();
-        if (chassis_) {
-            std::lock_guard<std::mutex> lock(chassis_->mutex);
-            chassis_->provider.reset();
-        }
+        // Pending engages hold replies too: answer them before the server goes.
+        chassis_->Stop();
         server_.reset();
         scene_.reset();
         motion_.reset();
@@ -591,10 +545,9 @@ class SimulationService::Impl {
         v["limits"]["operation_timeout_ms"] = 60000;
         v["limits"]["receipt_retention_ms"] = 300000;
         v["limits"]["artifact_bytes"] = Json::UInt(kArtifactBytes);
-        v["limits"]["request_bytes"] = Json::Int64(policy_->integer("MAX_REQUEST_BYTES"));
-        v["limits"]["response_bytes"] = Json::Int64(policy_->integer("MAX_RESPONSE_BYTES"));
-        if (chassis_)
-            v["capabilities"].append("chassis.hold.v1");
+        v["limits"]["request_bytes"] = Json::UInt64(limits_.request_bytes);
+        v["limits"]["response_bytes"] = Json::UInt64(limits_.response_bytes);
+        chassis_->DescribeFacts(v["facts"]);
         v["storage"]["durable_writes"] = Json::Value(Json::arrayValue);
         v["storage"]["operation_receipts"] = "instance-scoped memory";
         v["storage"]["scene_meshes"]["location"] = mesh_root_.string();
@@ -733,9 +686,9 @@ class SimulationService::Impl {
                     if (p->HasElement("chassisRobotId")) {
                         if (p->Get<std::string>("chassisRobotId") != c.id)
                             Invalid("chassisRobotId must match the public entity ID");
-                        if (!chassis_ ||
-                            std::find(chassis_->ids.begin(), chassis_->ids.end(), c.id) == chassis_->ids.end())
-                            Invalid("chassis identity is not granted by this world");
+                        if (!xgc2::chassis_hold::valid_robot_id(c.id))
+                            Invalid("a chassis entity ID must be 1-128 characters of [A-Za-z0-9._:-]");
+                        c.chassis = true;
                     }
                 }
             }
@@ -934,18 +887,8 @@ class SimulationService::Impl {
                 queue_cv_.notify_one();
                 return;
             }
-            if (r.target == "/v1/runtime-policy" && r.method == "GET") {
-                if (!r.body.empty())
-                    Invalid("runtime policy body is unsupported");
-                reply.complete(Response(EffectivePolicy(*policy_)));
-                return;
-            }
-            if (r.target.starts_with("/v1/chassis/")) {
-                if (!chassis_)
-                    throw DomainError(422, "unsupported", "world has no granted chassis hold bindings");
-                chassis_->provider->handle(std::move(r), std::move(reply));
-                hold_requested_.store(true);
-                queue_cv_.notify_one();
+            if (detail::ChassisHoldHost::Calls(r.target)) {
+                chassis_->Handle(std::move(r), std::move(reply));
                 return;
             }
             if (r.target.starts_with("/v1/operations/")) {
@@ -1084,8 +1027,6 @@ class SimulationService::Impl {
                 slot.phase.store(0);
             }
         }
-        if (chassis_ && chassis_->provider)
-            chassis_->provider->finish();
         const auto health = Health();
         for (auto it = health_observers_.begin(); it != health_observers_.end();) {
             if (health["revision"].asUInt64() != it->after) {
@@ -1276,7 +1217,7 @@ class SimulationService::Impl {
             // the operation terminal; the native last-plugin ack reconciles it.
             entity->model = Realize(c.artifact, c.native_name);
             sensors_->CompleteParentSensors(entity->id, entity->generation);
-            if (chassis_ && !chassis_->Ready(c.id))
+            if (c.chassis && !chassis_->Bound(c.id))
                 throw DomainError(503, "unavailable", "native chassis initialization did not complete");
             entity->native_ready = true;
             r.entities.push_back(Snapshot(*entity));
@@ -1321,10 +1262,12 @@ class SimulationService::Impl {
                 throw DomainError(422, "unsupported", "scene membership and state are owned by the scene extension");
             if (c.kind == Kind::Remove) {
                 sensors_->RemoveParent(entity.id, entity.generation, 5000, &r.effects_started);
-                if (chassis_) {
+                {
+                    // The model plugin is destroyed after Gazebo has finalized its joints and links: the
+                    // HOLD seat ends here, before the removal.
                     boost::recursive_mutex::scoped_lock physics(*world_->Physics()->GetPhysicsUpdateMutex());
                     r.effects_started = true;
-                    chassis_->ResetOutput(entity.id, true);
+                    chassis_->Retire(entity.id);
                 }
             } else {
                 r.effects_started = true;
@@ -1362,7 +1305,7 @@ class SimulationService::Impl {
                         for (const auto& ref : c.refs)
                             selected |= e.id == ref.first;
                         if (selected) {
-                            if (chassis_ && !chassis_->ResetOutput(e.id, false))
+                            if (!chassis_->ZeroOutput(e.id))
                                 throw DomainError(503, "unavailable", "native chassis reset output failed");
                             e.model->Reset();
                             e.model->SetWorldPose(e.initial);
@@ -1386,7 +1329,7 @@ class SimulationService::Impl {
                 } else {
                     if (c.kind == Kind::ResetEntity) {
                         r.effects_started = true;
-                        if (chassis_ && !chassis_->ResetOutput(e.id, false))
+                        if (!chassis_->ZeroOutput(e.id))
                             throw DomainError(503, "unavailable", "native chassis reset output failed");
                         e.model->Reset();
                         e.model->SetWorldPose(e.initial);
@@ -1423,7 +1366,7 @@ class SimulationService::Impl {
             {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
                 queue_cv_.wait(lock, [this] {
-                    return stopping_ || !queue_.empty() || hold_requested_.load() || scene_snapshot_requested_.load();
+                    return stopping_ || !queue_.empty() || scene_snapshot_requested_.load();
                 });
                 if (stopping_)
                     break;
@@ -1431,11 +1374,6 @@ class SimulationService::Impl {
                     index = queue_.front();
                     queue_.pop_front();
                 }
-            }
-            if (hold_requested_.exchange(false) && chassis_) {
-                boost::recursive_mutex::scoped_lock native_lock(*world_->Physics()->GetPhysicsUpdateMutex());
-                chassis_->Tick();
-                server_->wake();
             }
             if (scene_snapshot_requested_.exchange(false) && scene_observers_active_) {
                 try {
@@ -1492,9 +1430,8 @@ class SimulationService::Impl {
     std::filesystem::path resource_root_;
     std::string instance_, configuration_revision_;
     std::unique_ptr<xgc2::xrpc::HttpServer> server_;
-    std::shared_ptr<const xgc2::xrpc::RuntimePolicy> policy_;
-    std::shared_ptr<detail::ChassisDomain> chassis_;
-    std::atomic<bool> hold_requested_{false};
+    xgc2::xrpc::HttpLimits limits_;
+    std::shared_ptr<detail::ChassisHoldHost> chassis_;
     std::atomic<bool> native_ready_{false};
     std::vector<Component> components_;
     std::vector<Observer> health_observers_, scene_observers_;
@@ -1525,12 +1462,12 @@ class SimulationService::Impl {
 };
 
 SimulationService::SimulationService(gazebo::physics::WorldPtr world, std::string path, std::string target,
-                                     const std::string& root, std::vector<std::string> chassis_ids,
+                                     const std::string& root,
                                      const std::vector<std::string>& required_components,
                                      std::string configuration_revision) {
     auto* identity = world.get();
-    impl_ = std::make_unique<Impl>(std::move(world), std::move(path), std::move(target), root, std::move(chassis_ids),
-                                   required_components, std::move(configuration_revision));
+    impl_ = std::make_unique<Impl>(std::move(world), std::move(path), std::move(target), root, required_components,
+                                   std::move(configuration_revision));
     std::vector<std::shared_ptr<detail::WorldStartupState>> attached;
     {
         std::lock_guard<std::mutex> lock(registry_mutex);

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(native_simulation_fixture LANGUAGES CXX)
-find_package(XgcXrpc CONFIG REQUIRED)
-find_package(XgcChassisHold 0.1.0 CONFIG REQUIRED COMPONENTS Rpc)
+find_package(XgcXrpc CONFIG REQUIRED COMPONENTS http)
+find_package(XgcChassisHold CONFIG REQUIRED COMPONENTS core)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(Gazebo REQUIRED IMPORTED_TARGET gazebo)
 get_target_property(gazebo_options PkgConfig::Gazebo INTERFACE_COMPILE_OPTIONS)
@@ -17,8 +17,8 @@ if(NOT GEOMETRY_MESSAGES_INCLUDE)
 endif()
 add_library(xgc2_simulation_service SHARED
   "${scene_dir}/src/simulation_service.cpp"
-  "${scene_dir}/src/chassis_hold_bridge.cpp"
-  "${scene_dir}/src/chassis_ros_callbacks.cpp"
+  "${scene_dir}/src/chassis_hold.cpp"
+  "${scene_dir}/src/chassis_command_queue.cpp"
   "${scene_dir}/src/native_sensor_controller.cpp"
   "${scene_dir}/src/native_scene_controller.cpp"
   "${scene_dir}/src/native_entity_motion.cpp"
@@ -28,7 +28,7 @@ add_library(xgc2_simulation_service SHARED
 target_compile_features(xgc2_simulation_service PUBLIC cxx_std_20)
 target_include_directories(xgc2_simulation_service PUBLIC "${scene_dir}/include")
 target_include_directories(xgc2_simulation_service SYSTEM PUBLIC "${GEOMETRY_MESSAGES_INCLUDE}" "/opt/ros/noetic/include")
-target_link_libraries(xgc2_simulation_service PUBLIC XgcChassisHold::Rpc XgcXrpc::http PkgConfig::JsonCpp PkgConfig::Gazebo Eigen3::Eigen Boost::thread Boost::filesystem
+target_link_libraries(xgc2_simulation_service PUBLIC XgcChassisHold::core XgcXrpc::http PkgConfig::JsonCpp PkgConfig::Gazebo Eigen3::Eigen Boost::thread Boost::filesystem
   /opt/ros/noetic/lib/libroscpp.so /opt/ros/noetic/lib/librostime.so /opt/ros/noetic/lib/librosconsole.so)
 foreach(plugin world entity_ack sensor_ack)
   add_library(xgc2_simulation_${plugin} SHARED "${scene_dir}/src/simulation_${plugin}_plugin.cpp")

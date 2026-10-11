@@ -8,13 +8,13 @@
 #include <vector>
 
 namespace xgc2_gazebo_scene {
-// One fixed management executor and one XRPC IO owner per live world.
-// Engine update callbacks only publish native events; they never parse JSON.
+// One fixed management executor and one XRPC IO owner per live world. The same http.v1 server carries the
+// world's chassis HOLD methods (POST /v1/call/xgc2.chassis.hold/<Method>, see chassis_hold.hpp). Engine
+// update callbacks only publish native events; they never parse JSON.
 class SimulationService {
   public:
     SimulationService(gazebo::physics::WorldPtr world, std::string socket_path, std::string target_id,
-                      const std::string& resource_root, std::vector<std::string> chassis_robot_ids = {},
-                      const std::vector<std::string>& required_components = {},
+                      const std::string& resource_root, const std::vector<std::string>& required_components = {},
                       std::string configuration_revision = {});
     ~SimulationService();
     SimulationService(const SimulationService&) = delete;

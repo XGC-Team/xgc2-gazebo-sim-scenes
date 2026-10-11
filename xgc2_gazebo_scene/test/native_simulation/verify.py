@@ -48,7 +48,6 @@ def main():
             <socket_path>{escape(str(endpoint))}</socket_path><target_id>test-world</target_id>
             <resource_root>{escape(str(root))}</resource_root>
             <configuration_revision>fixture-configuration-1</configuration_revision>
-            <chassis_robot_id>drive-1</chassis_robot_id><chassis_robot_id>drive-2</chassis_robot_id>
           </plugin></world></sdf>''')
         environment = dict(os.environ)
         environment.pop("DISPLAY", None)
@@ -85,10 +84,13 @@ def main():
             def query(route):
                 return json.loads(client.call(route, method="GET", timeout=5).body)
 
-            policy = query("/v1/runtime-policy")
-            fields = {field["name"]: field for field in policy["fields"]}
-            assert fields["MAX_REQUEST_BYTES"]["value"] == description["limits"]["request_bytes"]
-            assert query("/v1/chassis/runtime-policy") == policy, "embedded HOLD invented a second policy"
+            def hold(method, body):
+                return json.loads(client.call("/v1/call/xgc2.chassis.hold/" + method, body, timeout=5).body)
+
+            assert description["facts"]["capabilities"] == [{"name": "xgc2.chassis.hold", "entities": []}]
+            hold_description = hold("Describe", {})
+            assert hold_description["instance"] == ref["instance_id"], "HOLD shares the instance of the transport"
+            assert hold_description["robots"] == []
             health = query("/v1/health")
             assert health["world_initialized"] and health["lifecycle"] == "ready", health
             immediate = json.loads(client.call("/v1/health/observe", {"after_revision": 0}, timeout=2).body)
@@ -167,18 +169,26 @@ def main():
                 added = mutate("/v1/entities", {"entity": drive})
                 assert added["state"] == "succeeded", added
                 assert query(f"/v1/entities/drive-{n}")["entities"][0]["state"]["twist"]["linear"] == [1, 0, 0]
-            hold = query("/v1/chassis/hold")
-            held = json.loads(client.call("/v1/chassis/hold", {"expected_revision": hold["revision"], "changes": [
-                {"robot_id": "drive-1", "held": True}, {"robot_id": "drive-2", "held": True}]}).body)
-            assert held["stage"] == "applied" and all(item["zero_applied"] for item in held["changes"]), held
-            assert all(item["held"] for item in held["robots"])
-            assert query("/v1/entities/drive-1")["entities"][0]["state"]["twist"]["linear"] == [0, 0, 0]
-            assert query("/v1/entities/drive-2")["entities"][0]["state"]["twist"]["linear"] == [0, 0, 0]
-            released = json.loads(client.call("/v1/chassis/hold", {"expected_revision": held["revision"], "changes": [
-                {"robot_id": "drive-1", "held": False}, {"robot_id": "drive-2", "held": False}]}).body)
-            assert released["stage"] == "applied" and all(item["zero_applied"] for item in released["changes"])
+            def twist(name):
+                return query(f"/v1/entities/{name}")["entities"][0]["state"]["twist"]["linear"]
+
+            assert query("/v1/world")["paused"]
+            assert query("/v1/describe")["facts"]["capabilities"] == [
+                {"name": "xgc2.chassis.hold", "entities": ["drive-1", "drive-2"]}]
+            engaged = hold("Engage", {"robot_ids": ["drive-1", "drive-2"]})["robots"]
+            assert [(r["outcome"], r["held"]) for r in engaged] == [("engaged", True)] * 2, engaged
+            for n in (1, 2):
+                # The native tick writes zero while the world is paused.
+                deadline = time.monotonic() + 5
+                while hold("State", {"robot_ids": [f"drive-{n}"]})["robots"][0]["stage"] not in ("zero_written", "stopped"):
+                    assert time.monotonic() < deadline, "zero was not written while paused"
+                    time.sleep(0.01)
+            assert twist("drive-1") == [0, 0, 0] and twist("drive-2") == [0, 0, 0]
+            released = hold("Release", {"expected_instance": ref["instance_id"], "changes": [
+                {"robot_id": r["robot_id"], "expected_revision": r["revision"]} for r in engaged]})["robots"]
+            assert [r["outcome"] for r in released] == ["released"] * 2, released
             mutate("/v1/world/step", {"steps": 2})
-            assert query("/v1/entities/drive-1")["entities"][0]["state"]["twist"]["linear"] == [0, 0, 0], "release replayed cached command"
+            assert twist("drive-1") == [0, 0, 0], "release replayed cached command"
             urdf = '<robot name="camera"><link name="body"><inertial><mass value="1"/><inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/></inertial></link></robot>'
             converted = mutate("/v1/entities", {"entity": {"id": "urdf-1", "role": "sensor", "pose": pose,
                 "asset": {"id": "camera-urdf", "realization": {"media_type": "application/urdf+xml", "content": urdf}}}})
@@ -241,7 +251,7 @@ def main():
                                          "time-epoch", "removal", "replacement-fence", "deduplication",
                                          "strict-input", "instance-binding", "native-scene-geometry",
                                          "scene-identity", "native-scene-motion", "native-scene-clear",
-                                         "shared-runtime-policy", "native-multi-hold-zero",
+                                         "shared-hold-instance", "native-multi-hold-zero",
                                          "hold-release-no-replay", "native-urdf-create", "configuration-revision",
                                          "native-health", "health-observe-deadline-reclaim", "scene-held-observe",
                                          "completed-query-leases-released"]}
