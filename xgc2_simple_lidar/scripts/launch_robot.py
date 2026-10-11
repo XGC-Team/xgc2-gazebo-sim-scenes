@@ -29,7 +29,8 @@ def main():
                       target_id=args.target_id)
     if any(arg.partition(':=')[0] in parameters for arg in launch_args):
         raise ValueError('launch arguments override frozen robot input')
-    arguments = ['/opt/ros/noetic/bin/roslaunch', args.launch_file, *launch_args]
+    # --wait: with parallel starts the session master may not be up yet, and roslaunch would start its own.
+    arguments = ['/opt/ros/noetic/bin/roslaunch', '--wait', args.launch_file, *launch_args]
     arguments.extend(key + ':=' + (str(value).lower() if isinstance(value, bool) else str(value))
                      for key, value in parameters.items())
     os.execv('/opt/ros/noetic/bin/roslaunch', arguments)

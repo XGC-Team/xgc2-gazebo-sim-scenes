@@ -11,6 +11,8 @@ workspace="${XGC2_GAZEBO_SIM_SCENES_TEST_WS:-${repo_root}/.ci/package-tests}"
 
 PYTHONPATH="${repo_root}/xgc2_gazebo_scene/python:${PYTHONPATH:-}" \
   "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_simulation_client.py -v
+PYTHONPATH="${repo_root}/xgc2_simple_lidar/python:${PYTHONPATH:-}" \
+  "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_simple_lidar/test" -p test_launch_robot.py -v
 
 if [[ ! -f "/opt/ros/${ros_distro}/setup.bash" ]]; then
   echo "Missing ROS setup: /opt/ros/${ros_distro}/setup.bash" >&2
