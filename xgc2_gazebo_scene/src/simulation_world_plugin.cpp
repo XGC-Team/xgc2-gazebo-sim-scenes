@@ -1,7 +1,7 @@
 #include "xgc2_gazebo_scene/simulation_service.hpp"
+#include <cstdlib>
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/physics/World.hh>
-#include <cstdlib>
 #include <memory>
 #include <sdf/sdf.hh>
 #include <stdexcept>

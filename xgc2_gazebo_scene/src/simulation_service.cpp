@@ -880,8 +880,8 @@ class SimulationService::Impl {
                 else {
                     if (describe_waiters_.size() >= 16)
                         throw DomainError(429, "resource_exhausted", "describe waiter capacity reached");
-                    describe_waiters_.push_back({std::move(reply),
-                        std::min(r.deadline, Clock::now() + std::chrono::milliseconds(wait_ms))});
+                    describe_waiters_.push_back(
+                        {std::move(reply), std::min(r.deadline, Clock::now() + std::chrono::milliseconds(wait_ms))});
                 }
                 return;
             }
