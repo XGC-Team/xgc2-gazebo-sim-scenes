@@ -3,33 +3,42 @@ import math
 import re
 
 
-def robot_parameters(robot, profile, namespace):
+def robot_parameters(row, profile, run_mode):
     """Lower one frozen robot at the native launch boundary."""
-    if not isinstance(robot, dict) or robot.get('namespace') != namespace:
-        raise ValueError('robot namespace differs from the claimed namespace')
-    if not re.fullmatch(r'/[A-Za-z][A-Za-z0-9_]{0,127}', namespace):
-        raise ValueError('robot requires one absolute ROS namespace segment')
-    identity = robot.get('id')
+    if not isinstance(row, dict):
+        raise ValueError('robot must be a freezer row object')
+    namespace = row.get('namespace')
+    if not isinstance(namespace, str) or not re.fullmatch(r'/[A-Za-z][A-Za-z0-9_]{0,127}', namespace):
+        raise ValueError('robot.namespace requires one absolute ROS namespace segment')
+    identity = row.get('slotId')
     if not isinstance(identity, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', identity):
-        raise ValueError('robot requires an explicit chassis identity')
+        raise ValueError('robot.slotId requires an explicit chassis identity')
     name = namespace[1:]
-    if robot.get('kind') != {'scout': 'scout_mini', 'mecanum': 'mecanum_ugv'}[profile]:
+    if row.get('kind') != {'scout': 'scout_mini', 'mecanum': 'mecanum_ugv'}[profile]:
         raise ValueError('robot kind differs from the native launch profile')
-    parameters = surface_parameters(robot['authoredSimulationSensors'])
+    binding = row.get('binding')
+    if not isinstance(binding, dict):
+        raise ValueError('robot.binding must be an object')
+    pose = binding.get('initialPose')
+    if not isinstance(pose, dict):
+        raise ValueError('robot.binding.initialPose must be an object')
+    parameters = surface_parameters(binding.get('simulationSensors') or {})
     parameters.update(ns=name, model_name=identity)
     for key in ('x', 'y', 'z', 'yaw'):
-        value = robot['initialPose'][key]
+        value = pose.get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-            raise ValueError('robot initial pose must be finite')
+            raise ValueError('robot.binding.initialPose.' + key + ' must be finite')
         parameters[key] = value
     if profile == 'scout':
-        scout = robot['scout']
+        scout = binding.get('scout', {})
+        if not isinstance(scout, dict):
+            raise ValueError('robot.binding.scout must be an object')
         parameters.update(robot_description_param=namespace+'/robot_description',
                           tf_prefix=name, frame_prefix=name+'/', sensor_ns=name,
-                          robot_state_publisher_ns=name, run_mode=robot['runMode'])
+                          robot_state_publisher_ns=name, run_mode=run_mode)
         for source, target in (('lidarSimulationEnabled', 'enable_lidar'),
                                ('imageSimulationEnabled', 'enable_camera')):
-            value = scout[source]
+            value = scout.get(source, False)
             if not isinstance(value, bool):
                 raise ValueError('Scout sensor switches must be boolean')
             parameters[target] = value
