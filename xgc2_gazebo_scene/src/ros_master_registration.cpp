@@ -138,7 +138,9 @@ class RosMasterWatcher {
         const int fd = socket_owner.fd;
         std::string body =
             "<?xml version=\"1.0\"?><methodCall><methodName>" + std::string(method) + "</methodName><params>";
-        for (int i = 0; i < parameters.size(); ++i)
+        // XmlRpcValue iterates structs only, so an array of parameters is indexed.
+        const int parameter_count = parameters.size();
+        for (int i = 0; i < parameter_count; ++i)
             body += "<param>" + parameters[i].toXml() + "</param>";
         body += "</params></methodCall>";
         const std::string request =
