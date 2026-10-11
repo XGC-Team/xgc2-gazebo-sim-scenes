@@ -155,8 +155,6 @@ build_scene_deb() {
   done
   test -x "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/spawn_robot_model"
   test -x "${pkg_root}${PREFIX}/lib/xgc2_gazebo_scene/simulation_world_prepare"
-  find "${pkg_root}${PREFIX}/lib/python3/dist-packages/xgc2_gazebo_scene" \
-    -type d -name __pycache__ -prune -exec rm -rf {} +
   mkdir -p "${BUILD_DIR}/debian"
   cat > "${BUILD_DIR}/debian/control" <<EOF
 Source: xgc2-gazebo-sim-scenes
