@@ -5,6 +5,10 @@ find_package(catkin REQUIRED)
 catkin_package()
 catkin_install_python(PROGRAMS scripts/native_world_start scripts/native_obstacle.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+install(DIRECTORY ../process-definitions
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+  FILES_MATCHING PATTERN "*.json"
+)
 
 install(DIRECTORY worlds models
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}

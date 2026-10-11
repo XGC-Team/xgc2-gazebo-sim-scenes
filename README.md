@@ -8,6 +8,16 @@ parts:
 - `xgc2_gazebo_scene`: the scene director. It owns deterministic obstacle
   motion and the XGC2 runtime scene-control interface.
 
+The worlds package installs `gazebo-client`, `gazebo-server` and
+`gazebo-server-hybrid` from `process-definitions/` under
+`/usr/share/xgc2/process-definitions/`. Servers consume an explicitly prepared
+single-world SDF. Core passes its allocated `socketPath` to `native_world_start`
+as `--socket-path`; the launcher forwards it to the native world host through
+`XGC_SIM_SOCKET_PATH`, leaving the SDF's resource and component grants intact.
+Unbound `GET /v1/describe?wait_ready_ms=N` waits asynchronously for the native
+world and required components, up to 30000 ms. The GUI's `modelDatabaseUri`
+remains a plain URI parameter and defaults to offline access.
+
 For independently authored obstacle scenes, choose
 [`scene_editable`](gazebo_sim_worlds/worlds/scene_editable/README.md). Its world
 plugin consumes the unified scene runtime interface, materializes live geometry

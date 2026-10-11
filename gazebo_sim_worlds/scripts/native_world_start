@@ -22,6 +22,7 @@ def absolute_file(value, label, maximum):
 def compose(arguments, environment):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--world', required=True)
+    parser.add_argument('--socket-path', help='Core-allocated private native world endpoint')
     for name in ('paused', 'gui', 'ros-data'):
         parser.add_argument('--'+name, required=True, choices=('true', 'false'))
     parser.add_argument('--vrpn-config', default='')
@@ -59,6 +60,14 @@ def compose(arguments, environment):
     if not math.isfinite(rate) or not 0 <= rate <= 1e6:
         raise ValueError('--clock-rate-hz must be finite in [0, 1000000]')
     env = dict(environment)
+    env.pop('XGC_SIM_SOCKET_PATH', None)
+    if args.socket_path is not None:
+        socket_path = args.socket_path
+        if (not os.path.isabs(socket_path) or os.path.normpath(socket_path) != socket_path
+                or socket_path.startswith('//') or socket_path == '/'
+                or '\x00' in socket_path or len(os.fsencode(socket_path)) > 107):
+            raise ValueError('--socket-path must be a canonical absolute Unix socket path')
+        env['XGC_SIM_SOCKET_PATH'] = socket_path
     if args.allow_online_models == 'false': env['GAZEBO_MODEL_DATABASE_URI'] = 'http://127.0.0.1:9'
     for key in ('XGC_SIM_VRPN_CONFIG', 'XGC_SIM_ROS_NAME', 'XGC_SIM_ROS_NAMESPACE', 'XGC_SIM_ROS_LOG', 'XGC_SIM_ROS_CLOCK_RATE_HZ'):
         env.pop(key, None)

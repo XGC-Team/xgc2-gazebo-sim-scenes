@@ -1,6 +1,7 @@
 #include "xgc2_gazebo_scene/simulation_service.hpp"
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/physics/World.hh>
+#include <cstdlib>
 #include <memory>
 #include <sdf/sdf.hh>
 #include <stdexcept>
@@ -17,8 +18,10 @@ class SimulationWorldPlugin final : public gazebo::WorldPlugin {
         if (config->HasElement("required_component"))
             for (auto id = config->GetElement("required_component"); id; id = id->GetNextElement("required_component"))
                 required_components.push_back(id->Get<std::string>());
+        const char* allocated_socket = std::getenv("XGC_SIM_SOCKET_PATH");
+        const std::string socket_path = allocated_socket ? allocated_socket : config->Get<std::string>("socket_path");
         service_ = std::make_unique<SimulationService>(
-            std::move(world), config->Get<std::string>("socket_path"), config->Get<std::string>("target_id"),
+            std::move(world), socket_path, config->Get<std::string>("target_id"),
             config->Get<std::string>("resource_root"), required_components,
             config->HasElement("configuration_revision") ? config->Get<std::string>("configuration_revision") : "");
         service_->Start();

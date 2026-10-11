@@ -1,0 +1,312 @@
+{
+  "apiVersion": "xgc.execution.process/v1",
+  "definitions": [
+    {
+      "id": "gazebo-server",
+      "version": "5.0.0",
+      "label": "Gazebo server",
+      "description": "Native Gazebo world entry with owner-described simulation service; ROS carries user data.",
+      "parameters": {
+        "groups": [
+          {
+            "id": "simulation",
+            "label": "Simulation",
+            "collapsed": true,
+            "parameters": [
+              "world",
+              "physics",
+              "paused"
+            ]
+          },
+          {
+            "id": "vrpn-server",
+            "label": "VRPN server",
+            "collapsed": true,
+            "parameters": [
+              "vrpnBindAddress",
+              "vrpnPort",
+              "vrpnConfigPath"
+            ]
+          },
+          {
+            "id": "vrpn-tracking",
+            "label": "VRPN tracking",
+            "collapsed": true,
+            "parameters": [
+              "vrpnAutoTrackKnownModels",
+              "vrpnTrackerPatterns",
+              "vrpnMatchMode",
+              "vrpnPublishRate",
+              "vrpnScanInterval",
+              "vrpnStaleTimeout",
+              "vrpnVelocityFilterCutoff",
+              "vrpnAccelerationFilterCutoff",
+              "vrpnDerivativeResetTimeout"
+            ]
+          },
+          {
+            "id": "gazebo-advanced",
+            "label": "Gazebo Advanced",
+            "collapsed": true,
+            "parameters": [
+              "masterPort",
+              "verbose",
+              "allowOnlineModels"
+            ]
+          },
+          {
+            "id": "ros-advanced",
+            "label": "ROS Advanced",
+            "collapsed": true,
+            "parameters": [
+              "rosInstallPath",
+              "rosMasterUri",
+              "rosIp",
+              "rosHostname",
+              "rosLogDir"
+            ]
+          }
+        ],
+        "properties": {
+          "allowOnlineModels": {
+            "type": "boolean",
+            "description": "Allow Gazebo Classic to contact its online model database",
+            "default": false
+          },
+          "masterPort": {
+            "type": "integer",
+            "description": "Gazebo master TCP port",
+            "default": 11345,
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "Start the simulation paused",
+            "default": false
+          },
+          "physics": {
+            "type": "string",
+            "description": "Gazebo physics engine",
+            "default": "ode",
+            "enum": [
+              "ode",
+              "bullet",
+              "dart",
+              "simbody"
+            ]
+          },
+          "rosHostname": {
+            "type": "string",
+            "description": "Optional ROS_HOSTNAME advertised by Gazebo",
+            "default": "",
+            "output": true
+          },
+          "rosInstallPath": {
+            "type": "string",
+            "description": "Absolute ROS installation prefix",
+            "default": "/opt/ros/noetic",
+            "x-xgc-path-kind": "directory"
+          },
+          "rosIp": {
+            "type": "string",
+            "description": "Optional ROS_IP advertised by Gazebo",
+            "default": "",
+            "output": true
+          },
+          "rosLogDir": {
+            "type": "string",
+            "description": "Absolute ROS_LOG_DIR for Gazebo ROS plugins",
+            "default": "/tmp/xgc2/ros/log",
+            "x-xgc-path-kind": "directory"
+          },
+          "rosMasterUri": {
+            "type": "string",
+            "description": "ROS_MASTER_URI used by gazebo_ros_api_plugin",
+            "default": "http://127.0.0.1:11311",
+            "output": true
+          },
+          "verbose": {
+            "type": "boolean",
+            "description": "Enable verbose Gazebo logging",
+            "default": true
+          },
+          "vrpnAccelerationFilterCutoff": {
+            "type": "number",
+            "description": "Independent low-pass cutoff (Hz) for linear and angular acceleration derived from VRPN poses",
+            "default": 25,
+            "minimum": 0
+          },
+          "vrpnAutoTrackKnownModels": {
+            "type": "boolean",
+            "description": "Automatically expose configured canonical robot model names",
+            "default": true
+          },
+          "vrpnBindAddress": {
+            "type": "string",
+            "description": "VRPN listener bind address (0.0.0.0 = all interfaces)",
+            "default": "0.0.0.0"
+          },
+          "vrpnConfigPath": {
+            "type": "string",
+            "description": "Trusted VRPN tracker, extrinsic, noise, and delay configuration",
+            "default": "/opt/ros/noetic/share/gazebo_sim_vrpn_bridge/config/vrpn_server.yaml",
+            "fixedOnly": true,
+            "x-xgc-path-kind": "file",
+            "x-xgc-file-extensions": [
+              ".yaml",
+              ".yml"
+            ]
+          },
+          "vrpnDerivativeResetTimeout": {
+            "type": "number",
+            "description": "Derivative state reset gap in seconds",
+            "default": 0.5,
+            "minimum": 0.01
+          },
+          "vrpnMatchMode": {
+            "type": "string",
+            "default": "contains",
+            "enum": [
+              "contains",
+              "exact",
+              "prefix"
+            ]
+          },
+          "vrpnPort": {
+            "type": "integer",
+            "description": "In-process VRPN listener port",
+            "default": 3884,
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "vrpnPublishRate": {
+            "type": "number",
+            "description": "VRPN tracker report rate in Hz",
+            "default": 120,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "vrpnScanInterval": {
+            "type": "number",
+            "description": "Gazebo model discovery interval in seconds",
+            "default": 2,
+            "minimum": 0.01
+          },
+          "vrpnStaleTimeout": {
+            "type": "number",
+            "description": "Wall-time age before a captured pose is reported stale",
+            "default": 1,
+            "minimum": 0.01
+          },
+          "vrpnVelocityFilterCutoff": {
+            "type": "number",
+            "description": "Independent low-pass cutoff (Hz) for linear and angular velocity derived from VRPN poses",
+            "default": 25,
+            "minimum": 0
+          },
+          "world": {
+            "type": "string",
+            "description": "Prepared single-world SDF containing the native service endpoint and resource grant.",
+            "x-xgc-path-kind": "file",
+            "x-xgc-file-extensions": [
+              ".world"
+            ]
+          },
+          "vrpnTrackerPatterns": {
+            "type": "string",
+            "description": "Comma-separated Gazebo model name patterns to expose as VRPN trackers when auto-track is off. Used with match_mode.",
+            "default": "uav,ugv,mecanum"
+          },
+          "socketPath": {
+            "type": "string",
+            "default": "",
+            "fixedOnly": true,
+            "description": "Explicit private native world endpoint."
+          }
+        },
+        "required": [
+          "world"
+        ]
+      },
+      "command": {
+        "executable": "${rosInstallPath}/lib/gazebo_sim_worlds/native_world_start",
+        "env": {
+          "GAZEBO_MASTER_URI": "http://127.0.0.1:${masterPort}",
+          "GAZEBO_MODEL_PATH": "${rosInstallPath}/share/gazebo_sim_worlds/models:${rosInstallPath}/share/gazebo_sim_fs150_sitl/models:/usr/share/gazebo-11/models",
+          "GAZEBO_PLUGIN_PATH": "${rosInstallPath}/lib/gazebo_sim_px4_1_12:${rosInstallPath}/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins",
+          "GAZEBO_RESOURCE_PATH": "/usr/share/gazebo-11",
+          "ROS_HOSTNAME": "${rosHostname}",
+          "ROS_IP": "${rosIp}",
+          "ROS_LOG_DIR": "${rosLogDir}",
+          "ROS_MASTER_URI": "${rosMasterUri}"
+        },
+        "args": [
+          "--world",
+          "${world}",
+          "--socket-path",
+          "${socketPath}",
+          "--gui",
+          "false",
+          "--ros-data",
+          "true",
+          "--paused",
+          "${paused}",
+          "--physics",
+          "${physics}",
+          "--verbose",
+          "${verbose}",
+          "--allow-online-models",
+          "${allowOnlineModels}",
+          "--vrpn-config",
+          "${vrpnConfigPath}",
+          "--vrpn-bind-address",
+          "${vrpnBindAddress}",
+          "--vrpn-port",
+          "${vrpnPort}",
+          "--vrpn-publish-rate",
+          "${vrpnPublishRate}",
+          "--vrpn-scan-interval",
+          "${vrpnScanInterval}",
+          "--vrpn-stale-timeout",
+          "${vrpnStaleTimeout}",
+          "--vrpn-velocity-filter-cutoff",
+          "${vrpnVelocityFilterCutoff}",
+          "--vrpn-acceleration-filter-cutoff",
+          "${vrpnAccelerationFilterCutoff}",
+          "--vrpn-derivative-reset-timeout",
+          "${vrpnDerivativeResetTimeout}",
+          "--vrpn-match-mode",
+          "${vrpnMatchMode}",
+          "--vrpn-auto-track-known-models",
+          "${vrpnAutoTrackKnownModels}",
+          "--vrpn-tracker-patterns",
+          "${vrpnTrackerPatterns}"
+        ]
+      },
+      "services": [
+        {
+          "service": "xgc2.simulation",
+          "api_version": "v1",
+          "profile": "http.v1",
+          "endpointParameter": "socketPath"
+        }
+      ],
+      "setupFiles": [
+        "${rosInstallPath}/setup.bash"
+      ],
+      "readiness": {
+        "kind": "describe",
+        "startGraceMs": 180000,
+        "timeoutMs": 30000
+      },
+      "stop": {
+        "graceMs": 8000
+      },
+      "logs": {
+        "maxBytes": 1048576,
+        "files": 3
+      }
+    }
+  ]
+}

@@ -42,4 +42,23 @@ class NativeWorldStartTest(unittest.TestCase):
             for extra in [['--probe'], ['__master:=http://station:11311'], ['__name:=one', '__name:=two'], ['--vrpn-config', 'relative.yaml']]:
                 with self.subTest(extra=extra), self.assertRaises(ValueError): entry.compose(args+extra, {})
 
+    def test_allocated_socket_overrides_only_the_native_endpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            world = Path(directory)/'world.sdf'; world.write_text(WORLD)
+            socket_path = str(Path(directory)/'allocated.sock')
+            args = ['--world', str(world), '--paused', 'false', '--gui', 'false',
+                    '--ros-data', 'false', '--gazebo-bin', '/usr/bin/true']
+            environment = {'XGC_SIM_SOCKET_PATH': '/stale.sock'}
+            _, argv, env = entry.compose(args+['--socket-path', socket_path], environment)
+            self.assertEqual(env['XGC_SIM_SOCKET_PATH'], socket_path)
+            self.assertEqual(argv[-1], str(world))
+            self.assertEqual(world.read_text(), WORLD)
+            self.assertEqual(environment['XGC_SIM_SOCKET_PATH'], '/stale.sock')
+            _, _, env = entry.compose(args, environment)
+            self.assertNotIn('XGC_SIM_SOCKET_PATH', env)
+            for invalid in ('', 'relative.sock', '/', '//private/world.sock',
+                            '/private/../world.sock', '/'+('a'*107), '/private/\x00.sock'):
+                with self.subTest(socket_path=invalid), self.assertRaises(ValueError):
+                    entry.compose(args+['--socket-path', invalid], environment)
+
 if __name__ == '__main__': unittest.main()

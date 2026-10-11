@@ -10,6 +10,15 @@ export GAZEBO_MODEL_PATH="${repo_root}/gazebo_sim_worlds/models:${GAZEBO_MODEL_P
 export GAZEBO_MODEL_DATABASE_URI="${GAZEBO_MODEL_DATABASE_URI:-}"
 
 bash -n .xgc2/scripts/*.sh
+python3 - <<'PY'
+import json
+from pathlib import Path
+for name in ('gazebo-client', 'gazebo-server', 'gazebo-server-hybrid'):
+    document = json.loads((Path('process-definitions') / (name + '.json')).read_text())
+    assert document['apiVersion'] == 'xgc.execution.process/v1'
+    definition, = document['definitions']
+    assert definition['id'] == name
+PY
 
 nested_git="$(
   find . \

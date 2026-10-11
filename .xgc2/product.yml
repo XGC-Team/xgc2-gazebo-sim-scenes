@@ -125,6 +125,9 @@ usage:
     '
 ownership:
   paths:
+  - /usr/share/xgc2/process-definitions/gazebo-client.json
+  - /usr/share/xgc2/process-definitions/gazebo-server.json
+  - /usr/share/xgc2/process-definitions/gazebo-server-hybrid.json
   - /opt/ros/noetic/share/gazebo_sim_worlds
   - /opt/ros/noetic/share/xgc2_gazebo_scene
   - /opt/ros/noetic/share/xgc2_simple_lidar

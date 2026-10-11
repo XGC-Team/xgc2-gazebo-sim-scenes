@@ -10,6 +10,9 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-sim-worlds" >/dev/null
+for definition in gazebo-client gazebo-server gazebo-server-hybrid; do
+  test -s "/usr/share/xgc2/process-definitions/${definition}.json"
+done
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-scene" >/dev/null
 dpkg -s "ros-${ROS_DISTRO}-xgc2-simple-lidar" >/dev/null
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-rendering" >/dev/null

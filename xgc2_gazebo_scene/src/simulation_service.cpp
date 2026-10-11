@@ -382,6 +382,7 @@ class SimulationService::Impl {
         }
         health_observers_.clear();
         scene_observers_.clear();
+        describe_waiters_.clear();
         // Pending engages hold replies too: answer them before the server goes.
         chassis_->Stop();
         server_.reset();
@@ -400,7 +401,10 @@ class SimulationService::Impl {
             ack_cv_.notify_one();
         }
     }
-    void MarkNativeReady() noexcept { native_ready_.store(true); }
+    void MarkNativeReady() noexcept {
+        native_ready_.store(true);
+        server_->wake();
+    }
     std::shared_ptr<detail::NativeComponentState> AttachComponent(const std::string& id) {
         for (const auto& component : components_)
             if (component.id == id) {
@@ -495,6 +499,12 @@ class SimulationService::Impl {
     }
     Json::Value Description() {
         Json::Value v;
+        const auto health = Health();
+        v["service"] = "xgc2.simulation";
+        v["api_version"] = "v1";
+        v["instance_id"] = instance_;
+        v["ready"] = health["lifecycle"] == "ready";
+        v["facts"]["health"] = health;
         auto& ref = v["service_ref"];
         ref["target_id"] = target_;
         ref["service"] = "xgc2.simulation";
@@ -846,10 +856,33 @@ class SimulationService::Impl {
     void Handle(HttpRequest r, HttpReply reply) {
         try {
             Drain();
-            if (r.target == "/v1/describe" && r.method == "GET") {
+            if (r.method == "GET" && (r.target == "/v1/describe" || r.target.starts_with("/v1/describe?"))) {
                 if (!r.body.empty())
                     Invalid("describe body is unsupported");
-                reply.complete(Response(Description()));
+                unsigned wait_ms = 0;
+                if (r.target != "/v1/describe") {
+                    const std::string prefix = "/v1/describe?wait_ready_ms=";
+                    if (!r.target.starts_with(prefix))
+                        Invalid("describe supports only wait_ready_ms");
+                    const auto value = r.target.substr(prefix.size());
+                    if (value.empty() || value.size() > 5)
+                        Invalid("wait_ready_ms must be in [0, 30000]");
+                    for (const auto digit : value) {
+                        if (digit < '0' || digit > '9')
+                            Invalid("wait_ready_ms must be in [0, 30000]");
+                        wait_ms = wait_ms * 10 + unsigned(digit - '0');
+                    }
+                    if (wait_ms > 30000)
+                        Invalid("wait_ready_ms must be in [0, 30000]");
+                }
+                if (!wait_ms || Health()["lifecycle"] == "ready")
+                    reply.complete(Response(Description()));
+                else {
+                    if (describe_waiters_.size() >= 16)
+                        throw DomainError(429, "resource_exhausted", "describe waiter capacity reached");
+                    describe_waiters_.push_back({std::move(reply),
+                        std::min(r.deadline, Clock::now() + std::chrono::milliseconds(wait_ms))});
+                }
                 return;
             }
             if (r.target == "/v1/health" && r.method == "GET") {
@@ -1026,6 +1059,15 @@ class SimulationService::Impl {
             }
         }
         const auto health = Health();
+        for (auto it = describe_waiters_.begin(); it != describe_waiters_.end();) {
+            if (it->reply.cancelled())
+                it = describe_waiters_.erase(it);
+            else if (health["lifecycle"] == "ready" || Clock::now() >= it->deadline) {
+                it->reply.complete(Response(Description()));
+                it = describe_waiters_.erase(it);
+            } else
+                ++it;
+        }
         for (auto it = health_observers_.begin(); it != health_observers_.end();) {
             if (health["revision"].asUInt64() != it->after) {
                 it->reply.complete(Response(health));
@@ -1433,6 +1475,7 @@ class SimulationService::Impl {
     std::atomic<bool> native_ready_{false};
     std::vector<Component> components_;
     std::vector<Observer> health_observers_, scene_observers_;
+    std::vector<Waiter> describe_waiters_;
     std::atomic<bool> scene_observers_active_{false}, scene_snapshot_requested_{false}, scene_snapshot_ready_{false};
     std::mutex scene_snapshot_mutex_;
     std::string scene_snapshot_;

@@ -91,6 +91,11 @@ build_worlds_deb() {
   mkdir -p "${pkg_root}"
   copy_path "${PREFIX_ROOT}/share/gazebo_sim_worlds" "${pkg_root}"
   copy_path "${PREFIX_ROOT}/lib/gazebo_sim_worlds" "${pkg_root}"
+  mkdir -p "${pkg_root}/usr/share/xgc2"
+  mv "${pkg_root}${PREFIX}/share/gazebo_sim_worlds/process-definitions" "${pkg_root}/usr/share/xgc2/"
+  for definition in gazebo-client gazebo-server gazebo-server-hybrid; do
+    test -s "${pkg_root}/usr/share/xgc2/process-definitions/${definition}.json"
+  done
   test -x "${pkg_root}${PREFIX}/lib/gazebo_sim_worlds/native_world_start"
   test -f "${pkg_root}${PREFIX}/share/gazebo_sim_worlds/launch/native_world.launch"
   test -f "${pkg_root}${PREFIX}/share/gazebo_sim_worlds/package.xml"
