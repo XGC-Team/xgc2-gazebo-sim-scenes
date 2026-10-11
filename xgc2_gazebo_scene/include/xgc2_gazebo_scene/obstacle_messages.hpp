@@ -82,9 +82,7 @@ class ObstacleMessages {
         const std::vector<xgc2_geometry_msgs::ConvexBodyInstance>* parts = nullptr;
     };
 
-    ObstacleMessages() {
-        instances_.header.frame_id = "world";
-    }
+    ObstacleMessages() { instances_.header.frame_id = "world"; }
 
     /// Replaces the set of obstacles. Everything it keeps is copied: the
     /// local parts are read here only.

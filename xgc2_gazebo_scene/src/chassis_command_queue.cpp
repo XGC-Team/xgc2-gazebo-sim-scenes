@@ -37,7 +37,8 @@ class CommandQueue::Impl final : public ros::CallbackQueueInterface {
   private:
     class Stamped final : public ros::CallbackInterface {
       public:
-        Stamped(ros::CallbackInterfacePtr callback, std::int64_t stamp) : callback_(std::move(callback)), stamp_(stamp) {}
+        Stamped(ros::CallbackInterfacePtr callback, std::int64_t stamp)
+            : callback_(std::move(callback)), stamp_(stamp) {}
         bool ready() override { return callback_->ready(); }
         CallResult call() override {
             struct Scope {

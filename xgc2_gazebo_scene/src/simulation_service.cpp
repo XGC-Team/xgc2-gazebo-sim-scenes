@@ -1460,8 +1460,7 @@ class SimulationService::Impl {
 };
 
 SimulationService::SimulationService(gazebo::physics::WorldPtr world, std::string path, std::string target,
-                                     const std::string& root,
-                                     const std::vector<std::string>& required_components,
+                                     const std::string& root, const std::vector<std::string>& required_components,
                                      std::string configuration_revision) {
     auto* identity = world.get();
     impl_ = std::make_unique<Impl>(std::move(world), std::move(path), std::move(target), root, required_components,
