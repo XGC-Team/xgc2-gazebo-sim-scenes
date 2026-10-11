@@ -22,10 +22,6 @@ in Gazebo Server, then load the YAML through the separate user scene workflow.
 - `/xgc/scene/gazebo/apply`: `xgc2_geometry_msgs/ApplyScene`, full typed snapshot.
 - `/xgc/scene/state`: `xgc2_geometry_msgs/SceneState`, computed current poses from
   the scene runtime. This plugin has no separate motion clock or YAML loader.
-- `/xgc/scene/consumer_status`: `SceneConsumerStatus` heartbeat. `applied` is
-  whether this epoch/revision is in the simulator; `operational` matches
-  `applied` for this adapter; `capability` is `ok` when applied else empty;
-  `success` is published equal to `applied` and is not a second authority.
 
 The world plugin's `scene_namespace` parameter changes the common namespace.
 `apply_timeout` is a wall-clock timeout, default 5 seconds, maximum 60 seconds.
@@ -67,7 +63,7 @@ its parameters under the physics update mutex). `ModelSdfParser`
 (`model_sdf_parser.hpp`) reads the SDF specification once, which costs about 25 ms
 per `sdf::init`, and the parameters are restored after parsing, not during it.
 `test/run_sdf_parser_benchmark.sh` measures it with libsdformat.
-Applying, State and the heartbeat resolve scene models through an index of the
+Applying and State resolve scene models through an index of the
 world's model list (`model_index.hpp`) that is rebuilt only when the list changes
 (`World::ModelByName` walks every entity and holds the model-loading mutex while
 it does), refreshed before every step and every 10 ms wait pass. A held obstacle
@@ -119,8 +115,6 @@ services for one-shot scene edits. Continuous motion is configured through:
 
 Planning ground truth is published on:
 
-- `/xgc2/simulation/obstacles/geometry` (latched)
-- `/xgc2/simulation/obstacles/state` (latched latest snapshot, simulation time)
 - `/xgc2/simulation/obstacles/geometry_library` (standard planning library,
   latched)
 - `/xgc2/simulation/obstacles/instances` (standard planning instances,
@@ -157,39 +151,20 @@ when it changed, or while a managed model is still rejected; an unchanged
 world costs one comparison per model instead of a fresh map per update.
 `test/run_model_snapshot_benchmark.sh` measures both without Gazebo.
 
-The 30 Hz state and instance messages keep what does not change between
-publications (obstacle and model names, generation, instance ids and names,
-geometry types, scales) in `ObstacleMessages` (`obstacle_messages.hpp`), which is
-rebuilt when the set of obstacles changes. A publication writes only poses,
-velocities, the motion mode and flags, so an unchanged set allocates nothing.
-`test/obstacle_messages_test.cpp` compares the serialized messages with the ones
-rebuilt every time, and `test/run_obstacle_messages_benchmark.sh` measures both
-without Gazebo.
+The 30 Hz instance message keeps instance ids and names, geometry types, scales
+and local collision poses in `ObstacleMessages` (`obstacle_messages.hpp`), which
+is rebuilt when the set of obstacles changes. A publication writes only world
+poses, velocities and static flags, so an unchanged set allocates nothing.
+`test/obstacle_messages_test.cpp` checks those values, membership changes and
+cache reuse without Gazebo. Geometry-library templates are published when
+the obstacle set changes.
 
-The first pair preserves the native scene-truth contract:
-
-```text
-/xgc2/simulation/obstacles/geometry
-  xgc2_gazebo_scene/ObstacleDefinitionArray
-  Header + scene_epoch + scene_revision + ObstacleDefinition[]
-  ObstacleDefinition: name + model_name + generation + ConvexPart[]
-  ConvexPart: part_id + shape + local_pose + primitive parameters
-              + mesh URI/submesh/scale + conservative_vertices
-
-/xgc2/simulation/obstacles/state
-  xgc2_gazebo_scene/ObstacleStateArray
-  Header + scene_epoch + scene_revision + ObstacleState[]
-  ObstacleState: name + model_name + generation + pose + twist
-                 + motion_mode + motion_revision
-```
-
-The second pair uses `xgc2_geometry_msgs/GeometryLibrary` and
+The planning topics use `xgc2_geometry_msgs/GeometryLibrary` and
 `xgc2_geometry_msgs/ConvexBodyArray` directly. Primitive instances keep the
 analytic `sphere`, `cylinder`, and `cube` geometry types. Convex meshes use one
 stable `convex_mesh:<mesh-uri>[#submesh][#centered]` template with exact
 unscaled local vertices, while every instance carries its world pose, collision
-scale, static flag, and velocity. This keeps planner adapters independent from
-the native Gazebo scene messages. A whole-mesh asset also publishes the
+scale, static flag, and velocity. A whole-mesh asset also publishes the
 GeometryLibrary-compatible alias `v_polytope:<mesh-file-stem>` with the same
 support points. Instances retain the canonical URI type; the alias lets
 robot-body and other non-obstacle consumers use the semantic template name
