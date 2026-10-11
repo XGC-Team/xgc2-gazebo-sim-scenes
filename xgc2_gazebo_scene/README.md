@@ -12,21 +12,25 @@ readiness gates the world's health. HOLD has no parameters: chassis model plugin
 themselves through `xgc2_gazebo_scene/chassis_hold.hpp`. It builds against `libxgc2-xrpc-dev` and
 `libxgc2-chassis-hold-dev` 0.2 or later.
 
-The editable scene entry point is `libxgc2_scene_authoring_world.so`, loaded by
-`gazebo_sim_worlds/worlds/scene_editable/scene_editable.world`. It is an adapter
-for the independent scene runtime, not an algorithm launcher. Select the world
-in Gazebo Server, then load the YAML through the separate user scene workflow.
+Python consumers use `xgc2_gazebo_scene.simulation_client.SimulationClient` with
+the formal `xgc2_xrpc` 0.2.0 wheel and an explicit simulation-v1 ServiceRef.
+The client submits once and waits for the world's terminal operation result.
+
+Gazebo world preparation is provided by `xgc2-scene-prepare` from the
+`xgc_scene_ros1_adapter` package (`ros-noetic-xgc2-scene-adapter` >= 0.7.0-1).
+It materializes `gazebo_sim_worlds/worlds/scene_editable/scene_editable.world`
+with the native world host's socket, target and configuration parameters.
+The independent C++ `xgc2_scene_adapter` owns scene authoring and persistence.
 
 ## Editable scene adapter
 
-- `/xgc/scene/gazebo/apply`: `xgc2_geometry_msgs/ApplyScene`, full typed snapshot.
+- `/v1/extensions/scene/apply`: full scene document through the bound world service.
 - `/xgc/scene/state`: `xgc2_geometry_msgs/SceneState`, computed current poses from
-  the scene runtime. This plugin has no separate motion clock or YAML loader.
+  the scene adapter. The native world host owns simulator application and motion.
 
-The world plugin's `scene_namespace` parameter changes the common namespace.
-`apply_timeout` is a wall-clock timeout, default 5 seconds, maximum 60 seconds.
-Applications also work while Gazebo is paused; the adapter does not unpause the
-world or advance simulation time.
+The scene adapter uses `__ns` for its ROS namespace, `_profile:=gazebo` and an
+explicit `_simulation_service_ref_json`. Applications also work while Gazebo
+is paused; applying a scene does not advance simulation time.
 
 Geometry is in metres and the snapshot frame must be `world`. Boxes preserve
 full side lengths, spheres preserve radius, cylinders preserve radius and full
@@ -34,7 +38,7 @@ height. A capsule is an exact union of its cylinder and two end spheres; its
 height is the straight section only. Convex meshes preserve the supplied vertex
 coordinates and triangle topology. The existing convex validator rejects open,
 degenerate and concave meshes. Multi-part objects stay multi-part, so a gate's
-opening remains open. The temporary OBJ files are adapter-owned transport
+opening remains open. The temporary OBJ files are world-owned transport
 artifacts; they are never a second authoring source or a file path accepted from
 the viewer. Gazebo's mesh loader uses float coordinates internally.
 After allocation, original double parameters and cached collision poses are
@@ -47,7 +51,7 @@ model with the same stable name. Clear and replace only remove models actually
 created by this plugin. Prefix-matching foreign models, robots and cameras are
 never adopted or deleted. The name prefix remains `xgc2_obstacle_` so an optional
 legacy physical-contact observer can identify these obstacles, but that observer
-cannot configure or stop their motion. A global stop skips scene-runtime models.
+cannot configure or stop their motion. A global stop skips adapter-authored models.
 Retired entities receive a unique internal name before destruction, preventing
 Gazebo's delayed delete requests from deleting their same-name replacements.
 
@@ -75,9 +79,9 @@ other obstacles, including when a scene is playing.
 World changes are not an atomic transaction. If Gazebo fails after replacement
 has begun, the adapter reports failure and retains the previous applied revision;
 the world can be partially modified. Motion is suspended until a full snapshot
-repairs it. The scene runtime must retain its unsynchronized state and retry or
-apply a compensating full snapshot. Stopping the scene runtime does not clear the
-last physical models. Saving belongs to the scene runtime, not this adapter.
+repairs it. The scene adapter must retain its unsynchronized state and retry or
+apply a compensating full snapshot. Stopping the scene adapter does not clear the
+last physical models. Saving belongs to the scene adapter.
 Corrective snapshots first drain outstanding factory insertions; an older failed
 request cannot insert a late obstacle after a successful correction or Clear.
 
@@ -86,16 +90,17 @@ classes, a ray through the gate opening, stable identity, live membership/size
 updates, stale/malformed messages and foreign-model protection. It uses its own
 Gazebo master and a private rostest ROS master.
 
-`test/scene_runtime_gazebo_integration.py` additionally starts private ROS/Gazebo
-masters and the independent scene runtime. Pass `--scene-file` pointing to the
+`test/scene_adapter_gazebo_integration.py` additionally starts private ROS/Gazebo
+masters and the C++ scene adapter. Pass `--scene-file` pointing to the
 algorithm-owned original `uav6_knot/scene.yaml` and `--evidence-dir` pointing to a
 new test output directory. It compares all 16 actual collision definitions using
 the existing collision observer, tests live edits, persistence/reload, motion,
 late subscribers, simulator failure, exact-command retry and accepted-document
-resynchronization. It starts no algorithm. With separately built catkin workspaces,
-source the scene product `devel/setup.bash`, then the common runtime
-`devel/setup.bash --extend`; prepend the scene product's `devel/lib` to
-`GAZEBO_PLUGIN_PATH`. Test input is copied and all subprocesses are cleaned up.
+resynchronization. Simulator fault tests suspend and resume the same process to
+preserve its bound ServiceRef instance. It starts no algorithm. Source the Gazebo
+scenes and ROS1 adapter install overlays; prepend the Gazebo scenes library
+directory to `GAZEBO_PLUGIN_PATH`. The adapter executable must be discoverable
+in `xgc_scene_ros1_adapter`. Test input is copied and all subprocesses are cleaned up.
 
 ## Legacy world observation and motion
 
