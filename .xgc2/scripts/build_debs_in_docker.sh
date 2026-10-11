@@ -69,9 +69,9 @@ docker run --rm --network "${DOCKER_NETWORK}" \
       dpkg --compare-versions "${version}" ge "${floor}"
       printf "%s=%s\n" "${package}" "${version}"
     done
-    wheel="/workspace/work/xgc2_xrpc-0.1.0-py3-none-any.whl"
-    curl -fL https://github.com/XGC-Team/xgc2-xrpc/releases/download/v0.1.0-1/xgc2_xrpc-0.1.0-py3-none-any.whl -o "${wheel}"
-    printf "%s  %s\n" 8e505ab2366eed198dcd4343e758fed5b7936990b2a72ba635d73d81b195187c "${wheel}" | sha256sum --check --status
+    wheel="/workspace/work/xgc2_xrpc-0.2.0-py3-none-any.whl"
+    curl -fL https://github.com/XGC-Team/xgc2-xrpc/releases/download/v0.2.0-1/xgc2_xrpc-0.2.0-py3-none-any.whl -o "${wheel}"
+    printf "%s  %s\n" fc81fe2ee5ef1abf2e7313ff4ae9401ce60f3dee14292b5228ea46e01f97c298 "${wheel}" | sha256sum --check --status
     # Install only the formal first-party wheel; third-party requirements are
     # image-owned and may not be bootstrapped by this product build.
     "${XGC2_PYTHON_EXECUTABLE}" -m pip install --no-deps --no-index "${wheel}"
