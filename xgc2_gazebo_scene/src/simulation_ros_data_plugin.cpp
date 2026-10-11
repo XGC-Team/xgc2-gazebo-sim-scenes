@@ -1,5 +1,5 @@
-#include "xgc2_gazebo_scene/scene_ownership.hpp"
 #include "xgc2_gazebo_scene/ros_master_registration.hpp"
+#include "xgc2_gazebo_scene/scene_ownership.hpp"
 #include <atomic>
 #include <cerrno>
 #include <cmath>
@@ -145,19 +145,21 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
     void Register() {
         node_ = std::make_unique<ros::NodeHandle>();
         const std::weak_ptr<DataSource> weak = shared_from_this();
-        clock_ = node_->advertise<rosgraph_msgs::Clock>("/clock", 1,
+        clock_ = node_->advertise<rosgraph_msgs::Clock>(
+            "/clock", 1,
             [weak](const ros::SingleSubscriberPublisher&) {
                 if (auto self = weak.lock()) {
                     self->clock_requested_.store(true, std::memory_order_release);
                     self->Wake();
                 }
-            }, ros::SubscriberStatusCallback{});
+            },
+            ros::SubscriberStatusCallback{});
         const ros::SubscriberStatusCallback connected = [weak](const ros::SingleSubscriberPublisher&) {
             if (auto self = weak.lock())
                 self->Wake();
         };
         models_ = node_->advertise<gazebo_msgs::ModelStates>("/gazebo/model_states", 1, connected,
-                                                                     ros::SubscriberStatusCallback{});
+                                                             ros::SubscriberStatusCallback{});
         if (!clock_ || !models_) {
             clock_.shutdown();
             models_.shutdown();
@@ -200,8 +202,8 @@ class DataSource : public std::enable_shared_from_this<DataSource> {
                 bool changed;
                 {
                     const std::int64_t nanoseconds = clock_ns_.load(std::memory_order_acquire);
-                    changed = clock_requested_.exchange(false, std::memory_order_acq_rel) ||
-                              last_clock < 0 || nanoseconds < last_clock ||
+                    changed = clock_requested_.exchange(false, std::memory_order_acq_rel) || last_clock < 0 ||
+                              nanoseconds < last_clock ||
                               (nanoseconds != last_clock &&
                                (rate_ == 0 || static_cast<double>(nanoseconds - last_clock) * 1e-9 >= 1.0 / rate_));
                     if (changed) {

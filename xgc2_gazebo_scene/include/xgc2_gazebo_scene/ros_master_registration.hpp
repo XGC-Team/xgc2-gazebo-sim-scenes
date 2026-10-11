@@ -8,7 +8,7 @@ namespace xgc2_gazebo_scene {
 namespace detail {
 class RosMasterWatcher;
 struct RosRegistration;
-}
+} // namespace detail
 
 struct RosMasterStatus {
     std::string state = "unused", uri, run_id;

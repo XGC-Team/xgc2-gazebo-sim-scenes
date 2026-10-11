@@ -9,8 +9,8 @@
 #include <netdb.h>
 #include <poll.h>
 #include <random>
-#include <ros/master.h>
 #include <ros/init.h>
+#include <ros/master.h>
 #include <ros/this_node.h>
 #include <ros/time.h>
 #include <stdexcept>
@@ -38,7 +38,9 @@ class RosMasterWatcher {
         status_.uri = ros::master::getURI();
         status_.state = "waiting";
         ros::master::setRetryTimeout(ros::WallDuration(0.25));
-        worker_ = std::thread([this] { Work(); });
+        worker_ = std::thread([this] {
+            Work();
+        });
     }
     ~RosMasterWatcher() {
         stopping_ = true;
@@ -78,7 +80,8 @@ class RosMasterWatcher {
     }
     void DrainWake() {
         std::uint64_t count;
-        while (read(wake_fd_, &count, sizeof(count)) == sizeof(count)) {}
+        while (read(wake_fd_, &count, sizeof(count)) == sizeof(count)) {
+        }
     }
     bool WaitSocket(int fd, short events, Clock::time_point deadline) {
         while (!stopping_) {
@@ -109,7 +112,10 @@ class RosMasterWatcher {
         std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> address_owner(addresses, freeaddrinfo);
         struct Socket {
             int fd;
-            ~Socket() { if (fd >= 0) close(fd); }
+            ~Socket() {
+                if (fd >= 0)
+                    close(fd);
+            }
         } socket_owner{-1};
         const auto deadline = Clock::now() + std::chrono::seconds(1);
         for (auto address = addresses; address && !stopping_; address = address->ai_next) {
@@ -117,8 +123,8 @@ class RosMasterWatcher {
             if (candidate < 0)
                 continue;
             socket_owner.fd = candidate;
-            const bool connecting = connect(candidate, address->ai_addr, address->ai_addrlen) == 0 ||
-                                    errno == EINPROGRESS;
+            const bool connecting =
+                connect(candidate, address->ai_addr, address->ai_addrlen) == 0 || errno == EINPROGRESS;
             int error = 0;
             socklen_t size = sizeof(error);
             if (connecting && WaitSocket(candidate, POLLOUT, deadline) &&
@@ -130,14 +136,15 @@ class RosMasterWatcher {
         if (socket_owner.fd < 0)
             return false;
         const int fd = socket_owner.fd;
-        std::string body = "<?xml version=\"1.0\"?><methodCall><methodName>" + std::string(method) +
-                           "</methodName><params>";
+        std::string body =
+            "<?xml version=\"1.0\"?><methodCall><methodName>" + std::string(method) + "</methodName><params>";
         for (int i = 0; i < parameters.size(); ++i)
             body += "<param>" + parameters[i].toXml() + "</param>";
         body += "</params></methodCall>";
-        const std::string request = "POST /RPC2 HTTP/1.1\r\nHost: " + ros::master::getHost() +
-                                   "\r\nContent-Type: text/xml\r\nConnection: close\r\nContent-Length: " +
-                                   std::to_string(body.size()) + "\r\n\r\n" + body;
+        const std::string request =
+            "POST /RPC2 HTTP/1.1\r\nHost: " + ros::master::getHost() +
+            "\r\nContent-Type: text/xml\r\nConnection: close\r\nContent-Length: " + std::to_string(body.size()) +
+            "\r\n\r\n" + body;
         std::size_t sent = 0;
         while (sent < request.size()) {
             if (!WaitSocket(fd, POLLOUT, deadline))
@@ -185,13 +192,13 @@ class RosMasterWatcher {
         const auto failure = [&](Clock::time_point now, const char* reason) {
             ++suppressed;
             if (last_log == Clock::time_point{} || now - last_log >= std::chrono::seconds(10)) {
-                std::fprintf(stderr, "ROS master unavailable (%s); %llu suppressed attempts\n",
-                             reason, static_cast<unsigned long long>(suppressed - 1));
+                std::fprintf(stderr, "ROS master unavailable (%s); %llu suppressed attempts\n", reason,
+                             static_cast<unsigned long long>(suppressed - 1));
                 last_log = now;
                 suppressed = 0;
             }
-            next_probe = Clock::now() + std::chrono::milliseconds(
-                std::uniform_int_distribution<int>(0, ceiling_ms)(random));
+            next_probe =
+                Clock::now() + std::chrono::milliseconds(std::uniform_int_distribution<int>(0, ceiling_ms)(random));
             ceiling_ms = std::min(30000, ceiling_ms * 2);
         };
         int bound_pid = 0;
@@ -205,15 +212,16 @@ class RosMasterWatcher {
                     std::lock_guard<std::mutex> lock(mutex_);
                     ++status_.attempts;
                 }
-                const bool available = Call("getPid", parameters, pid) &&
-                                       pid.getType() == XmlRpc::XmlRpcValue::TypeInt && int(pid) > 0;
+                const bool available =
+                    Call("getPid", parameters, pid) && pid.getType() == XmlRpc::XmlRpcValue::TypeInt && int(pid) > 0;
                 if (available) {
                     parameters[1] = "/run_id";
                     Call("getParam", parameters, run_id);
-                    const auto identity = run_id.getType() == XmlRpc::XmlRpcValue::TypeString ?
-                                              std::string(run_id) : std::string{};
-                    const bool replaced = bound_pid && (bound_pid != int(pid) ||
-                        (!bound_run_id.empty() && !identity.empty() && bound_run_id != identity));
+                    const auto identity =
+                        run_id.getType() == XmlRpc::XmlRpcValue::TypeString ? std::string(run_id) : std::string{};
+                    const bool replaced =
+                        bound_pid && (bound_pid != int(pid) ||
+                                      (!bound_run_id.empty() && !identity.empty() && bound_run_id != identity));
                     {
                         std::lock_guard<std::mutex> lock(mutex_);
                         status_.state = replaced ? "replaced" : "connected";
@@ -282,7 +290,7 @@ class RosMasterWatcher {
 namespace {
 std::mutex watcher_mutex;
 std::weak_ptr<detail::RosMasterWatcher> watcher;
-}
+} // namespace
 
 RosMasterStatus CurrentRosMasterStatus() {
     std::lock_guard<std::mutex> lock(watcher_mutex);
@@ -302,5 +310,7 @@ RosMasterRegistration::RosMasterRegistration(std::function<void()> register_node
     }
     watcher_->Add(registration_);
 }
-RosMasterRegistration::~RosMasterRegistration() { watcher_->Remove(registration_); }
+RosMasterRegistration::~RosMasterRegistration() {
+    watcher_->Remove(registration_);
+}
 } // namespace xgc2_gazebo_scene

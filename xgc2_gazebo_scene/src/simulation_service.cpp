@@ -1,9 +1,9 @@
 #include "xgc2_gazebo_scene/simulation_service.hpp"
-#include "xgc2_gazebo_scene/ros_master_registration.hpp"
 #include "chassis_hold_host.hpp"
 #include "xgc2_gazebo_scene/native_entity_motion.hpp"
 #include "xgc2_gazebo_scene/native_scene_controller.hpp"
 #include "xgc2_gazebo_scene/native_sensor_controller.hpp"
+#include "xgc2_gazebo_scene/ros_master_registration.hpp"
 #include "xgc2_gazebo_scene/world_startup_binding.hpp"
 #include <array>
 #include <atomic>

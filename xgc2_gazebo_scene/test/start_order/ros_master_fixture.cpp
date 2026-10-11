@@ -6,14 +6,16 @@
 #include <poll.h>
 #include <ros/ros.h>
 #include <std_msgs/UInt64.h>
-#include <string>
 #include <stdexcept>
+#include <string>
 #include <unistd.h>
 
 namespace {
 volatile std::sig_atomic_t stopping = 0;
-void Stop(int) { stopping = 1; }
+void Stop(int) {
+    stopping = 1;
 }
+} // namespace
 
 int main(int argc, char** argv) {
     bool topics = false, fail_registration = false;
@@ -21,8 +23,8 @@ int main(int argc, char** argv) {
         topics |= std::string(argv[i]) == "--topics";
         fail_registration |= std::string(argv[i]) == "--fail-registration";
     }
-    ros::init(argc, argv, "gazebo_start_order_fixture", ros::init_options::NoSigintHandler |
-              ros::init_options::NoRosout | ros::init_options::NoSimTime);
+    ros::init(argc, argv, "gazebo_start_order_fixture",
+              ros::init_options::NoSigintHandler | ros::init_options::NoRosout | ros::init_options::NoSimTime);
     std::signal(SIGINT, Stop);
     std::signal(SIGTERM, Stop);
     std::atomic<unsigned> first{0}, second{0}, cancelled{0};
@@ -48,7 +50,9 @@ int main(int argc, char** argv) {
         ++second;
     });
     {
-        xgc2_gazebo_scene::RosMasterRegistration removed([&] { ++cancelled; });
+        xgc2_gazebo_scene::RosMasterRegistration removed([&] {
+            ++cancelled;
+        });
     }
     while (!stopping) {
         pollfd input{STDIN_FILENO, POLLIN, 0};
@@ -66,10 +70,9 @@ int main(int argc, char** argv) {
             }
         }
         const auto status = xgc2_gazebo_scene::CurrentRosMasterStatus();
-        std::cout << "{\"state\":\"" << status.state << "\",\"attempts\":" << status.attempts
-                  << ",\"first\":" << first << ",\"second\":" << second << ",\"cancelled\":" << cancelled
-                  << ",\"revision\":" << desired_revision << ",\"registration_attempts\":"
-                  << registration_attempts << "}" << std::endl;
+        std::cout << "{\"state\":\"" << status.state << "\",\"attempts\":" << status.attempts << ",\"first\":" << first
+                  << ",\"second\":" << second << ",\"cancelled\":" << cancelled << ",\"revision\":" << desired_revision
+                  << ",\"registration_attempts\":" << registration_attempts << "}" << std::endl;
     }
     another.reset();
     registration.reset();

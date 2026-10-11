@@ -1,3 +1,4 @@
+#include "xgc2_gazebo_scene/ros_master_registration.hpp"
 #include <boost/weak_ptr.hpp>
 #include <gazebo/common/Events.hh>
 #include <gazebo/common/Plugin.hh>
@@ -14,7 +15,6 @@
 #include <gazebo/physics/WorldState.hh>
 #include <gazebo/transport/transport.hh>
 #include <ros/ros.h>
-#include "xgc2_gazebo_scene/ros_master_registration.hpp"
 #include <std_msgs/Bool.h>
 #include <std_msgs/String.h>
 
@@ -145,7 +145,9 @@ class GazeboSceneSystemPlugin final : public gazebo::SystemPlugin {
             return;
         }
 
-        registration_ = std::make_unique<RosMasterRegistration>([this, world_name] { AttachRos(world_name); });
+        registration_ = std::make_unique<RosMasterRegistration>([this, world_name] {
+            AttachRos(world_name);
+        });
     }
 
     void AttachRos(const std::string& world_name) {
