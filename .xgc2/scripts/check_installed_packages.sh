@@ -97,6 +97,6 @@ if readelf -d "/opt/ros/${ROS_DISTRO}/lib/libxgc2_simple_lidar.so" "/opt/ros/${R
 fi
 
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray'
-"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_scene_runtime.simulation_client import SimulationClient; from xgc2_scene_runtime.prepare import prepare'
+"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_gazebo_scene.simulation_client import SimulationClient'
 
 echo "Installed scene packages check passed"

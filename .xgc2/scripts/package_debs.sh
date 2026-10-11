@@ -131,9 +131,11 @@ build_scene_deb() {
     libxgc2_simulation_sensor_ack.so libxgc2_simulation_ros_data.so)
   local objects=() arguments=(-O "-x${package}" "-l${pkg_root}${PREFIX}/lib")
   mkdir -p "${pkg_root}"
-  for directory in share/xgc2_gazebo_scene include/xgc2_gazebo_scene lib/xgc2_gazebo_scene; do
+  for directory in share/xgc2_gazebo_scene include/xgc2_gazebo_scene lib/xgc2_gazebo_scene \
+      lib/python3/dist-packages/xgc2_gazebo_scene; do
     copy_path "${PREFIX_ROOT}/${directory}" "${pkg_root}"
   done
+  find "${pkg_root}" -type d -name __pycache__ -prune -exec rm -rf {} +
   copy_path "${PREFIX_ROOT}/lib/pkgconfig/xgc2_gazebo_scene.pc" "${pkg_root}"
   for library in "${libraries[@]}"; do
     copy_path "${PREFIX_ROOT}/lib/${library}" "${pkg_root}"
@@ -142,6 +144,8 @@ build_scene_deb() {
     arguments+=("-e${pkg_root}${PREFIX}/lib/${library}")
   done
   for file in share/xgc2_gazebo_scene/package.xml \
+      lib/python3/dist-packages/xgc2_gazebo_scene/__init__.py \
+      lib/python3/dist-packages/xgc2_gazebo_scene/simulation_client.py \
       include/xgc2_gazebo_scene/obstacle_messages.hpp include/xgc2_gazebo_scene/simulation_service.hpp \
       include/xgc2_gazebo_scene/native_scene_controller.hpp; do
     test -f "${pkg_root}${PREFIX}/${file}"
@@ -187,7 +191,7 @@ EOF
     echo "Native scene runtime dependencies leaked build-only packages" >&2; exit 1
   fi
   write_control "${pkg_root}" "${package}" \
-    "${shlibdeps}, libxgc2-xrpc2 (>= 0.2.0-1~focal), libxgc2-chassis-hold1 (>= 0.2.0-1~focal), ros-noetic-gazebo-msgs, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-rosgraph-msgs, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-13), ros-noetic-xgc2-scene-runtime (>= 1.2.0-13)" \
+    "${shlibdeps}, libxgc2-xrpc2 (>= 0.2.0-1~focal), libxgc2-chassis-hold1 (>= 0.2.0-1~focal), ros-noetic-gazebo-msgs, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-rosgraph-msgs, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-13)" \
     "Native Gazebo Classic simulation-v1 service and exact scene geometry with ROS user data"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +

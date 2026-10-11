@@ -25,11 +25,9 @@
   <build_depend>libjsoncpp-dev</build_depend>
   <build_export_depend>libjsoncpp-dev</build_export_depend>
   <exec_depend>rospy</exec_depend>
-  <exec_depend>xgc2_scene_runtime</exec_depend>
 
   <test_depend>rostest</test_depend>
   <test_depend>std_srvs</test_depend>
-  <test_depend>xgc2_scene_runtime</test_depend>
 
   <export>
     <gazebo_ros plugin_path="${prefix}/lib" />
