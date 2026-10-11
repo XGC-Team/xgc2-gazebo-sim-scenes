@@ -512,7 +512,7 @@ class SimulationService::Impl {
         v["facts"]["ros_master"]["pid"] = master.pid;
         v["facts"]["ros_master"]["run_id"] = master.run_id;
         v["facts"]["ros_master"]["attempts"] = Json::UInt64(master.attempts);
-        auto& ref = v["service_ref"];
+        auto& ref = v["facts"]["service_ref"];
         ref["target_id"] = target_;
         ref["service"] = "xgc2.simulation";
         ref["api_version"] = "v1";
@@ -520,52 +520,52 @@ class SimulationService::Impl {
         ref["profile"] = "http.v1";
         ref["endpoint"]["kind"] = "unix";
         ref["endpoint"]["address"] = path_;
-        v["describe_path"] = "/v1/describe";
-        v["engine"] = "gazebo-classic-11";
-        v["configuration"]["revision"] =
+        auto& simulation = v["facts"]["simulation"];
+        simulation["engine"] = "gazebo-classic-11";
+        simulation["configuration"]["revision"] =
             configuration_revision_.empty() ? Json::Value(Json::nullValue) : Json::Value(configuration_revision_);
-        v["configuration"]["resource_root"] = resource_root_.string();
-        v["health"]["query"] = "/v1/health";
-        v["health"]["observe"] = "/v1/health/observe";
+        simulation["configuration"]["resource_root"] = resource_root_.string();
+        simulation["health"]["query"] = "/v1/health";
+        simulation["health"]["observe"] = "/v1/health/observe";
         for (const auto& component : components_)
-            v["health"]["required_components"].append(component.id);
-        v["extensions"]["scene"]["query"] = "/v1/extensions/scene";
-        v["extensions"]["scene"]["observe"] = "/v1/extensions/scene/observe";
+            simulation["health"]["required_components"].append(component.id);
+        simulation["extensions"]["scene"]["query"] = "/v1/extensions/scene";
+        simulation["extensions"]["scene"]["observe"] = "/v1/extensions/scene/observe";
         {
             std::lock_guard<std::mutex> lock(extension_mutex_);
             for (const auto& [id, owner] : extensions_)
-                v["extensions"][id] = owner->Describe();
+                simulation["extensions"][id] = owner->Describe();
         }
         for (auto name : {"entities.create", "entities.remove", "entities.set_state", "entities.reset", "world.pause",
                           "world.resume", "world.step", "world.reset.entities", "world.reset.all_entities",
                           "world.reset_time", "health.observe"})
-            v["capabilities"].append(name);
-        v["capabilities"].append("xgc2.scene.v1");
-        v["capabilities"].append("xgc2.entity_motion.v1");
+            simulation["capabilities"].append(name);
+        simulation["capabilities"].append("xgc2.scene.v1");
+        simulation["capabilities"].append("xgc2.entity_motion.v1");
         // These capabilities are retained only with the native Init/Fini fixture.
         for (const auto* name : {"sensors.describe", "sensors.create", "sensors.configure", "sensors.remove"})
-            v["capabilities"].append(name);
+            simulation["capabilities"].append(name);
         for (const auto* kind : {"camera", "imu", "lidar"})
-            v["sensor_kinds"].append(kind);
-        v["limits"]["sensors"] = 32;
-        v["world_frame"]["id"] = "world";
-        v["world_frame"]["axes"] = "right-handed z-up";
-        v["artifact_types"].append("application/sdf+xml");
-        v["artifact_types"].append("application/urdf+xml");
-        v["limits"]["entities"] = Json::UInt(kEntities);
-        v["limits"]["pending_commands"] = Json::UInt(kQueue);
-        v["limits"]["operation_receipts"] = Json::UInt(kReceipts);
-        v["limits"]["operation_waiters"] = Json::UInt(kWaiters);
-        v["limits"]["operation_timeout_ms"] = 60000;
-        v["limits"]["receipt_retention_ms"] = 300000;
-        v["limits"]["artifact_bytes"] = Json::UInt(kArtifactBytes);
-        v["limits"]["request_bytes"] = Json::UInt64(limits_.request_bytes);
-        v["limits"]["response_bytes"] = Json::UInt64(limits_.response_bytes);
+            simulation["sensor_kinds"].append(kind);
+        simulation["limits"]["sensors"] = 32;
+        simulation["world_frame"]["id"] = "world";
+        simulation["world_frame"]["axes"] = "right-handed z-up";
+        simulation["artifact_types"].append("application/sdf+xml");
+        simulation["artifact_types"].append("application/urdf+xml");
+        simulation["limits"]["entities"] = Json::UInt(kEntities);
+        simulation["limits"]["pending_commands"] = Json::UInt(kQueue);
+        simulation["limits"]["operation_receipts"] = Json::UInt(kReceipts);
+        simulation["limits"]["operation_waiters"] = Json::UInt(kWaiters);
+        simulation["limits"]["operation_timeout_ms"] = 60000;
+        simulation["limits"]["receipt_retention_ms"] = 300000;
+        simulation["limits"]["artifact_bytes"] = Json::UInt(kArtifactBytes);
+        simulation["limits"]["request_bytes"] = Json::UInt64(limits_.request_bytes);
+        simulation["limits"]["response_bytes"] = Json::UInt64(limits_.response_bytes);
         v["facts"]["capabilities"].append(Parse(chassis_->http().capability_json()));
-        v["storage"]["durable_writes"] = Json::Value(Json::arrayValue);
-        v["storage"]["operation_receipts"] = "instance-scoped memory";
-        v["storage"]["scene_meshes"]["location"] = mesh_root_.string();
-        v["storage"]["scene_meshes"]["lifetime"] = "world-scoped transient artifacts";
+        simulation["storage"]["durable_writes"] = Json::Value(Json::arrayValue);
+        simulation["storage"]["operation_receipts"] = "instance-scoped memory";
+        simulation["storage"]["scene_meshes"]["location"] = mesh_root_.string();
+        simulation["storage"]["scene_meshes"]["lifetime"] = "world-scoped transient artifacts";
         return v;
     }
     Command Prepare(const HttpRequest& r) {

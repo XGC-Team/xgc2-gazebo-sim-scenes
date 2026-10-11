@@ -29,6 +29,13 @@ caller can resolve "entity X, capability `xgc2.chassis.hold`" to this host:
 
     {"facts": {"capabilities": [{"name": "xgc2.chassis.hold", "entities": ["scout-1", "ugv-2"]}]}}
 
+`GET /v1/describe` has exactly the XRPC envelope fields `service`, `api_version`,
+`instance_id`, `ready`, and `facts`. The bound world reference is
+`facts.service_ref`; engine/configuration/operation limits are in
+`facts.simulation`. `facts.capabilities` is the typed per-entity capability list,
+not the simulation operation-name list. Legacy top-level discovery fields are
+not emitted or accepted by the placement consumer.
+
 There is nothing else to configure: no `/v1/chassis/*` routes, no `chassis_robot_id` world parameters and no
 roster from Core.
 

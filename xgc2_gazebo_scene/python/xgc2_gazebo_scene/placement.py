@@ -69,8 +69,7 @@ def discover_world(endpoint, target_id, timeout):
             remaining = _remaining(deadline)
             description = discovery.json('/v1/describe?wait_ready_ms={}'.format(
                 min(30000, max(1, int(remaining * 1000)))), method='GET', timeout=remaining)
-            reference = ServiceRef.from_dict(description.get('facts', {}).get(
-                'service_ref', description.get('service_ref'))).validate()
+            reference = ServiceRef.from_dict(description['facts']['service_ref']).validate()
             if (description.get('service') != 'xgc2.simulation'
                     or reference.service != 'xgc2.simulation'):
                 raise SimulationError('World service must be xgc2.simulation')

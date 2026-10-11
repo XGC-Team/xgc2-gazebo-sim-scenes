@@ -146,9 +146,9 @@ def main():
                 runtime = Runtime(blocking_workers=1, max_calls=8)
                 discovery = Client(str(endpoint), runtime=runtime)
                 description = json.loads(discovery.call('/v1/describe', method='GET').body)
-                assert description['configuration']['revision'] == '13', description
-                assert description['sensor_kinds'] == ['camera', 'imu', 'lidar'], description
-                ref = description['service_ref']
+                assert description['facts']['simulation']['configuration']['revision'] == '13', description
+                assert description['facts']['simulation']['sensor_kinds'] == ['camera', 'imu', 'lidar'], description
+                ref = description['facts']['service_ref']
                 client = Client(str(endpoint), runtime=runtime, instance_id=ref['instance_id'])
                 counter = 0
 

@@ -54,7 +54,7 @@ def main():
         environment.pop("WAYLAND_DISPLAY", None)
         environment.update(HOME=str(root), GAZEBO_MASTER_URI=f"http://127.0.0.1:{master_port}",
                            GAZEBO_PLUGIN_PATH=args.plugins, GAZEBO_MODEL_DATABASE_URI="")
-        environment["LD_LIBRARY_PATH"] = "/opt/ros/noetic/lib:" + environment.get("LD_LIBRARY_PATH", "")
+        environment["LD_LIBRARY_PATH"] = args.plugins + ":/opt/ros/noetic/lib:" + environment.get("LD_LIBRARY_PATH", "")
         log = open(root / "gzserver.log", "w+")
         command = [args.gzserver, "--verbose", "--pause", str(world)]
         process = subprocess.Popen(command, env=environment,
@@ -75,10 +75,11 @@ def main():
             fixture_files += [Path(line.split(maxsplit=5)[5]) for line in native_maps
                               if "libxgc2_xrpc_" in line and len(line.split(maxsplit=5)) == 6]
             admitted_hashes = source_hashes()
-            ref = description["service_ref"]
+            assert set(description) == {"service", "api_version", "instance_id", "ready", "facts"}
+            ref = description["facts"]["service_ref"]
             assert ref["target_id"] == "test-world" and ref["api_version"] == "v1"
-            assert description["configuration"]["revision"] == "fixture-configuration-1"
-            assert description["sensor_kinds"] == ["camera", "imu", "lidar"]
+            assert description["facts"]["simulation"]["configuration"]["revision"] == "fixture-configuration-1"
+            assert description["facts"]["simulation"]["sensor_kinds"] == ["camera", "imu", "lidar"]
             client = Client(str(endpoint), runtime=runtime, instance_id=ref["instance_id"])
 
             def query(route):

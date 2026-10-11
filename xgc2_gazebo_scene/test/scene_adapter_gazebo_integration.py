@@ -153,7 +153,7 @@ class Integration:
         discovery = Client(str(self.world_socket), runtime=self.xrpc)
         try:
             description = discovery.json('/v1/describe?wait_ready_ms=30000', method='GET', timeout=35)
-            self.simulation_reference = description['service_ref']
+            self.simulation_reference = description['facts']['service_ref']
         finally:
             discovery.close()
         rospy.wait_for_service('/gazebo/get_model_state', timeout=30)
@@ -174,7 +174,7 @@ class Integration:
         try:
             description = discovery.json('/v1/describe?wait_ready_ms=30000', method='GET', timeout=35)
             assert description['ready'], description
-            self.scene_client = Client.from_service(ServiceRef.from_dict(description['service_ref']),
+            self.scene_client = Client.from_service(ServiceRef.from_dict(description['facts']['service_ref']),
                 runtime=self.xrpc, local_target=self.target_id,
                 limits=Limits(body_bytes=8*1024*1024, response_bytes=8*1024*1024+65536, call_timeout=60))
         finally:

@@ -21,7 +21,7 @@ class FakeWorld:
                           'profile': 'http.v1', 'instance_id': 'world-one',
                           'endpoint': {'kind': 'unix', 'address': self.endpoint}}
         self.description = dict(service='xgc2.simulation', api_version='v1',
-                                instance_id='world-one', service_ref=self.reference, ready=ready)
+                                instance_id='world-one', facts={'service_ref': self.reference}, ready=ready)
         self.ready_after, self.accepted = ready_after, accepted
         self.incomplete, self.conflict = incomplete, conflict
         self.calls, self.headers = [], []
@@ -183,7 +183,7 @@ class PlacementTest(unittest.TestCase):
             calls.append((route, kwargs['timeout']))
             clock.now += 2
             return dict(service='xgc2.simulation', api_version='v1', instance_id='world-one',
-                        ready=True, service_ref=reference)
+                        ready=True, facts={'service_ref': reference})
         def operation(route, payload, **kwargs):
             calls.append((route, kwargs['timeout']))
             if route == '/v1/entities':
@@ -215,7 +215,7 @@ class PlacementTest(unittest.TestCase):
                          endpoint={'kind': 'unix', 'address': '/tmp/world.sock'})
         discovery, bound, runtime = Mock(), Mock(), Mock()
         discovery.json.return_value = dict(service='xgc2.simulation', api_version='v1',
-                                           instance_id='world-one', ready=True, service_ref=reference)
+                                           instance_id='world-one', ready=True, facts={'service_ref': reference})
         with patch('xgc2_gazebo_scene.placement._wait_for_socket'), patch(
                 'xgc2_gazebo_scene.placement.Runtime', return_value=runtime), patch(
                 'xgc2_gazebo_scene.placement.Client', return_value=discovery), patch(
