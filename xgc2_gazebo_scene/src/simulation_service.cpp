@@ -316,9 +316,6 @@ class SimulationService::Impl {
             ++gate->readers;
             if (auto* owner = gate->owner.load()) {
                 owner->native_clock_ns_.store(std::int64_t(info.simTime.sec) * 1000000000LL + info.simTime.nsec);
-                // First among the update callbacks: the control steps of the chassis models that connect
-                // later see the zero of this tick.
-                owner->chassis_->Tick();
                 const auto serial = owner->scene_->serial();
                 owner->scene_->Update(info.simTime.Double());
                 owner->motion_->Update(info.simTime.Double());
@@ -547,7 +544,7 @@ class SimulationService::Impl {
         v["limits"]["artifact_bytes"] = Json::UInt(kArtifactBytes);
         v["limits"]["request_bytes"] = Json::UInt64(limits_.request_bytes);
         v["limits"]["response_bytes"] = Json::UInt64(limits_.response_bytes);
-        chassis_->DescribeFacts(v["facts"]);
+        v["facts"]["capabilities"].append(Parse(chassis_->http().capability_json()));
         v["storage"]["durable_writes"] = Json::Value(Json::arrayValue);
         v["storage"]["operation_receipts"] = "instance-scoped memory";
         v["storage"]["scene_meshes"]["location"] = mesh_root_.string();
@@ -887,10 +884,11 @@ class SimulationService::Impl {
                 queue_cv_.notify_one();
                 return;
             }
-            if (detail::ChassisHoldHost::Calls(r.target)) {
-                chassis_->Handle(std::move(r), std::move(reply));
+            if (chassis_->http().handle(r, reply)) {
                 return;
             }
+            if (r.target.starts_with("/v1/call/"))
+                throw DomainError(404, "not_found", "no such capability method");
             if (r.target.starts_with("/v1/operations/")) {
                 auto name = r.target.substr(15);
                 auto slash = name.find('/');

@@ -11,17 +11,9 @@
 namespace xgc2_gazebo_scene {
 namespace detail {
 namespace {
-using xgc2::chassis_hold::Status;
-using xgc2::xrpc::HttpReply;
-using xgc2::xrpc::HttpRequest;
-
 // The world's own HOLD host, found by the model plugins of that world.
 std::mutex hosts_mutex;
 std::map<const gazebo::physics::World*, std::weak_ptr<ChassisHoldHost>> hosts;
-
-// The capability and service name of the HOLD domain on every transport.
-const std::string kService = "xgc2.chassis.hold";
-const std::string kCallPrefix = "/v1/call/";
 
 constexpr std::chrono::milliseconds kPausedTick{10};
 // Feedback is read at most this often: the domain needs samples no further apart than its 300 ms dwell.
@@ -29,24 +21,11 @@ constexpr std::int64_t kFeedbackIntervalNs = 5000000;
 constexpr std::size_t kMaxIds = 256;
 constexpr std::size_t kMaxBodyBytes = 65536;
 
-int HttpStatus(Status status) {
-    switch (status) {
-    case Status::ok:
-        return 200;
-    case Status::invalid_argument:
-        return 400;
-    case Status::not_found:
-        return 404;
-    case Status::internal:
-        break;
-    }
-    return 500;
-}
-
-xgc2::chassis_hold::DomainOptions DomainOptions(const std::string& instance_id) {
+xgc2::chassis_hold::DomainOptions DomainOptions(const std::string& instance_id, std::function<void()> wake) {
     xgc2::chassis_hold::DomainOptions options;
     options.instance_id = instance_id;
     options.clock = MonotonicNs;
+    options.wake = std::move(wake);
     return options;
 }
 
@@ -102,9 +81,12 @@ std::shared_ptr<ChassisHoldHost> ChassisHoldHost::Of(const gazebo::physics::Worl
 }
 
 ChassisHoldHost::ChassisHoldHost(gazebo::physics::WorldPtr world, const std::string& instance_id)
-    : world_(world), domain_(DomainOptions(instance_id)),
+    : world_(world), domain_(DomainOptions(instance_id,
+                                           [this] {
+                                               Wake();
+                                           })),
       service_(std::make_unique<xgc2::chassis_hold::Service>(domain_, ServiceOptions())),
-      sink_(std::make_unique<Sink>(*this)) {}
+      http_(std::make_unique<xgc2::chassis_hold::HttpAdapter>(*service_)), sink_(std::make_unique<Sink>(*this)) {}
 
 ChassisHoldHost::~ChassisHoldHost() {
     Stop();
@@ -142,35 +124,8 @@ void ChassisHoldHost::Stop() {
     if (thread_.joinable())
         thread_.join();
     // Pending engages are answered with the state reached so far.
+    http_.reset();
     service_.reset();
-}
-
-bool ChassisHoldHost::Calls(const std::string& target) {
-    return target.rfind(kCallPrefix, 0) == 0;
-}
-
-void ChassisHoldHost::Handle(HttpRequest request, HttpReply reply) {
-    // POST /v1/call/xgc2.chassis.hold/<Method>: the method is the segment after the service name.
-    const std::string prefix = kCallPrefix + kService + "/";
-    if (request.method != "POST" || request.target.rfind(prefix, 0) != 0) {
-        reply.complete(xgc2::xrpc::http_error(404, "not_found", "no such capability method"));
-        return;
-    }
-    const std::string method = request.target.substr(prefix.size());
-    if (!service_) {
-        reply.complete(xgc2::xrpc::http_error(503, "unavailable", "chassis HOLD host is stopped"));
-        return;
-    }
-    // The reply copy lives in the callback until the service has called it, then it is released.
-    service_->call_async(method, request.body, request.deadline,
-                         [reply](xgc2::chassis_hold::ServiceReply result) mutable {
-                             reply.complete({HttpStatus(result.status), {{"Content-Type", "application/json"}},
-                                             std::move(result.body), true});
-                             reply = {};
-                         });
-    // An engage has gated the robot; the native tick writes the zero the reply waits for.
-    if (method == "Engage")
-        Wake();
 }
 
 void ChassisHoldHost::Wake() {
@@ -181,8 +136,8 @@ void ChassisHoldHost::Wake() {
     wake_cv_.notify_one();
 }
 
-// The world thread ticks on every update. This thread covers the paused world, where updates stop, and
-// writes the zero of a new engage at once instead of at the next update.
+// The domain's state machines require one tick thread. It also runs while the world is paused, and the
+// domain wakes it whenever an operation needs a tick.
 void ChassisHoldHost::Run() {
     if (const auto world = world_.lock())
         world->Physics()->InitForThread();
@@ -193,9 +148,9 @@ void ChassisHoldHost::Run() {
         });
         if (stopping_)
             break;
-        const bool requested = std::exchange(wake_, false);
+        wake_ = false;
         lock.unlock();
-        if (const auto world = world_.lock(); world && world->Running() && (requested || world->IsPaused()))
+        if (const auto world = world_.lock(); world && world->Running())
             Tick();
         lock.lock();
     }
@@ -205,8 +160,7 @@ void ChassisHoldHost::Tick() {
     const auto world = world_.lock();
     if (!world)
         return;
-    // Zero writes and feedback reads touch the physics objects: they never overlap a physics step, and ticks
-    // of the world thread and of the tick thread never overlap each other.
+    // Zero writes and feedback reads touch the physics objects: they never overlap a physics step.
     boost::recursive_mutex::scoped_lock physics(*world->Physics()->GetPhysicsUpdateMutex());
     sink_->written.clear();
     domain_.tick(*sink_);
@@ -233,15 +187,6 @@ void ChassisHoldHost::Feedback() {
         }
         domain_.observe(seat->id, linear, angular, now);
     }
-}
-
-void ChassisHoldHost::DescribeFacts(Json::Value& facts) const {
-    Json::Value capability;
-    capability["name"] = kService;
-    capability["entities"] = Json::Value(Json::arrayValue);
-    for (const auto& robot : domain_.describe().robots)
-        capability["entities"].append(robot.robot_id);
-    facts["capabilities"].append(capability);
 }
 
 std::shared_ptr<ChassisSeat> ChassisHoldHost::Find(const std::string& id) const {

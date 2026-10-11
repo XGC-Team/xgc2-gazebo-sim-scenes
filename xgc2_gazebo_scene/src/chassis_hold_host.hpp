@@ -2,7 +2,6 @@
 #include "xgc2_gazebo_scene/chassis_hold.hpp"
 #include <boost/weak_ptr.hpp>
 #include <condition_variable>
-#include <json/json.h>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -11,8 +10,8 @@
 #include <thread>
 #include <vector>
 #include <xgc2/chassis_hold/domain.hpp>
+#include <xgc2/chassis_hold/http_adapter.hpp>
 #include <xgc2/chassis_hold/service.hpp>
-#include <xgc2/xrpc/http.hpp>
 
 namespace xgc2_gazebo_scene::detail {
 // The clock of the HOLD domain and of the receipt times of commands: monotonic, so it keeps running while
@@ -63,22 +62,12 @@ class ChassisHoldHost : public std::enable_shared_from_this<ChassisHoldHost> {
     ChassisHoldHost(const ChassisHoldHost&) = delete;
     ChassisHoldHost& operator=(const ChassisHoldHost&) = delete;
 
-    // Starts the tick thread of the paused world and accepts model seats.
+    // Starts the domain's tick thread and accepts model seats.
     void Start();
     // Ends the seats' access to the host, stops the tick thread and answers pending engages.
     void Stop();
 
-    // The http.v1 binding of the HOLD service is Calls(), Handle() and DescribeFacts() and nothing else: the
-    // generic method addressing POST /v1/call/<service>/<Method> and the capability entry of the describe facts.
-    static bool Calls(const std::string& target);
-    // Answers a method call of the world host. Only the HOLD service is served; Engage replies asynchronously.
-    void Handle(xgc2::xrpc::HttpRequest request, xgc2::xrpc::HttpReply reply);
-    // Adds the capability, with the entities that are bound to it now, to the describe facts of the world.
-    void DescribeFacts(Json::Value& facts) const;
-
-    // The native tick: writes zero to every held robot and reports their feedback. Called on every update of
-    // the world thread, and by the tick thread while the world is paused or an engage waits.
-    void Tick();
+    const xgc2::chassis_hold::HttpAdapter& http() const { return *http_; }
 
     std::shared_ptr<ChassisSeat> Reserve(const std::string& id, ChassisOutput output);
     void Enroll(ChassisSeat& seat);
@@ -101,11 +90,14 @@ class ChassisHoldHost : public std::enable_shared_from_this<ChassisHoldHost> {
     std::shared_ptr<ChassisSeat> Find(const std::string& id) const;
     void Wake();
     void Run();
+    // Writes zero and reports feedback on the domain's one tick thread, under the physics update lock.
+    void Tick();
     void Feedback();
 
     boost::weak_ptr<gazebo::physics::World> world_; // identity only: the host never keeps a World alive
     xgc2::chassis_hold::Domain domain_;
     std::unique_ptr<xgc2::chassis_hold::Service> service_;
+    std::unique_ptr<xgc2::chassis_hold::HttpAdapter> http_;
     std::unique_ptr<Sink> sink_;
     std::int64_t last_feedback_ = 0; // under the physics update lock, like Tick()
 

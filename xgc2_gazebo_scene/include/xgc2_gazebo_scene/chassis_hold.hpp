@@ -30,8 +30,8 @@ struct ChassisSeat;
 struct ChassisOutput {
     // Writes one zero motion command: clears the commands and filter state the model holds and zeroes its
     // actuators. The host calls it on every HOLD tick while the robot is held, with the world's physics update
-    // lock and the seat lock held: on the world thread while the world runs, on the HOLD thread while it is
-    // paused. It must not block and must write what the model's control step writes while held.
+    // lock and the seat lock held, on the HOLD thread whether the world runs or is paused. It must not block
+    // and must write what the model's control step writes while held.
     std::function<void()> zero;
     // Optional trusted feedback: speed of the body in m/s and rad/s. A robot that provides it can reach the
     // `stopped` stage; one that does not never does. Same locks as `zero`.

@@ -8,14 +8,16 @@ The domain, the JSON bodies and their semantics are the chassis HOLD contract of
 ## Host
 
 The world plugin `libxgc2_simulation_world.so` owns one HOLD host per world: one `xgc2::chassis_hold::Domain` and
-one `Service`. HOLD is a capability of the world host, `xgc2.chassis.hold`, and is called like any XRPC method
-(the generic method addressing of `http.v1`) on the world's Unix server, the one that serves simulation-v1:
+one `Service` and the library's `HttpAdapter`. HOLD is a capability of the world host, `xgc2.chassis.hold`, and
+is called like any XRPC method (the generic method addressing of `http.v1`) on the world's Unix server, the one
+that serves simulation-v1:
 
     POST /v1/call/xgc2.chassis.hold/{Describe,State,Engage,Release}
 
 The request is the JSON body of the contract (an empty body is `{}`) and the reply is its JSON reply, unchanged.
 Status mapping: `ok` 200, `invalid_argument` 400, `not_found` 404 (an unknown method, or a `State` that names an
-unknown robot), `internal` 500; any other method or service under `/v1/call/` is 404. Engage replies once the
+unknown robot), `internal` 500; an unknown method or service under `/v1/call/` is 404. A verb other than POST
+on a HOLD route is 405 with `Allow: POST`. Errors use the XRPC `error` envelope. Engage replies once the
 native tick has written zero (at most 60 ms, never beyond the call deadline) without blocking the server's IO
 thread. Like every business call these carry `X-Xrpc-Instance-ID`; the `instance` of the HOLD bodies is the same
 instance ID, so a caller that kept a plan for a previous world host is refused by the transport (409) or, if it
@@ -54,13 +56,11 @@ The stamp is not simulation time, which stops while the world is paused.
 
 ## Native tick and zero output
 
-`Domain::tick` writes zero to every held robot on every tick:
-
-* While the world runs it is the `WorldUpdateBegin` callback of the world plugin, on the world thread. That
-  callback is connected when the world plugin loads, before any model can bind, so the zero of a tick precedes
-  the control steps of the models in the same update.
-* While the world is paused, and when an engage arrives, a thread of the host ticks every 10 ms under the
-  physics update lock, so HOLD takes effect and is re-asserted while simulation time is frozen.
+`Domain::tick` writes zero to every held robot on every tick. The domain's state machines always tick on one
+thread of the host, every 10 ms under the physics update lock,
+whether the world runs or is paused. `DomainOptions::wake` wakes that thread whenever the domain needs a tick,
+including engage and release. HOLD takes effect and is re-asserted while simulation time is frozen. Every
+model's control step also observes the admission gate and uses zero commands while held.
 
 Each model supplies its zero writer to its `ChassisHold`. The host calls it with the physics update lock and the
 seat lock of the model held; the model's `cmd_vel` callback and control step run under the same seat lock

@@ -15,8 +15,8 @@ find_package(catkin REQUIRED COMPONENTS
 )
 find_package(gazebo REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(XgcXrpc 0.1.0 CONFIG REQUIRED COMPONENTS http)
-find_package(XgcChassisHold CONFIG REQUIRED COMPONENTS core)
+find_package(XgcXrpc 0.2.0 CONFIG REQUIRED COMPONENTS http)
+find_package(XgcChassisHold 0.2.0 CONFIG REQUIRED COMPONENTS http)
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
@@ -122,7 +122,7 @@ target_include_directories(xgc2_simulation_service SYSTEM PUBLIC ${catkin_INCLUD
 add_dependencies(xgc2_simulation_service ${catkin_EXPORTED_TARGETS})
 target_link_libraries(xgc2_simulation_service PUBLIC xgc2_scene_model xgc2_gazebo_scene_motion
   PkgConfig::JSONCPP ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES}
-  PRIVATE XgcChassisHold::core XgcXrpc::http)
+  PRIVATE XgcChassisHold::http XgcXrpc::http)
 foreach(plugin simulation_world simulation_entity_ack simulation_sensor_ack)
   add_library(xgc2_${plugin} SHARED src/${plugin}_plugin.cpp)
   target_compile_features(xgc2_${plugin} PUBLIC cxx_std_20)
