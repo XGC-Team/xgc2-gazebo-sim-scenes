@@ -219,6 +219,7 @@
           "GAZEBO_MASTER_URI": "http://127.0.0.1:${masterPort}",
           "GAZEBO_MODEL_PATH": "${rosInstallPath}/share/gazebo_sim_worlds/models:${rosInstallPath}/share/gazebo_sim_fs150_sitl/models:/usr/share/gazebo-11/models",
           "GAZEBO_PLUGIN_PATH": "${rosInstallPath}/lib/gazebo_sim_px4_1_12:${rosInstallPath}/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins",
+          "LD_LIBRARY_PATH": "${rosInstallPath}/lib/gazebo_sim_px4_1_12:${rosInstallPath}/lib",
           "GAZEBO_RESOURCE_PATH": "/usr/share/gazebo-11",
           "ROS_HOSTNAME": "${rosHostname}",
           "ROS_IP": "${rosIp}",
