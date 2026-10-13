@@ -229,6 +229,19 @@ def main():
             cleared = mutate("/v1/extensions/scene/apply", {"epoch": "scene-epoch", "revision": 3, "document": document})
             assert cleared["state"] == "succeeded", cleared
             assert all(item["ref"]["id"] != "scene:box" for item in query("/v1/entities")["entities"])
+
+            # A paper-size scene must complete in the same native operation
+            # budget as small scenes, without a factory round trip per body.
+            batch_document = {"schema": "xgc2.scene.v1", "id": "batch-scene", "frame": "world", "obstacles": [
+                {"id": str(i), "name": "Box " + str(i),
+                 "pose": {"position": [i * 2.0, 0.0, 1.0], "orientation": [0, 0, 0, 1]},
+                 "motion": {"type": "hold"},
+                 "parts": [{"id": "body", "geometry": {"type": "box", "size": [1, 1, 1]}}]}
+                for i in range(77)]}
+            batch_scene = mutate("/v1/extensions/scene/apply", {
+                "epoch": "batch-epoch", "revision": 1, "document": batch_document})
+            assert batch_scene["state"] == "succeeded", batch_scene
+            assert len(query("/v1/extensions/scene")["document"]["obstacles"]) == 77
             for body in ({"steps": 1.0}, {"steps": True}, {"steps": 1, "unused": 2}):
                 try:
                     mutate("/v1/world/step", body)

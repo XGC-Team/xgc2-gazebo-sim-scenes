@@ -397,8 +397,9 @@ class SimulationService::Impl {
     }
     void Acknowledge(gazebo::physics::ModelPtr model) {
         std::lock_guard<std::mutex> lock(ack_mutex_);
-        if (pending_name_ == model->GetName()) {
-            pending_model_ = std::move(model);
+        const auto found = pending_models_.find(model->GetName());
+        if (found != pending_models_.end()) {
+            found->second = std::move(model);
             ack_cv_.notify_one();
         }
     }
@@ -1137,22 +1138,36 @@ class SimulationService::Impl {
         r.paused = world_->IsPaused();
         r.step_size = world_->Physics()->GetMaxStepSize();
     }
-    gazebo::physics::ModelPtr Realize(const sdf::SDFPtr& artifact, const std::string& name) {
+    std::map<std::string, gazebo::physics::ModelPtr> RealizeBatch(const std::map<std::string, sdf::SDFPtr>& artifacts) {
+        if (artifacts.empty())
+            return {};
         {
             std::lock_guard<std::mutex> lock(ack_mutex_);
-            pending_name_ = name;
-            pending_model_.reset();
+            pending_models_.clear();
+            for (const auto& [name, artifact] : artifacts)
+                pending_models_.emplace(name, gazebo::physics::ModelPtr{});
         }
-        world_->InsertModelSDF(*artifact);
+        // Queue the complete scene before waiting. Waiting after each obstacle
+        // forces a separate Gazebo factory/update round trip for every model.
+        for (const auto& [name, artifact] : artifacts)
+            world_->InsertModelSDF(*artifact);
         std::unique_lock<std::mutex> lock(ack_mutex_);
         ack_cv_.wait(lock, [this] {
-            return pending_model_ || stopping_;
+            if (stopping_)
+                return true;
+            for (const auto& [name, model] : pending_models_)
+                if (!model)
+                    return false;
+            return true;
         });
-        if (!pending_model_)
+        if (stopping_)
             throw DomainError(503, "unavailable", "world ended before native factory completion");
-        auto model = std::move(pending_model_);
-        pending_name_.clear();
-        return model;
+        auto models = std::move(pending_models_);
+        pending_models_.clear();
+        return models;
+    }
+    gazebo::physics::ModelPtr Realize(const sdf::SDFPtr& artifact, const std::string& name) {
+        return RealizeBatch({{name, artifact}}).at(name);
     }
     std::map<std::string, gazebo::physics::ModelPtr> ApplyScene(const std::map<std::string, SceneModel>& desired,
                                                                 Clock::time_point deadline) {
@@ -1187,6 +1202,15 @@ class SimulationService::Impl {
                     e.occupied = false;
                 }
             }
+        std::map<std::string, sdf::SDFPtr> additions;
+        for (const auto& [id, definition] : desired) {
+            bool exists = false;
+            for (const auto& e : entities_)
+                exists |= e.occupied && e.id == "scene:" + id;
+            if (!exists)
+                additions.emplace(definition.name, artifacts.at(id));
+        }
+        const auto created = RealizeBatch(additions);
         std::map<std::string, gazebo::physics::ModelPtr> models;
         for (const auto& [id, definition] : desired) {
             Entity* entity = nullptr;
@@ -1205,7 +1229,7 @@ class SimulationService::Impl {
                     throw DomainError(429, "resource_exhausted", "scene entity capacity reached");
                 *entity = {"scene:" + id,   "obstacle", definition.name, ++generation_, {}, definition.pose, true, true,
                            definition.body, ""};
-                entity->model = Realize(artifacts.at(id), definition.name);
+                entity->model = created.at(definition.name);
                 entity->native_ready = true;
             }
             ModelSdfParser parser;
@@ -1502,8 +1526,7 @@ class SimulationService::Impl {
     std::mutex queue_mutex_, ack_mutex_;
     std::condition_variable queue_cv_, ack_cv_;
     std::deque<std::size_t> queue_;
-    std::string pending_name_;
-    gazebo::physics::ModelPtr pending_model_;
+    std::map<std::string, gazebo::physics::ModelPtr> pending_models_;
     std::array<Slot, kReceipts> slots_;
     std::array<Entity, kEntities> entities_;
     std::size_t waiters_ = 0;
