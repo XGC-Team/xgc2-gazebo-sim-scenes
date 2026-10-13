@@ -1,7 +1,19 @@
 """Interpret authored observations at the sensor's native boundary."""
 import math
 import re
+import functools
+import subprocess
 
+
+
+@functools.lru_cache(maxsize=1)
+def gpu_available():
+    """Probe the installed native renderer, never infer GPU support from a label."""
+    try:
+        return subprocess.run(['/usr/libexec/xgc2-sensing-probe'], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 def robot_parameters(row, profile, run_mode):
     """Lower one frozen robot at the native launch boundary."""
@@ -66,8 +78,11 @@ def surface_parameters(sensors):
         raise ValueError('invalid simpleLidar preset')
     sampled = (mode in ('penetrating', 'depth_frustum') or lidar.get('publishBeams', False)
                or (preset and mode != 'raycast'))
+    acceleration = lidar.get('acceleration') or 'auto'
+    if acceleration == 'auto':
+        acceleration = ('gpu' if gpu_available() else 'cpu') if lidar.get('enabled', False) and not sampled else 'gpu'
     result = {'enable_simple_lidar': lidar.get('enabled', False) and not sampled,
-              'simple_lidar_acceleration': lidar.get('acceleration') or 'gpu'}
+              'simple_lidar_acceleration': acceleration}
     if result['simple_lidar_acceleration'] not in ('cpu', 'gpu'):
         raise ValueError('invalid simpleLidar acceleration')
     for field, target, default, maximum, integral in (

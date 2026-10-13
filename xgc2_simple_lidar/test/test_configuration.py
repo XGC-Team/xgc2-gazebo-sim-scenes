@@ -3,6 +3,8 @@
 import copy
 import math
 import unittest
+from unittest import mock
+from xgc2_simple_lidar import configuration
 
 from xgc2_simple_lidar.configuration import robot_parameters, surface_parameters
 
@@ -141,6 +143,27 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(parameters['simple_lidar_acceleration'], 'cpu')
         self.assertEqual(parameters['simple_lidar_rate_hz'], 12)
         self.assertEqual(parameters['simple_lidar_range_meters'], 30)
+
+
+class AutoBackendTest(unittest.TestCase):
+    def tearDown(self):
+        configuration.gpu_available.cache_clear()
+
+    def test_auto_probes_once_and_preserves_native_observation(self):
+        for available in (True, False):
+            configuration.gpu_available.cache_clear()
+            with mock.patch.object(configuration.subprocess, 'run', return_value=mock.Mock(returncode=0 if available else 1)) as probe:
+                for _ in range(3):
+                    value = surface_parameters({'simpleLidar': {'enabled': True, 'acceleration': 'auto'}})
+                    self.assertTrue(value['enable_simple_lidar'])
+                    self.assertEqual(value['simple_lidar_acceleration'], 'gpu' if available else 'cpu')
+                self.assertEqual(probe.call_count, 1)
+
+    def test_penetration_uses_scene_adapter_without_native_sensor_or_probe(self):
+        with mock.patch.object(configuration.subprocess, 'run') as probe:
+            value = surface_parameters({'simpleLidar': {'enabled': True, 'mode': 'penetrating', 'acceleration': 'auto'}})
+            self.assertFalse(value['enable_simple_lidar'])
+            probe.assert_not_called()
 
 
 if __name__ == '__main__':
