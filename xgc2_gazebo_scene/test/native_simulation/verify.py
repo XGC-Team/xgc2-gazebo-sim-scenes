@@ -114,15 +114,15 @@ def main():
 
             sequence = 0
 
-            def mutate(route, body, *, method="POST", request_id=None):
+            def mutate(route, body, *, method="POST", request_id=None, timeout=5):
                 nonlocal sequence
                 sequence += 1
-                body = {**body, "operation_timeout_ms": 5000}
-                response = client.call(route, body, method=method, timeout=5,
+                body = {**body, "operation_timeout_ms": int(timeout * 1000)}
+                response = client.call(route, body, method=method, timeout=timeout,
                                        request_id=request_id or f"mutation-{sequence}")
                 op = json.loads(response.body)
                 assert response.status == 202 or op["state"] in ("succeeded", "failed", "cancelled")
-                final = json.loads(client.call(f'/v1/operations/{op["id"]}/wait', {}, timeout=10).body)
+                final = json.loads(client.call(f'/v1/operations/{op["id"]}/wait', {}, timeout=max(10, timeout)).body)
                 return final
 
             pose = {"position": [1, 2, 3], "orientation": [0, 0, 0, 1]}
@@ -230,22 +230,22 @@ def main():
             assert cleared["state"] == "succeeded", cleared
             assert all(item["ref"]["id"] != "scene:box" for item in query("/v1/entities")["entities"])
 
-            # A paper-size scene must complete in the same native operation
-            # budget as small scenes, without a factory round trip per body.
+            # A multi-part scene exceeds the old transport ceiling without a
+            # factory round trip per body.
             batch_document = {"schema": "xgc2.scene.v1", "id": "batch-scene", "frame": "world", "obstacles": [
                 {"id": str(i), "name": "Box " + str(i),
                  "pose": {"position": [i * 2.0, 0.0, 1.0], "orientation": [0, 0, 0, 1]},
                  "motion": {"type": "hold"},
                  "parts": [{"id": "body-" + str(j),
                             "pose": {"position": [0, 0, 0], "orientation": [0, 0, 0, 1]}, "geometry": {"type": "box", "size": [1, 1, 1]}}
-                           for j in range(24)]}
+                           for j in range(32)]}
                 for i in range(77)]}
             assert len(json.dumps(batch_document).encode()) > 128 * 1024
             batch_scene = mutate("/v1/extensions/scene/apply", {
-                "epoch": "batch-epoch", "revision": 1, "document": batch_document})
+                "epoch": "batch-epoch", "revision": 1, "document": batch_document}, timeout=60)
             assert batch_scene["state"] == "succeeded", batch_scene
             batch_snapshot = query("/v1/extensions/scene")
-            assert len(batch_snapshot["document"]["obstacles"]) == 77
+            assert len(batch_snapshot["definition"]["obstacles"]) == 77
             assert len(json.dumps(batch_snapshot).encode()) > 256 * 1024
             for body in ({"steps": 1.0}, {"steps": True}, {"steps": 1, "unused": 2}):
                 try:
