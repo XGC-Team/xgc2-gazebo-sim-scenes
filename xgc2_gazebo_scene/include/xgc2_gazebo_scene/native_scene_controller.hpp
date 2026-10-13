@@ -2,6 +2,7 @@
 
 #include "xgc2_gazebo_scene/scene_model.hpp"
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -19,6 +20,7 @@ using NativeSceneApply = std::function<std::map<std::string, gazebo::physics::Mo
 
 class NativeSceneController {
   public:
+    static constexpr std::size_t kMaxRequestBytes = 8 * 1024 * 1024;
     // clock reads the world's engine-owner-published exact nanosecond cache.
     NativeSceneController(gazebo::physics::WorldPtr world, std::string mesh_root, NativeSceneApply apply,
                           std::function<std::int64_t()> clock);

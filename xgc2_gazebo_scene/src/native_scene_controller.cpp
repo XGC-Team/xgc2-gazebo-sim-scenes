@@ -235,7 +235,7 @@ NativeSceneController::~NativeSceneController() = default;
 
 std::shared_ptr<const PreparedSceneCommand> NativeSceneController::Prepare(const std::string& route,
                                                                            const std::string& text) {
-    if (text.size() > 8 * 1024 * 1024)
+    if (text.size() > kMaxRequestBytes)
         throw std::invalid_argument("scene request exceeds 8 MiB");
     Json::CharReaderBuilder builder;
     builder["rejectDupKeys"] = true;

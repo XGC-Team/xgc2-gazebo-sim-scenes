@@ -54,8 +54,8 @@ xgc2::xrpc::HttpLimits WorldLimits() {
     xgc2::xrpc::HttpLimits limits;
     limits.connections = 32;
     limits.header_bytes = 8192;
-    limits.request_bytes = 131072;
-    limits.response_bytes = 262144;
+    limits.request_bytes = NativeSceneController::kMaxRequestBytes;
+    limits.response_bytes = NativeSceneController::kMaxRequestBytes;
     limits.inflight = 32;
     limits.request_timeout = milliseconds(60000);
     limits.idle_timeout = milliseconds(5000);

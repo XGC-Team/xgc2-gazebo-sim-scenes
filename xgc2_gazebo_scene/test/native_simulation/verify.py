@@ -236,12 +236,17 @@ def main():
                 {"id": str(i), "name": "Box " + str(i),
                  "pose": {"position": [i * 2.0, 0.0, 1.0], "orientation": [0, 0, 0, 1]},
                  "motion": {"type": "hold"},
-                 "parts": [{"id": "body", "geometry": {"type": "box", "size": [1, 1, 1]}}]}
+                 "parts": [{"id": "body-" + str(j),
+                            "pose": {"position": [0, 0, 0], "orientation": [0, 0, 0, 1]}, "geometry": {"type": "box", "size": [1, 1, 1]}}
+                           for j in range(24)]}
                 for i in range(77)]}
+            assert len(json.dumps(batch_document).encode()) > 128 * 1024
             batch_scene = mutate("/v1/extensions/scene/apply", {
                 "epoch": "batch-epoch", "revision": 1, "document": batch_document})
             assert batch_scene["state"] == "succeeded", batch_scene
-            assert len(query("/v1/extensions/scene")["document"]["obstacles"]) == 77
+            batch_snapshot = query("/v1/extensions/scene")
+            assert len(batch_snapshot["document"]["obstacles"]) == 77
+            assert len(json.dumps(batch_snapshot).encode()) > 256 * 1024
             for body in ({"steps": 1.0}, {"steps": True}, {"steps": 1, "unused": 2}):
                 try:
                     mutate("/v1/world/step", body)
