@@ -311,6 +311,13 @@ class SimulationService::Impl {
         sensors_ =
             std::make_unique<NativeSensorController>(world_, [this](const std::string& id, std::uint64_t generation) {
                 return Find(id, generation).model;
+            }, "libxgc2_simulation_sensor_ack.so", [this] {
+                {
+                    // Publish under the waiter's mutex to prevent a lost ACK wake.
+                    std::lock_guard<std::mutex> lock(queue_mutex_);
+                    create_ack_ready_.store(true);
+                }
+                queue_cv_.notify_one();
             });
         update_gate_ = std::make_shared<UpdateGate>();
         update_gate_->owner.store(this);
@@ -1493,25 +1500,34 @@ class SimulationService::Impl {
     void CompleteCreates() {
         if (!create_ack_ready_.exchange(false) && !stopping_)
             return;
-        for (;;) {
+        std::vector<std::string> candidates;
+        {
+            std::lock_guard<std::mutex> lock(ack_mutex_);
+            for (const auto& entry : pending_creates_)
+                if (entry.second.model || stopping_)
+                    candidates.push_back(entry.first);
+        }
+        for (const auto& name : candidates) {
             PendingCreate create{};
             {
                 std::lock_guard<std::mutex> lock(ack_mutex_);
-                auto found = pending_creates_.begin();
-                while (found != pending_creates_.end() && !found->second.model && !stopping_)
-                    ++found;
+                auto found = pending_creates_.find(name);
                 if (found == pending_creates_.end())
-                    break;
-                create = std::move(found->second);
-                pending_creates_.erase(found);
+                    continue;
+                create = found->second;
             }
             auto& slot = slots_[create.slot];
+            bool awaiting_sensors = false;
             ApplySlot(slot, [&] {
                 if (stopping_)
                     throw DomainError(503, "unavailable", "world ended before native factory completion");
                 auto& entity = *create.entity;
+                Json::Value sensor_result;
+                if (!sensors_->CompleteParentSensors(entity.id, entity.generation, &sensor_result)) {
+                    awaiting_sensors = true;
+                    return true; // Keep the original receipt and reservation pending.
+                }
                 entity.model = std::move(create.model);
-                sensors_->CompleteParentSensors(entity.id, entity.generation);
                 if (slot.command.chassis && !chassis_->Bound(entity.id))
                     throw DomainError(503, "unavailable", "native chassis initialization did not complete");
                 entity.native_ready = true;
@@ -1519,6 +1535,14 @@ class SimulationService::Impl {
                 WorldState(slot.result);
                 return false;
             });
+            if (!awaiting_sensors) {
+                // Retain the native model for explicit reconciliation after an
+                // initialization failure, as before; pending creates stay hidden.
+                if (!stopping_ && !create.entity->model && create.model)
+                    create.entity->model = std::move(create.model);
+                std::lock_guard<std::mutex> lock(ack_mutex_);
+                pending_creates_.erase(name);
+            }
         }
     }
     void Work() {

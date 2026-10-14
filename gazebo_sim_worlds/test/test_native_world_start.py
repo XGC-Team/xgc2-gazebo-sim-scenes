@@ -20,7 +20,7 @@ class NativeWorldStartTest(unittest.TestCase):
             binary, argv, env = entry.compose(['--world', str(world), '--paused', 'true', '--gui', 'false',
                 '--ros-data', 'true', '--gazebo-bin', '/usr/bin/true', '--vrpn-config', str(vrpn),
                 '--plugin-dir', directory, '__name:=fixture', '__ns:=/fixture'], environment)
-            self.assertEqual(argv, [binary, '-u', '-s', 'libgazebo_ros_paths_plugin.so', '-s',
+            self.assertEqual(argv, [binary, '-u', '-s', 'libxgc2_simple_lidar_cpu.so', '-s', 'libxgc2_simple_lidar.so', '-s', 'libgazebo_ros_paths_plugin.so', '-s',
                 'libxgc2_simulation_ros_data.so', '-s',
                 'libgazebo_sim_vrpn_system_plugin.so', str(world)])
             self.assertEqual(env['XGC_SIM_VRPN_CONFIG'], str(vrpn))
@@ -29,7 +29,7 @@ class NativeWorldStartTest(unittest.TestCase):
             self.assertEqual(environment['XGC_SIM_VRPN_CONFIG'], '/stale')
             _, argv, env = entry.compose(['--world', str(world), '--paused', 'false', '--gui', 'false',
                 '--ros-data', 'false', '--gazebo-bin', '/usr/bin/true'], environment)
-            self.assertEqual(argv, [binary, str(world)])
+            self.assertEqual(argv, [binary, '-s', 'libxgc2_simple_lidar_cpu.so', '-s', 'libxgc2_simple_lidar.so', str(world)])
             self.assertNotIn('XGC_SIM_VRPN_CONFIG', env)
             self.assertNotIn('XGC_SIM_ROS_NAMESPACE', env)
 

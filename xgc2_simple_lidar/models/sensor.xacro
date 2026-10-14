@@ -10,7 +10,7 @@
   <xacro:property name="xgc2_simple_lidar_default_horizontal_fov" value="${2*pi}"/>
   <xacro:property name="xgc2_simple_lidar_default_acceleration" value="gpu"/>
   <xacro:macro name="xgc2_simple_lidar_sensor" params="namespace pose rate:=${xgc2_simple_lidar_default_rate} max_range:=${xgc2_simple_lidar_default_max_range} samples:=${xgc2_simple_lidar_default_samples} layers:=${xgc2_simple_lidar_default_layers} vertical_fov:=${xgc2_simple_lidar_default_vertical_fov} horizontal_fov:=${xgc2_simple_lidar_default_horizontal_fov} acceleration:=${xgc2_simple_lidar_default_acceleration}">
-    <sensor name="simple_lidar" type="${dict(cpu='ray', gpu='gpu_ray')[acceleration]}">
+    <sensor name="simple_lidar" type="${dict(cpu='xgc2_cpu_lidar', gpu='xgc2_gpu_lidar')[acceleration]}">
       <pose>${pose}</pose>
       <always_on>false</always_on>
       <update_rate>${rate}</update_rate>
@@ -28,9 +28,7 @@
         </scan>
         <range><min>0.15</min><max>${max_range}</max><resolution>0.01</resolution></range>
       </ray>
-      <plugin name="simple_lidar" filename="${dict(cpu='libxgc2_simple_lidar_cpu.so', gpu='libxgc2_simple_lidar.so')[acceleration]}">
-        <robotNamespace>${namespace}</robotNamespace>
-      </plugin>
+      <topic>${namespace}/simple_lidar/points</topic>
     </sensor>
   </xacro:macro>
 </robot>

@@ -72,10 +72,9 @@ def make_environment(args):
 
 def prepare_world(args, output_dir):
     tree = ET.parse(Path(__file__).resolve().with_name('enclosure.world'))
-    if args.acceleration == 'cpu':
-        sensor = tree.getroot().find("world/model[@name='scanner']/link/sensor")
-        sensor.set('type', 'ray')
-        sensor.find('plugin').set('filename', 'libxgc2_simple_lidar_cpu.so')
+    sensor = tree.getroot().find("world/model[@name='scanner']/link/sensor")
+    sensor.set('type', 'xgc2_' + args.acceleration + '_lidar')
+    sensor.find('topic').text = '/test_robot/simple_lidar/points'
     path = output_dir / 'enclosure.world'
     tree.write(path, encoding='unicode')
     return path
@@ -91,6 +90,10 @@ def start_processes(output_dir, environment, ros_port, processes, world):
                 '--verbose',
                 '-s',
                 'libgazebo_ros_api_plugin.so',
+                '-s',
+                'libxgc2_simple_lidar_cpu.so',
+                '-s',
+                'libxgc2_simple_lidar.so',
                 str(world),
             ],
         ),
@@ -237,7 +240,8 @@ def make_sensor_instance(base_sdf, name):
     instance = copy.deepcopy(base_sdf)
     instance.find('model').set('name', name)
     instance.find('model/link/sensor').set('name', name + '_simple_lidar')
-    instance.find('model/link/sensor/plugin/robotNamespace').text = '/' + name
+    sensor = instance.find('model/link/sensor')
+    sensor.find('topic').text = '/' + name + '/simple_lidar/points'
     return instance
 
 

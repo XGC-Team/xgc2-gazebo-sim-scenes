@@ -6,6 +6,23 @@ XYZ metres, stamped at the observation time. GPU rays consume rendered
 surfaces; CPU rays consume collision surfaces. Both preserve first-return occlusion. It does not simulate scan motion,
 measurement noise, intensity, or a physical lidar/localization stack.
 
+The CPU macro declares the native `xgc2_cpu_lidar` sensor. `native_world_start`
+registers its factory through `libxgc2_simple_lidar_cpu.so` before loading the
+world. It batches lightweight ODE rays against the actual world collision
+space, with reusable direction and point buffers. It does not instantiate a
+Gazebo collision/SDF object for every beam. The SensorManager owns creation,
+initialization acknowledgement and removal; scans run at their individual
+simulation-time phases on WorldUpdateEnd.
+
+The GPU macro declares `xgc2_gpu_lidar`, registered by
+`libxgc2_simple_lidar.so`. Six depth-only views sample the current Gazebo
+rendering scene, including moving bodies, over the full sphere. Each face's
+pixel angle is at most one quarter of the smallest requested beam interval;
+the output retains every requested horizontal and vertical sample. Textures,
+materials and readback buffers belong to that sensor and are released on
+removal. No RGB, reflectance or normal render targets are created. This replaces
+Classic GpuLaser's large fixed internal textures and its 90-degree vertical cap.
+
 The shared `models/sensor.xacro` macro can be included inside a Gazebo link
 (or a URDF `gazebo reference` element). `models/sensor.sdf.xacro` renders the
 sensor element for SDF model generators. Its required arguments are `namespace`
@@ -21,10 +38,9 @@ FS150, Scout and Wheeltec launch files expose `enable_simple_lidar` and
 enabled, it scans only while the point cloud has subscribers. Invalid or
 out-of-range points are omitted: a range must lie strictly between the minimum
 and maximum compared as floats, so a maximum without an exact float, such as
-20.9 m, does not turn misses into a sphere of points. On the GPU path, the final horizontal column is omitted because
-Gazebo 11 repeats a texture-edge ray there; the default complete frame contains
-at most 5,744 points (68,928 XYZ bytes). CPU keeps all 360 columns, up to
-5,760 points (69,120 bytes).
+20.9 m, does not turn misses into a sphere of points. Both paths keep all
+horizontal columns; the default complete frame contains at most 5,760 points
+(69,120 XYZ bytes).
 
 `test/run_standalone_test.sh` builds the projection test with only a C++17
 compiler and the stand-in headers under `test/standalone` (their ignition

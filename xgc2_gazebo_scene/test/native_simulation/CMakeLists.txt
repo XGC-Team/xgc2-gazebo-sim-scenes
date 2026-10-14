@@ -62,3 +62,10 @@ target_link_libraries(xgc2_create_ack_fixture PRIVATE xgc2_simulation_service)
 set_target_properties(xgc2_create_ack_fixture PROPERTIES
   OUTPUT_NAME xgc2_simulation_entity_ack
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/create_ack_fixture")
+
+add_library(xgc2_sensor_ack_fixture SHARED sensor_ack_fixture.cpp)
+target_compile_features(xgc2_sensor_ack_fixture PRIVATE cxx_std_20)
+target_link_libraries(xgc2_sensor_ack_fixture PRIVATE xgc2_simulation_service)
+set_target_properties(xgc2_sensor_ack_fixture PROPERTIES
+  OUTPUT_NAME xgc2_simulation_sensor_ack
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sensor_ack_fixture")

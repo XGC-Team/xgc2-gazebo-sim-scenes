@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -6,8 +8,10 @@
 
 #include <gazebo/common/Events.hh>
 #include <gazebo/common/Plugin.hh>
+#include <gazebo/physics/ode/ODEPhysics.hh>
 #include <gazebo/physics/physics.hh>
-#include <gazebo/sensors/RaySensor.hh>
+#include <gazebo/sensors/Sensor.hh>
+#include <gazebo/sensors/SensorFactory.hh>
 #include <ros/ros.h>
 #include <xgc2_gazebo_scene/ros_master_registration.hpp>
 
@@ -16,119 +20,185 @@
 
 namespace xgc2_simple_lidar {
 
-class CpuLidarPlugin final : public gazebo::SensorPlugin {
-    struct State {
-        std::weak_ptr<gazebo::sensors::RaySensor> sensor;
-        gazebo::physics::WorldPtr world;
-        std::unique_ptr<ros::NodeHandle> node;
-        ros::Publisher publisher;
-        std::unique_ptr<xgc2_gazebo_scene::RosMasterRegistration> registration;
-        std::unique_ptr<ScanProjection> projection;
-        std::vector<double> native_ranges;
-        std::vector<float> ranges;
-        std::mutex frame_mutex;
-        ScanSchedule schedule{0.1};
-        std::atomic<bool> closing{false}, ready{false};
-
-        void Stop() {
-            closing = true;
-            registration.reset();
-            const std::lock_guard<std::mutex> lock(frame_mutex);
-            publisher.shutdown();
-        }
-
-        void Frame() {
-            if (closing || !ready.load(std::memory_order_acquire))
-                return;
-            std::lock_guard<std::mutex> lock(frame_mutex);
-            if (closing)
-                return;
-            // Updates between scans stop here. The sensor and its parent are
-            // looked up only when a scan is due: EntityByName walks the
-            // world's entity tree and copies every scoped name on the way.
-            const double now = world->SimTime().Double();
-            if (!schedule.Due(now))
-                return;
-            auto current = sensor.lock();
-            if (!current)
-                return;
-            auto parent = world->EntityByName(current->ParentName());
-            if (!parent)
-                return;
-            schedule.Taken(now);
-            // RaySensor's background worker stays inactive (no Gazebo scan
-            // transport subscriber). Updating in WorldUpdateEnd avoids the
-            // SensorContainer -> physics / model deletion -> SensorContainer
-            // lock inversion in Gazebo Classic. Physics and measurement pose
-            // are sampled on this one world thread; delivery may be delayed.
-            current->Update(true);
-            current->Ranges(native_ranges);
-            if (native_ranges.size() != ranges.size()) {
-                ROS_ERROR_ONCE("simple lidar received an unexpected CPU frame layout");
-                return;
-            }
-            for (std::size_t i = 0; i < ranges.size(); ++i)
-                ranges[i] = static_cast<float>(native_ranges[i]);
-            const auto pose = current->Pose() + parent->WorldPose();
-            const auto stamp = current->LastMeasurementTime();
-            publisher.publish(projection->Project(ranges.data(), pose, ros::Time(stamp.sec, stamp.nsec)));
-        }
+// This is a native Gazebo sensor. Its ODE ray batch shares the world's actual
+// collision geometry, without constructing a full ODECollision (and its SDF
+// tree) for each beam. Scan shape and output remain the authored full grid.
+class CpuLidarSensor final : public gazebo::sensors::Sensor {
+    struct Beam {
+        dGeomID ray = nullptr;
+        ignition::math::Vector3d direction;
+        float range = 0;
     };
 
   public:
-    ~CpuLidarPlugin() override {
-        frame_connection_.reset();
-        if (state_)
-            state_->Stop();
-        state_.reset();
+    CpuLidarSensor() : Sensor(gazebo::sensors::OTHER) {}
+    ~CpuLidarSensor() override { Fini(); }
+
+    void Load(const std::string &name, sdf::ElementPtr element) override {
+        Sensor::Load(name, element);
+        if (!ros::isInitialized())
+            gzthrow("native CPU lidar requires the ROS data owner");
+        physics_ = boost::dynamic_pointer_cast<gazebo::physics::ODEPhysics>(world->Physics());
+        if (!physics_)
+            gzthrow("native CPU lidar requires Gazebo ODE collision geometry");
+        const auto ray = element->GetElement("ray");
+        const auto scan = ray->GetElement("scan");
+        const auto horizontal = scan->GetElement("horizontal");
+        const auto vertical = scan->GetElement("vertical");
+        const auto range = ray->GetElement("range");
+        const auto width = horizontal->Get<unsigned>("samples");
+        const auto height = vertical->Get<unsigned>("samples");
+        if (width < 2 || height < 2 || horizontal->Get<double>("resolution") != 1 ||
+            vertical->Get<double>("resolution") != 1 || element->Get<double>("update_rate") <= 0)
+            gzthrow("native CPU lidar requires 3D rays, scan resolution 1 and a positive rate");
+        const double yaw_min = horizontal->Get<double>("min_angle");
+        const double yaw_max = horizontal->Get<double>("max_angle");
+        const double pitch_min = vertical->Get<double>("min_angle");
+        const double pitch_max = vertical->Get<double>("max_angle");
+        range_min_ = range->Get<double>("min");
+        range_max_ = range->Get<double>("max");
+        projection_ = std::make_unique<ScanProjection>(width, height, yaw_min, yaw_max, pitch_min, pitch_max,
+                                                       range_min_, range_max_, false, 1);
+        beams_.resize(static_cast<std::size_t>(width) * height);
+        ranges_.resize(beams_.size());
+        ray_space_ = dSimpleSpaceCreate(nullptr);
+        dSpaceSetCleanup(ray_space_, 0);
+        dGeomSetCategoryBits(reinterpret_cast<dGeomID>(ray_space_), GZ_SENSOR_COLLIDE);
+        dGeomSetCollideBits(reinterpret_cast<dGeomID>(ray_space_), ~GZ_SENSOR_COLLIDE);
+        for (unsigned j = 0; j < height; ++j) {
+            const double pitch = pitch_min + (pitch_max - pitch_min) * j / (height - 1);
+            for (unsigned i = 0; i < width; ++i) {
+                auto &beam = beams_[static_cast<std::size_t>(j) * width + i];
+                const double yaw = yaw_min + (yaw_max - yaw_min) * i / (width - 1);
+                beam.direction = {std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)};
+                beam.ray = dCreateRay(ray_space_, range_max_ - range_min_);
+                dGeomSetData(beam.ray, &beam);
+                dGeomSetCategoryBits(beam.ray, GZ_SENSOR_COLLIDE);
+                dGeomSetCollideBits(beam.ray, ~GZ_SENSOR_COLLIDE);
+                dGeomRaySetParams(beam.ray, 0, 0);
+                dGeomRaySetClosestHit(beam.ray, 1);
+            }
+        }
+        const double period = 1.0 / element->Get<double>("update_rate");
+        schedule_ = ScanSchedule(period, ScanSchedule::SensorPhase(period, ParentName()));
+        // The SensorManager still owns lifecycle and the ACK plugin. Sampling
+        // belongs to WorldUpdateEnd so it never races body mutation/deletion.
+        SetActive(false);
+        const auto output = Topic();
+        if (output.empty())
+            gzthrow("native CPU lidar requires an explicit output topic");
+        registration_ = std::make_unique<xgc2_gazebo_scene::RosMasterRegistration>([this, output] {
+            node_ = std::make_unique<ros::NodeHandle>();
+            publisher_ = node_->advertise<sensor_msgs::PointCloud2>(output, 1);
+            if (!publisher_)
+                throw std::runtime_error("native CPU lidar ROS registration failed");
+            ready_.store(true, std::memory_order_release);
+        });
     }
 
-    void Load(gazebo::sensors::SensorPtr sensor, sdf::ElementPtr config) override {
-        auto cpu = std::dynamic_pointer_cast<gazebo::sensors::RaySensor>(sensor);
-        if (!cpu || !ros::isInitialized()) {
-            gzerr << "simple CPU lidar requires a ray sensor and an initialized ROS data owner\n";
-            return;
-        }
-        cpu->SetActive(false);
-        const auto width = cpu->RangeCount(), height = cpu->VerticalRangeCount();
-        if (width < 2 || height < 2 || cpu->RayCount() != width || cpu->VerticalRayCount() != height ||
-            cpu->UpdateRate() <= 0) {
-            gzerr << "simple CPU lidar requires 3D rays, scan resolution 1 and a positive rate\n";
-            return;
-        }
-        auto state = std::make_shared<State>();
-        state->sensor = cpu;
-        state->world = gazebo::physics::get_world(cpu->WorldName());
-        const double period = 1.0 / cpu->UpdateRate();
-        state->schedule = ScanSchedule(period, ScanSchedule::SensorPhase(period, cpu->ParentName()));
-        state->projection = std::make_unique<ScanProjection>(
-            width, height, cpu->AngleMin().Radian(), cpu->AngleMax().Radian(), cpu->VerticalAngleMin().Radian(),
-            cpu->VerticalAngleMax().Radian(), cpu->RangeMin(), cpu->RangeMax(), false, 1);
-        state->ranges.resize(static_cast<std::size_t>(width) * height);
-        const auto robot_namespace =
-            config->HasElement("robotNamespace") ? config->Get<std::string>("robotNamespace") : "";
-        const std::weak_ptr<State> weak = state;
-        state->registration = std::make_unique<xgc2_gazebo_scene::RosMasterRegistration>([weak, robot_namespace] {
-            if (auto current = weak.lock()) {
-                current->node = std::make_unique<ros::NodeHandle>(robot_namespace);
-                current->publisher = current->node->advertise<sensor_msgs::PointCloud2>("simple_lidar/points", 1);
-                if (!current->publisher)
-                    throw std::runtime_error("simple CPU lidar ROS registration failed");
-                current->ready.store(true, std::memory_order_release);
+    void Init() override {
+        Sensor::Init();
+        const std::weak_ptr<gazebo::sensors::Sensor> weak = shared_from_this();
+        frame_connection_ = gazebo::event::Events::ConnectWorldUpdateEnd([weak] {
+            if (auto sensor = weak.lock())
+                static_cast<CpuLidarSensor *>(sensor.get())->Frame();
+        });
+    }
+
+    void Fini() override {
+        frame_connection_.reset();
+        closing_ = true;
+        registration_.reset();
+        std::lock_guard<std::mutex> lock(frame_mutex_);
+        publisher_.shutdown();
+        for (auto &beam : beams_)
+            if (beam.ray) {
+                dGeomDestroy(beam.ray);
+                beam.ray = nullptr;
             }
-        });
-        frame_connection_ = gazebo::event::Events::ConnectWorldUpdateEnd([weak]() {
-            if (auto current = weak.lock())
-                current->Frame();
-        });
-        state_ = std::move(state);
+        if (ray_space_) {
+            dSpaceDestroy(ray_space_);
+            ray_space_ = nullptr;
+        }
+        beams_.clear();
+        Sensor::Fini();
     }
 
   private:
+    static void Intersect(void *context, dGeomID first, dGeomID second) {
+        auto *sensor = static_cast<CpuLidarSensor *>(context);
+        if (dGeomIsSpace(first) || dGeomIsSpace(second)) {
+            dSpaceCollide2(first, second, context, &Intersect);
+            return;
+        }
+        dGeomID query = nullptr;
+        if (dGeomGetSpace(first) == sensor->ray_space_)
+            query = first;
+        else if (dGeomGetSpace(second) == sensor->ray_space_)
+            query = second;
+        if (!query || (dGeomGetClass(first) == dRayClass && dGeomGetClass(second) == dRayClass))
+            return;
+        dContactGeom contact;
+        if (dCollide(first, second, 1, &contact, sizeof(contact)) > 0) {
+            auto *beam = static_cast<Beam *>(dGeomGetData(query));
+            beam->range = std::min(beam->range, static_cast<float>(contact.depth + sensor->range_min_));
+        }
+    }
+
+    void Frame() {
+        if (closing_ || !ready_.load(std::memory_order_acquire) || publisher_.getNumSubscribers() == 0)
+            return;
+        std::lock_guard<std::mutex> lock(frame_mutex_);
+        if (closing_)
+            return;
+        const auto stamp = world->SimTime();
+        if (!schedule_.Due(stamp.Double()))
+            return;
+        auto parent = world->EntityByName(ParentName());
+        if (!parent)
+            return;
+        schedule_.Taken(stamp.Double());
+        const auto measured = Pose() + parent->WorldPose();
+        const auto rotation = measured.Rot();
+        const auto origin = measured.Pos();
+        for (auto &beam : beams_) {
+            const auto direction = rotation.RotateVector(beam.direction);
+            const auto start = origin + direction * range_min_;
+            beam.range = static_cast<float>(range_max_);
+            dGeomRaySet(beam.ray, start.X(), start.Y(), start.Z(), direction.X(), direction.Y(), direction.Z());
+        }
+        {
+            boost::recursive_mutex::scoped_lock physics_lock(*physics_->GetPhysicsUpdateMutex());
+            dSpaceCollide2(reinterpret_cast<dGeomID>(ray_space_), reinterpret_cast<dGeomID>(physics_->GetSpaceId()),
+                           this, &Intersect);
+        }
+        for (std::size_t i = 0; i < beams_.size(); ++i)
+            ranges_[i] = beams_[i].range;
+        lastMeasurementTime = stamp;
+        publisher_.publish(projection_->Project(ranges_.data(), measured, ros::Time(stamp.sec, stamp.nsec)));
+    }
+
+    boost::shared_ptr<gazebo::physics::ODEPhysics> physics_;
+    dSpaceID ray_space_ = nullptr;
+    std::vector<Beam> beams_;
+    std::vector<float> ranges_;
+    double range_min_ = 0, range_max_ = 0;
+    std::unique_ptr<ScanProjection> projection_;
+    ScanSchedule schedule_{0.1};
+    std::unique_ptr<ros::NodeHandle> node_;
+    ros::Publisher publisher_;
+    std::unique_ptr<xgc2_gazebo_scene::RosMasterRegistration> registration_;
     gazebo::event::ConnectionPtr frame_connection_;
-    std::shared_ptr<State> state_;
+    std::mutex frame_mutex_;
+    std::atomic<bool> closing_{false}, ready_{false};
 };
 
-GZ_REGISTER_SENSOR_PLUGIN(CpuLidarPlugin)
-
+class CpuLidarRegistration final : public gazebo::SystemPlugin {
+  public:
+    void Load(int, char **) override {
+        gazebo::sensors::SensorFactory::RegisterSensor(
+            "xgc2_cpu_lidar", []() -> gazebo::sensors::Sensor * { return new CpuLidarSensor(); });
+    }
+};
+GZ_REGISTER_SYSTEM_PLUGIN(CpuLidarRegistration)
 } // namespace xgc2_simple_lidar

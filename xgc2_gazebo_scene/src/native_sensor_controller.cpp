@@ -22,11 +22,16 @@
 namespace xgc2_gazebo_scene {
 namespace {
 using Clock = std::chrono::steady_clock;
+struct CompletionSignal {
+    std::mutex mutex;
+    std::function<void()> notify;
+};
 struct AckState {
     std::mutex mutex;
     std::condition_variable changed;
     bool initialized = false, released = false;
     std::weak_ptr<gazebo::sensors::Sensor> sensor;
+    std::weak_ptr<CompletionSignal> completion;
 };
 std::mutex registry_mutex;
 std::unordered_map<std::string, std::weak_ptr<AckState>> registry;
@@ -89,6 +94,12 @@ std::shared_ptr<AckState> FindAck(const std::string& token) {
     auto it = registry.find(token);
     return it == registry.end() ? nullptr : it->second.lock();
 }
+void NotifyCompletion(const std::shared_ptr<AckState>& ack) {
+    if (auto signal = ack->completion.lock()) {
+        std::lock_guard<std::mutex> lock(signal->mutex);
+        if (signal->notify) signal->notify();
+    }
+}
 } // namespace
 SensorControlError::SensorControlError(int status_, std::string code_, const std::string& message)
     : std::runtime_error(message), status(status_), code(std::move(code_)) {}
@@ -100,6 +111,7 @@ void AcknowledgeSimulationSensor(const std::string& token, const gazebo::sensors
             ack->initialized = true;
         }
         ack->changed.notify_all();
+        NotifyCompletion(ack);
     }
 }
 void ReleaseSimulationSensor(const std::string& token) {
@@ -110,6 +122,7 @@ void ReleaseSimulationSensor(const std::string& token) {
             ack->released = true;
         }
         ack->changed.notify_all();
+        NotifyCompletion(ack);
     }
 }
 struct PreparedSensorCommand {
@@ -132,9 +145,13 @@ class NativeSensorController::Impl {
         Json::Value desired, applied;
         std::shared_ptr<AckState> ack;
     };
-    Impl(gazebo::physics::WorldPtr world, NativeSensorResolve resolve, std::string plugin)
-        : world_(std::move(world)), resolve_(std::move(resolve)), plugin_(std::move(plugin)) {}
+    Impl(gazebo::physics::WorldPtr world, NativeSensorResolve resolve, std::string plugin,
+         std::function<void()> completion_changed)
+        : world_(std::move(world)), resolve_(std::move(resolve)), plugin_(std::move(plugin)) {
+        completion_->notify = std::move(completion_changed);
+    }
     ~Impl() {
+        Stop();
         std::lock_guard<std::mutex> lock(registry_mutex);
         for (const auto& record : records_)
             if (record.occupied)
@@ -186,8 +203,9 @@ class NativeSensorController::Impl {
                 Invalid("one sensor is required");
             command->realization = sensor_element->Clone();
             command->type = command->realization->Get<std::string>("type");
-            if (command->type != "camera" && command->type != "imu" && command->type != "ray")
-                Invalid("supported sensor types are camera, imu and ray");
+            if (command->type != "camera" && command->type != "imu" && command->type != "ray" &&
+                command->type != "xgc2_cpu_lidar" && command->type != "xgc2_gpu_lidar")
+                Invalid("supported sensor types are camera, imu, ray, xgc2_cpu_lidar and xgc2_gpu_lidar");
         } else {
             if (route.compare(0, prefix.size() + 1, prefix + "/") != 0)
                 throw SensorControlError(404, "not_found", "unknown sensor route");
@@ -281,7 +299,8 @@ class NativeSensorController::Impl {
         result["parent"]["id"] = record.parent;
         result["parent"]["generation"] = Json::UInt64(record.parent_generation);
         result["parent"]["link"] = record.link;
-        result["kind"] = record.type == "ray" ? "lidar" : record.type;
+        result["kind"] = (record.type == "ray" || record.type == "xgc2_cpu_lidar" || record.type == "xgc2_gpu_lidar")
+                             ? "lidar" : record.type;
         result["native_type"] = record.type;
         result["native_name"] = record.native_name;
         result["desired"]["revision"] = Json::UInt64(record.desired_revision);
@@ -359,6 +378,7 @@ class NativeSensorController::Impl {
             const auto sequence = next_token.fetch_add(1);
             const auto token = "sensor-" + std::to_string(sequence);
             auto ack = std::make_shared<AckState>();
+            ack->completion = completion_;
             AppendAck(authored.sensor, token);
             staged_registry.emplace(token, ack);
             staged_records.push_back(Record{"attached-" + std::to_string(sequence),
@@ -389,12 +409,23 @@ class NativeSensorController::Impl {
                 }
         artifact->Root(staged_root);
     }
-    Json::Value CompleteParentSensors(const std::string& id, std::uint64_t generation) {
+    bool CompleteParentSensors(const std::string& id, std::uint64_t generation, Json::Value* output) {
+        if (stopping_.load())
+            throw SensorControlError(503, "unavailable", "world stopped during native sensor effect");
+        bool pending = false;
+        for (const auto& record : records_)
+            if (record.occupied && record.parent == id && record.parent_generation == generation) {
+                std::lock_guard<std::mutex> lock(record.ack->mutex);
+                if (record.ack->released)
+                    throw SensorControlError(503, "unavailable", "sensor released during initialization");
+                pending |= !record.ack->initialized;
+            }
+        if (pending)
+            return false;
         Json::Value result;
         result["sensors"] = Json::arrayValue;
         for (auto& record : records_)
             if (record.occupied && record.parent == id && record.parent_generation == generation) {
-                Wait(record.ack, false, {});
                 auto sensor = Sensor(record);
                 record.native_name = sensor->ScopedName();
                 record.desired = record.applied = Config(sensor);
@@ -402,7 +433,8 @@ class NativeSensorController::Impl {
                 result["sensors"].append(Describe(record));
             }
         result["native_initialized"] = true;
-        return result;
+        *output = std::move(result);
+        return true;
     }
     void Remove(Record& record, Clock::time_point deadline, bool* effects_started = nullptr) {
         if (record.native_name.empty()) {
@@ -560,6 +592,12 @@ class NativeSensorController::Impl {
     }
     void Stop() {
         stopping_.store(true);
+        {
+            // Stop waits for any in-flight wake, then detaches the owner before
+            // worker join and native registry teardown. Late ACKs cannot call it.
+            std::lock_guard<std::mutex> lock(completion_->mutex);
+            completion_->notify = {};
+        }
         std::lock_guard<std::mutex> lock(registry_mutex);
         for (auto& item : registry)
             if (auto ack = item.second.lock()) {
@@ -575,10 +613,12 @@ class NativeSensorController::Impl {
     std::array<Record, 32> records_;
     std::uint64_t generation_ = 0;
     std::atomic<bool> stopping_{false};
+    std::shared_ptr<CompletionSignal> completion_ = std::make_shared<CompletionSignal>();
 };
 NativeSensorController::NativeSensorController(gazebo::physics::WorldPtr world, NativeSensorResolve resolve,
-                                               std::string plugin)
-    : impl_(std::make_unique<Impl>(std::move(world), std::move(resolve), std::move(plugin))) {}
+                                               std::string plugin, std::function<void()> completion_changed)
+    : impl_(std::make_unique<Impl>(std::move(world), std::move(resolve), std::move(plugin),
+                                   std::move(completion_changed))) {}
 NativeSensorController::~NativeSensorController() = default;
 std::shared_ptr<const PreparedSensorCommand>
 NativeSensorController::Prepare(const std::string& method, const std::string& route, const Json::Value& body) {
@@ -601,7 +641,7 @@ void NativeSensorController::PrepareParentSensors(const std::string& id, std::ui
                                                   const sdf::SDFPtr& artifact) {
     impl_->PrepareParentSensors(id, generation, artifact);
 }
-Json::Value NativeSensorController::CompleteParentSensors(const std::string& id, std::uint64_t generation) {
-    return impl_->CompleteParentSensors(id, generation);
+bool NativeSensorController::CompleteParentSensors(const std::string& id, std::uint64_t generation, Json::Value* result) {
+    return impl_->CompleteParentSensors(id, generation, result);
 }
 } // namespace xgc2_gazebo_scene

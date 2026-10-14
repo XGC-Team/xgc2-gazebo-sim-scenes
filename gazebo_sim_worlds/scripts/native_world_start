@@ -101,7 +101,7 @@ def compose(arguments, environment):
         env.pop(key, None)
     for key, variable in (('__name', 'XGC_SIM_ROS_NAME'), ('__ns', 'XGC_SIM_ROS_NAMESPACE'), ('__log', 'XGC_SIM_ROS_LOG')):
         if key in mapped: env[variable] = mapped[key]
-    plugins = []
+    plugins = ['libxgc2_simple_lidar_cpu.so', 'libxgc2_simple_lidar.so']
     if args.ros_data == 'true':
         plugins.append('libgazebo_ros_paths_plugin.so')
         plugins.append('libxgc2_simulation_ros_data.so')

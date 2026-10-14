@@ -76,12 +76,10 @@ def surface_parameters(sensors):
         raise ValueError('invalid simpleLidar mode')
     if preset not in ('', 'bridge_equivalent', 'zju_cpu_crop', 'zju_cpu_crop_ego_v2'):
         raise ValueError('invalid simpleLidar preset')
-    sampled = (mode in ('penetrating', 'depth_frustum') or lidar.get('publishBeams', False)
-               or (preset and mode != 'raycast'))
     acceleration = lidar.get('acceleration') or 'auto'
     if acceleration == 'auto':
-        acceleration = ('gpu' if gpu_available() else 'cpu') if lidar.get('enabled', False) and not sampled else 'gpu'
-    result = {'enable_simple_lidar': lidar.get('enabled', False) and not sampled,
+        acceleration = ('gpu' if gpu_available() else 'cpu') if lidar.get('enabled', False) else 'gpu'
+    result = {'enable_simple_lidar': lidar.get('enabled', False),
               'simple_lidar_acceleration': acceleration}
     if result['simple_lidar_acceleration'] not in ('cpu', 'gpu'):
         raise ValueError('invalid simpleLidar acceleration')

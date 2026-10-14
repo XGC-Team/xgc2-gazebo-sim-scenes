@@ -159,9 +159,41 @@ class AutoBackendTest(unittest.TestCase):
                     self.assertEqual(value['simple_lidar_acceleration'], 'gpu' if available else 'cpu')
                 self.assertEqual(probe.call_count, 1)
 
-    def test_penetration_uses_scene_adapter_without_native_sensor_or_probe(self):
+    def test_legacy_observation_fields_keep_native_scan_and_explicit_backend(self):
+        for mode in ('', 'raycast', 'penetrating', 'depth_frustum'):
+            for preset in ('', 'bridge_equivalent', 'zju_cpu_crop', 'zju_cpu_crop_ego_v2'):
+                for backend in ('cpu', 'gpu'):
+                    for beams in (False, True):
+                        with self.subTest(mode=mode, preset=preset, backend=backend, beams=beams), \
+                                mock.patch.object(configuration.subprocess, 'run') as probe:
+                            value = surface_parameters({'simpleLidar': {
+                                'enabled': True, 'mode': mode, 'preset': preset,
+                                'publishBeams': beams, 'acceleration': backend,
+                                'rateHz': 4, 'rangeMeters': 37, 'hFovDeg': 270,
+                                'vFovDeg': 50, 'hRes': 720, 'vRes': 32}})
+                            self.assertTrue(value['enable_simple_lidar'])
+                            self.assertEqual(value['simple_lidar_acceleration'], backend)
+                            for field, expected in (('rate_hz', 4), ('range_meters', 37),
+                                    ('hfov_deg', 270), ('vfov_deg', 50), ('hres', 720), ('vres', 32)):
+                                self.assertEqual(value['simple_lidar_' + field], expected)
+                            probe.assert_not_called()
+
+    def test_legacy_penetrating_auto_selects_an_available_native_backend(self):
+        for available in (False, True):
+            configuration.gpu_available.cache_clear()
+            with mock.patch.object(configuration.subprocess, 'run',
+                    return_value=mock.Mock(returncode=0 if available else 1)) as probe:
+                value = surface_parameters({'simpleLidar': {'enabled': True,
+                    'mode': 'penetrating', 'preset': 'bridge_equivalent', 'publishBeams': True,
+                    'acceleration': 'auto'}})
+                self.assertTrue(value['enable_simple_lidar'])
+                self.assertEqual(value['simple_lidar_acceleration'], 'gpu' if available else 'cpu')
+                probe.assert_called_once()
+
+    def test_author_disabled_stays_disabled_without_an_auto_probe(self):
         with mock.patch.object(configuration.subprocess, 'run') as probe:
-            value = surface_parameters({'simpleLidar': {'enabled': True, 'mode': 'penetrating', 'acceleration': 'auto'}})
+            value = surface_parameters({'simpleLidar': {'enabled': False,
+                'mode': 'penetrating', 'preset': 'bridge_equivalent', 'acceleration': 'auto'}})
             self.assertFalse(value['enable_simple_lidar'])
             probe.assert_not_called()
 
