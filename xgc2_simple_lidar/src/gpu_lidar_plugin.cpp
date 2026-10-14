@@ -28,7 +28,7 @@ namespace xgc2_simple_lidar {
 class RangeFace final : public gazebo::rendering::DepthCamera {
   public:
     RangeFace(const std::string& name, const gazebo::rendering::ScenePtr& scene) : DepthCamera(name, scene, false) {}
-    void Prepare(sdf::ElementPtr config, const std::string& name) {
+    void Prepare(const sdf::ElementPtr& config, const std::string& name) {
         Load(config);
         DepthCamera::Init();
         texture_name_ = name + "_Depth";

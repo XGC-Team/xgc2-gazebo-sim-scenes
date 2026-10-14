@@ -159,8 +159,8 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
             return;
         schedule_.Taken(stamp.Double());
         const auto measured = Pose() + parent->WorldPose();
-        const auto rotation = measured.Rot();
-        const auto origin = measured.Pos();
+        const auto& rotation = measured.Rot();
+        const auto& origin = measured.Pos();
         for (auto& beam : beams_) {
             const auto direction = rotation.RotateVector(beam.direction);
             const auto start = origin + direction * range_min_;

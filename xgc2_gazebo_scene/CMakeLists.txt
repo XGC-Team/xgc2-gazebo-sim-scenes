@@ -164,6 +164,11 @@ catkin_install_python(PROGRAMS scripts/spawn_robot_model
 
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
+  # Give the native ACK fixtures the service's public compile requirements.
+  foreach(fixture create_ack sensor_ack)
+    add_library(xgc2_${fixture}_fixture SHARED test/native_simulation/${fixture}_fixture.cpp)
+    target_link_libraries(xgc2_${fixture}_fixture PRIVATE xgc2_simulation_service)
+  endforeach()
   catkin_install_python(PROGRAMS
     test/physical_contact_ground_truth_test.py
     test/scene_ground_truth_test.py
