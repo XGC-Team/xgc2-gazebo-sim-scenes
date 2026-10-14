@@ -27,8 +27,8 @@ namespace xgc2_simple_lidar {
 // Depth-only face: no RGB target and no six redundant Camera image readbacks.
 class RangeFace final : public gazebo::rendering::DepthCamera {
   public:
-    RangeFace(const std::string &name, const gazebo::rendering::ScenePtr &scene) : DepthCamera(name, scene, false) {}
-    void Prepare(sdf::ElementPtr config, const std::string &name) {
+    RangeFace(const std::string& name, const gazebo::rendering::ScenePtr& scene) : DepthCamera(name, scene, false) {}
+    void Prepare(sdf::ElementPtr config, const std::string& name) {
         Load(config);
         DepthCamera::Init();
         texture_name_ = name + "_Depth";
@@ -46,7 +46,7 @@ class RangeFace final : public gazebo::rendering::DepthCamera {
         lastRenderWallTime = gazebo::common::Time::GetWallTime();
         newData = false;
     }
-    const float *Ranges() const { return pixels_.data(); }
+    const float* Ranges() const { return pixels_.data(); }
     void Fini() override {
         if (!texture_name_.empty()) {
             if (depthTarget)
@@ -78,7 +78,7 @@ class GpuLidarSensor final : public gazebo::sensors::Sensor {
   public:
     GpuLidarSensor() : Sensor(gazebo::sensors::IMAGE) {}
     ~GpuLidarSensor() override { Fini(); }
-    void Load(const std::string &name, sdf::ElementPtr element) override {
+    void Load(const std::string& name, sdf::ElementPtr element) override {
         Sensor::Load(name, element);
         if (!ros::isInitialized())
             gzthrow("native GPU lidar requires the ROS data owner");
@@ -153,7 +153,7 @@ class GpuLidarSensor final : public gazebo::sensors::Sensor {
         if (!scene)
             gzthrow("native GPU lidar render scene unavailable");
         for (unsigned i = 0; i < 6; ++i) {
-            auto &face = faces_[i];
+            auto& face = faces_[i];
             const auto name = ScopedName() + "_face_" + std::to_string(i);
             face.camera = std::make_unique<RangeFace>(name, scene);
             auto config = std::make_shared<sdf::Element>();
@@ -173,7 +173,7 @@ class GpuLidarSensor final : public gazebo::sensors::Sensor {
         const std::weak_ptr<gazebo::sensors::Sensor> weak = shared_from_this();
         frame_ = gazebo::event::Events::ConnectRender([weak] {
             if (auto s = weak.lock())
-                static_cast<GpuLidarSensor *>(s.get())->Frame();
+                static_cast<GpuLidarSensor*>(s.get())->Frame();
         });
     }
     void Fini() override {
@@ -182,7 +182,7 @@ class GpuLidarSensor final : public gazebo::sensors::Sensor {
         registration_.reset();
         std::lock_guard<std::mutex> lock(mutex_);
         publisher_.shutdown();
-        for (auto &face : faces_)
+        for (auto& face : faces_)
             if (face.camera) {
                 face.camera.reset();
             }
@@ -206,14 +206,14 @@ class GpuLidarSensor final : public gazebo::sensors::Sensor {
             return;
         schedule_.Taken(stamp.Double());
         const auto measured = Pose() + parent->WorldPose();
-        for (auto &face : faces_) {
+        for (auto& face : faces_) {
             face.camera->SetWorldPose({measured.Pos(), measured.Rot() * face.rotation});
             face.camera->Render();
             face.camera->PostRender();
         }
         for (std::size_t i = 0; i < beams_.size(); ++i) {
-            const auto &b = beams_[i];
-            const auto *depths = faces_[b.face].camera->Ranges();
+            const auto& b = beams_[i];
+            const auto* depths = faces_[b.face].camera->Ranges();
             ranges_[i] = depths ? depths[b.pixel] / b.forward : static_cast<float>(max_range_);
         }
         lastMeasurementTime = stamp;
@@ -235,9 +235,10 @@ class GpuLidarSensor final : public gazebo::sensors::Sensor {
 };
 class GpuLidarRegistration final : public gazebo::SystemPlugin {
   public:
-    void Load(int, char **) override {
-        gazebo::sensors::SensorFactory::RegisterSensor(
-            "xgc2_gpu_lidar", []() -> gazebo::sensors::Sensor * { return new GpuLidarSensor(); });
+    void Load(int, char**) override {
+        gazebo::sensors::SensorFactory::RegisterSensor("xgc2_gpu_lidar", []() -> gazebo::sensors::Sensor* {
+            return new GpuLidarSensor();
+        });
     }
 };
 GZ_REGISTER_SYSTEM_PLUGIN(GpuLidarRegistration)

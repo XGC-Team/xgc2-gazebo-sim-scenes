@@ -97,7 +97,8 @@ std::shared_ptr<AckState> FindAck(const std::string& token) {
 void NotifyCompletion(const std::shared_ptr<AckState>& ack) {
     if (auto signal = ack->completion.lock()) {
         std::lock_guard<std::mutex> lock(signal->mutex);
-        if (signal->notify) signal->notify();
+        if (signal->notify)
+            signal->notify();
     }
 }
 } // namespace
@@ -300,7 +301,8 @@ class NativeSensorController::Impl {
         result["parent"]["generation"] = Json::UInt64(record.parent_generation);
         result["parent"]["link"] = record.link;
         result["kind"] = (record.type == "ray" || record.type == "xgc2_cpu_lidar" || record.type == "xgc2_gpu_lidar")
-                             ? "lidar" : record.type;
+                             ? "lidar"
+                             : record.type;
         result["native_type"] = record.type;
         result["native_name"] = record.native_name;
         result["desired"]["revision"] = Json::UInt64(record.desired_revision);
@@ -641,7 +643,8 @@ void NativeSensorController::PrepareParentSensors(const std::string& id, std::ui
                                                   const sdf::SDFPtr& artifact) {
     impl_->PrepareParentSensors(id, generation, artifact);
 }
-bool NativeSensorController::CompleteParentSensors(const std::string& id, std::uint64_t generation, Json::Value* result) {
+bool NativeSensorController::CompleteParentSensors(const std::string& id, std::uint64_t generation,
+                                                   Json::Value* result) {
     return impl_->CompleteParentSensors(id, generation, result);
 }
 } // namespace xgc2_gazebo_scene

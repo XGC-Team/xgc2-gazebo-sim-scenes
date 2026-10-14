@@ -34,7 +34,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
     CpuLidarSensor() : Sensor(gazebo::sensors::OTHER) {}
     ~CpuLidarSensor() override { Fini(); }
 
-    void Load(const std::string &name, sdf::ElementPtr element) override {
+    void Load(const std::string& name, sdf::ElementPtr element) override {
         Sensor::Load(name, element);
         if (!ros::isInitialized())
             gzthrow("native CPU lidar requires the ROS data owner");
@@ -68,7 +68,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
         for (unsigned j = 0; j < height; ++j) {
             const double pitch = pitch_min + (pitch_max - pitch_min) * j / (height - 1);
             for (unsigned i = 0; i < width; ++i) {
-                auto &beam = beams_[static_cast<std::size_t>(j) * width + i];
+                auto& beam = beams_[static_cast<std::size_t>(j) * width + i];
                 const double yaw = yaw_min + (yaw_max - yaw_min) * i / (width - 1);
                 beam.direction = {std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)};
                 beam.ray = dCreateRay(ray_space_, range_max_ - range_min_);
@@ -101,7 +101,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
         const std::weak_ptr<gazebo::sensors::Sensor> weak = shared_from_this();
         frame_connection_ = gazebo::event::Events::ConnectWorldUpdateEnd([weak] {
             if (auto sensor = weak.lock())
-                static_cast<CpuLidarSensor *>(sensor.get())->Frame();
+                static_cast<CpuLidarSensor*>(sensor.get())->Frame();
         });
     }
 
@@ -111,7 +111,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
         registration_.reset();
         std::lock_guard<std::mutex> lock(frame_mutex_);
         publisher_.shutdown();
-        for (auto &beam : beams_)
+        for (auto& beam : beams_)
             if (beam.ray) {
                 dGeomDestroy(beam.ray);
                 beam.ray = nullptr;
@@ -125,8 +125,8 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
     }
 
   private:
-    static void Intersect(void *context, dGeomID first, dGeomID second) {
-        auto *sensor = static_cast<CpuLidarSensor *>(context);
+    static void Intersect(void* context, dGeomID first, dGeomID second) {
+        auto* sensor = static_cast<CpuLidarSensor*>(context);
         if (dGeomIsSpace(first) || dGeomIsSpace(second)) {
             dSpaceCollide2(first, second, context, &Intersect);
             return;
@@ -140,7 +140,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
             return;
         dContactGeom contact;
         if (dCollide(first, second, 1, &contact, sizeof(contact)) > 0) {
-            auto *beam = static_cast<Beam *>(dGeomGetData(query));
+            auto* beam = static_cast<Beam*>(dGeomGetData(query));
             beam->range = std::min(beam->range, static_cast<float>(contact.depth + sensor->range_min_));
         }
     }
@@ -161,7 +161,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
         const auto measured = Pose() + parent->WorldPose();
         const auto rotation = measured.Rot();
         const auto origin = measured.Pos();
-        for (auto &beam : beams_) {
+        for (auto& beam : beams_) {
             const auto direction = rotation.RotateVector(beam.direction);
             const auto start = origin + direction * range_min_;
             beam.range = static_cast<float>(range_max_);
@@ -195,9 +195,10 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
 
 class CpuLidarRegistration final : public gazebo::SystemPlugin {
   public:
-    void Load(int, char **) override {
-        gazebo::sensors::SensorFactory::RegisterSensor(
-            "xgc2_cpu_lidar", []() -> gazebo::sensors::Sensor * { return new CpuLidarSensor(); });
+    void Load(int, char**) override {
+        gazebo::sensors::SensorFactory::RegisterSensor("xgc2_cpu_lidar", []() -> gazebo::sensors::Sensor* {
+            return new CpuLidarSensor();
+        });
     }
 };
 GZ_REGISTER_SYSTEM_PLUGIN(CpuLidarRegistration)

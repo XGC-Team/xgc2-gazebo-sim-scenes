@@ -13,7 +13,7 @@ namespace xgc2_gazebo_scene {
 namespace {
 std::mutex mutex;
 std::map<std::string, boost::weak_ptr<gazebo::physics::Model>> held;
-}
+} // namespace
 // Test-only replacement for the last-plugin ACK. Model Load always returns;
 // a later independently created entity releases the first model's receipt.
 class CreateAckFixture final : public gazebo::ModelPlugin {

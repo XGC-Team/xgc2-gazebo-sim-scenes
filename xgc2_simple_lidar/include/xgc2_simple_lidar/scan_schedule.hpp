@@ -18,12 +18,14 @@ namespace xgc2_simple_lidar {
 // A world reset retains the phase separation; missed scans never burst.
 class ScanSchedule {
   public:
-    explicit ScanSchedule(double period, double phase = 0.0)
-        : period_(period), phase_(phase), next_(phase) {}
+    explicit ScanSchedule(double period, double phase = 0.0) : period_(period), phase_(phase), next_(phase) {}
 
     static double SensorPhase(double period, const std::string& identity) {
         std::uint32_t key = 2166136261u;
-        for (const unsigned char byte : identity) { key ^= byte; key *= 16777619u; }
+        for (const unsigned char byte : identity) {
+            key ^= byte;
+            key *= 16777619u;
+        }
         key ^= key >> 16;
         return period * static_cast<double>(key & 0xffffu) / 65536.0;
     }

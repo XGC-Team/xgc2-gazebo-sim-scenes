@@ -308,10 +308,13 @@ class SimulationService::Impl {
             [this] {
                 return native_clock_ns_.load();
             });
-        sensors_ =
-            std::make_unique<NativeSensorController>(world_, [this](const std::string& id, std::uint64_t generation) {
+        sensors_ = std::make_unique<NativeSensorController>(
+            world_,
+            [this](const std::string& id, std::uint64_t generation) {
                 return Find(id, generation).model;
-            }, "libxgc2_simulation_sensor_ack.so", [this] {
+            },
+            "libxgc2_simulation_sensor_ack.so",
+            [this] {
                 {
                     // Publish under the waiter's mutex to prevent a lost ACK wake.
                     std::lock_guard<std::mutex> lock(queue_mutex_);
