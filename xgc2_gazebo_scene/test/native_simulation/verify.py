@@ -201,7 +201,10 @@ def main():
                 {"id": "box", "name": "Box", "pose": scene_pose,
                  "parts": [{"id": "body", "pose": {"position": [0, 0, 0], "orientation": [0, 0, 0, 1]},
                             "color": [1, .5, .1, 1],
-                            "geometry": {"type": "box", "size": [1, 2, 3]}}],
+                            "geometry": {"type": "box", "size": [1, 2, 3]}},
+                           {"id": "capsule", "pose": {"position": [0, 4, 0], "orientation": [0, 0, 0, 1]},
+                            "color": [1, .5, .1, 1],
+                            "geometry": {"type": "capsule", "radius": .2, "height": 1.5}}],
                  "motion": {"type": "constant_twist", "linear": [1, 0, 0], "angular": [0, 0, 0]}}]}
             scene = mutate("/v1/extensions/scene/apply", {"epoch": "scene-epoch", "revision": 1, "document": document})
             assert scene["state"] == "succeeded", scene
@@ -218,15 +221,25 @@ def main():
             scene_ref = next(item["ref"] for item in members if item["ref"]["id"] == "scene:box")
             assert unchanged["state"] == "succeeded", unchanged
             assert query("/v1/entities/scene:box")["entities"][0]["ref"] == scene_ref
-            played = mutate("/v1/extensions/scene/motion", {"epoch": "scene-epoch", "revision": 2, "operation": "play"})
+            # A pose-only apply reuses the exact collision/visual body and updates
+            # the reset pose without replacing the native entity.
+            document["obstacles"][0]["pose"]["position"] = [5, 0, 0]
+            repositioned = mutate("/v1/extensions/scene/apply", {
+                "epoch": "scene-epoch", "revision": 3, "document": document})
+            assert repositioned["state"] == "succeeded", repositioned
+            reused = query("/v1/entities/scene:box")["entities"][0]
+            assert reused["ref"] == scene_ref
+            assert reused["state"]["pose"] == document["obstacles"][0]["pose"]
+            played = mutate("/v1/extensions/scene/motion", {"epoch": "scene-epoch", "revision": 3, "operation": "play"})
             assert played["state"] == "succeeded", played
             mutate("/v1/world/step", {"steps": 10})
             actual = query("/v1/entities/scene:box")["entities"][0]["state"]["pose"]["position"][0]
-            assert abs(actual - 2.01) < 0.002, actual
-            reset_scene = mutate("/v1/extensions/scene/motion", {"epoch": "scene-epoch", "revision": 2, "operation": "reset"})
+            assert abs(actual - 5.01) < 0.002, actual
+            reset_scene = mutate("/v1/extensions/scene/motion", {"epoch": "scene-epoch", "revision": 3, "operation": "reset"})
             assert reset_scene["state"] == "succeeded"
+            assert query("/v1/entities/scene:box")["entities"][0]["state"]["pose"] == document["obstacles"][0]["pose"]
             document["obstacles"] = []
-            cleared = mutate("/v1/extensions/scene/apply", {"epoch": "scene-epoch", "revision": 3, "document": document})
+            cleared = mutate("/v1/extensions/scene/apply", {"epoch": "scene-epoch", "revision": 4, "document": document})
             assert cleared["state"] == "succeeded", cleared
             assert all(item["ref"]["id"] != "scene:box" for item in query("/v1/entities")["entities"])
 
@@ -269,7 +282,7 @@ def main():
                               "checks": ["paused-native-create", "native-pose", "reset", "exact-step",
                                          "time-epoch", "removal", "replacement-fence", "deduplication",
                                          "strict-input", "instance-binding", "native-scene-geometry",
-                                         "scene-identity", "native-scene-motion", "native-scene-clear",
+                                         "scene-identity", "scene-pose-only-reuse", "native-scene-motion", "native-scene-clear",
                                          "shared-hold-instance", "native-multi-hold-zero",
                                          "hold-release-no-replay", "native-urdf-create", "configuration-revision",
                                          "native-health", "health-observe-deadline-reclaim", "scene-held-observe",

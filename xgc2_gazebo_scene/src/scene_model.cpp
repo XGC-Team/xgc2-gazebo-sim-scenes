@@ -254,64 +254,6 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
     }
 }
 
-bool ApplySceneModelParameters(const gazebo::physics::ModelPtr& model, const SceneModel& expected,
-                               const ignition::math::Pose3d& current_pose, ModelSdfParser& parser) {
-    if (!model)
-        return false;
-    // Parsing takes milliseconds and touches no Gazebo state; the physics update
-    // thread waits on the mutex taken next.
-    if (!parser.Parse(expected.sdf))
-        return false;
-    boost::recursive_mutex::scoped_lock lock(*model->GetWorld()->Physics()->GetPhysicsUpdateMutex());
-    const auto link = model->GetLink("body");
-    if (!link || link->GetCollisions().size() != expected.collisions.size())
-        return false;
-    // UpdateParameters updates visual definitions and their Gazebo messages too.
-    model->UpdateParameters(parser.Model());
-    model->SetInitialRelativePose(expected.pose);
-    model->SetWorldPose(current_pose);
-    for (const auto& part : expected.collisions) {
-        const auto collision = link->GetCollision(part.name);
-        if (!collision)
-            return false;
-        collision->SetInitialRelativePose(part.pose);
-        collision->SetRelativePose(part.pose);
-        const auto& g = part.geometry;
-        const auto shape = collision->GetShape();
-        const auto set_value = [&](const std::string& key, const std::string& value) {
-            shape->GetSDF()->GetElement(key)->GetValue()->SetFromString(value);
-        };
-        std::ostringstream dimensions;
-        dimensions << std::setprecision(17);
-        if (g.type == "box") {
-            const auto box = boost::dynamic_pointer_cast<gazebo::physics::BoxShape>(shape);
-            if (!box)
-                return false;
-            box->SetSize({g.size.x, g.size.y, g.size.z});
-            dimensions << g.size.x << " " << g.size.y << " " << g.size.z;
-            set_value("size", dimensions.str());
-        } else if (g.type == "sphere") {
-            const auto sphere = boost::dynamic_pointer_cast<gazebo::physics::SphereShape>(shape);
-            if (!sphere)
-                return false;
-            sphere->SetRadius(g.radius);
-            dimensions << g.radius;
-            set_value("radius", dimensions.str());
-        } else if (g.type == "cylinder") {
-            const auto cylinder = boost::dynamic_pointer_cast<gazebo::physics::CylinderShape>(shape);
-            if (!cylinder)
-                return false;
-            cylinder->SetSize(g.radius, g.height);
-            dimensions << g.radius;
-            set_value("radius", dimensions.str());
-            dimensions.str("");
-            dimensions << g.height;
-            set_value("length", dimensions.str());
-        }
-    }
-    return true;
-}
-
 bool VerifySceneModel(const gazebo::physics::ModelPtr& model, const SceneModel& expected, bool verify_pose,
                       std::string* error) {
     const auto fail = [&](const std::string& reason) {

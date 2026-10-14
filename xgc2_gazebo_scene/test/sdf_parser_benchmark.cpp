@@ -1,12 +1,5 @@
-// The SDF parsing the scene adapter does for each obstacle, without Gazebo.
-//
-// Applying a scene parses every obstacle's SDF twice: CompileScene validates
-// it and ApplySceneModelParameters restores its parameters. "new sdf::SDF" is
-// what 1.4.1-1 did for each parse: a new sdf::SDF, sdf::init() (the whole SDF
-// specification) and sdf::readString(). "parser" is ModelSdfParser, which
-// reads the specification once. The last columns are the parsing of one
-// application of 500 obstacles (1,000 parses); half of the old time ran with
-// the physics update mutex held.
+// Benchmark libsdformat model parsing with fresh SDF objects and one reusable
+// specification. This measures parsing only, without native Gazebo creation.
 //
 // Build and run: test/run_sdf_parser_benchmark.sh
 #include "obstacle_sdf.hpp"

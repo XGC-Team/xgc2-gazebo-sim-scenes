@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <fstream>
 #include <gazebo/common/Events.hh>
+#include <gazebo/physics/Collision.hh>
+#include <gazebo/physics/Link.hh>
 #include <gazebo/physics/Model.hh>
 #include <gazebo/physics/PhysicsEngine.hh>
 #include <gazebo/physics/World.hh>
@@ -1232,15 +1234,21 @@ class SimulationService::Impl {
                 entity->model = created.at(definition.name);
                 entity->native_ready = true;
             }
-            ModelSdfParser parser;
-            if (!parser.Parse(definition.sdf))
-                throw DomainError(500, "internal", "scene artifact parsing failed");
             boost::recursive_mutex::scoped_lock native_lock(*world_->Physics()->GetPhysicsUpdateMutex());
-            if (!ApplySceneModelParameters(entity->model, definition, definition.pose, parser))
-                throw DomainError(500, "internal", "scene native parameters could not be applied");
+            // Factory completion has already loaded the exact body. Changed
+            // bodies are recreated above; commit poses without copying the full
+            // collision/visual SDF while holding the physics update mutex.
+            entity->model->SetInitialRelativePose(definition.pose);
+            entity->model->SetWorldPose(definition.pose);
+            if (const auto link = entity->model->GetLink("body"))
+                for (const auto& part : definition.collisions)
+                    if (const auto collision = link->GetCollision(part.name)) {
+                        collision->SetInitialRelativePose(part.pose);
+                        collision->SetRelativePose(part.pose);
+                    }
             std::string error;
             if (!VerifySceneModel(entity->model, definition, true, &error))
-                throw DomainError(500, "internal", "scene native verification failed");
+                throw DomainError(500, "internal", "scene native verification failed: " + error);
             models.emplace(id, entity->model);
         }
         return models;

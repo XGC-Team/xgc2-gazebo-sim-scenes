@@ -40,13 +40,6 @@ ignition::math::Pose3d ScenePose(const geometry_msgs::Pose& pose);
 bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::string& mesh_directory,
                   std::map<std::string, SceneModel>* models, std::string* error);
 
-// Gazebo's SDF factory clones values through low-precision strings. Restore the
-// original typed parameters after allocation, under the physics update mutex.
-// The SDF is parsed first, with `parser`, so the mutex is held only while the
-// world is changed.
-bool ApplySceneModelParameters(const gazebo::physics::ModelPtr& model, const SceneModel& expected,
-                               const ignition::math::Pose3d& current_pose, ModelSdfParser& parser);
-
 // Inspect the runtime physics objects, not just the requested SDF or model name.
 bool VerifySceneModel(const gazebo::physics::ModelPtr& model, const SceneModel& expected, bool verify_pose,
                       std::string* error);
