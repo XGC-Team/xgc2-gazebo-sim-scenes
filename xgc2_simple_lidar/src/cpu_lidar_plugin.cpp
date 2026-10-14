@@ -99,7 +99,8 @@ class CpuLidarPlugin final : public gazebo::SensorPlugin {
         auto state = std::make_shared<State>();
         state->sensor = cpu;
         state->world = gazebo::physics::get_world(cpu->WorldName());
-        state->schedule = ScanSchedule(1.0 / cpu->UpdateRate());
+        const double period = 1.0 / cpu->UpdateRate();
+        state->schedule = ScanSchedule(period, ScanSchedule::SensorPhase(period, cpu->ParentName()));
         state->projection = std::make_unique<ScanProjection>(
             width, height, cpu->AngleMin().Radian(), cpu->AngleMax().Radian(), cpu->VerticalAngleMin().Radian(),
             cpu->VerticalAngleMax().Radian(), cpu->RangeMin(), cpu->RangeMax(), false, 1);

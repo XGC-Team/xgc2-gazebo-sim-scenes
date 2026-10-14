@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <string>
 
 namespace xgc2_simple_lidar {
 
@@ -11,28 +13,35 @@ namespace xgc2_simple_lidar {
 // sensor and its parent link still exist) runs only when one is due, and
 // Taken() then advances the schedule.
 //
-// Scans stay on the grid k * period anchored at sim time 0. When sim time
-// runs backwards (a world reset), the next scan taken restarts the grid at
-// its own time. This is the schedule the plugin kept inline before; Due and
-// Taken only split it so the scan gates are not evaluated on every update.
+// Each sensor keeps its own periodic phase. Spreading those phases avoids
+// doing an entire fleet of full ray scans inside the same physics update.
+// A world reset retains the phase separation; missed scans never burst.
 class ScanSchedule {
   public:
-    explicit ScanSchedule(double period) : period_(period) {}
+    explicit ScanSchedule(double period, double phase = 0.0)
+        : period_(period), phase_(phase), next_(phase) {}
 
-    // Call on every world update while the cloud has subscribers.
-    bool Due(double now) {
-        if (now < previous_)
-            reset_ = true;
-        previous_ = now;
-        return reset_ || now + 1e-9 >= next_;
+    static double SensorPhase(double period, const std::string& identity) {
+        std::uint32_t key = 2166136261u;
+        for (const unsigned char byte : identity) { key ^= byte; key *= 16777619u; }
+        key ^= key >> 16;
+        return period * static_cast<double>(key & 0xffffu) / 65536.0;
     }
 
-    // Call when a due scan is taken at `now`.
-    void Taken(double now) {
-        if (reset_) {
-            next_ = now;
-            reset_ = false;
+    // Call on every ready world update. Newly loaded sensors join their own
+    // next phase rather than all scanning immediately after a slow model load.
+    bool Due(double now) {
+        if (!initialized_ || now < previous_) {
+            next_ = std::floor(now / period_) * period_ + phase_;
+            if (next_ + 1e-9 < now)
+                next_ += period_;
+            initialized_ = true;
         }
+        previous_ = now;
+        return now + 1e-9 >= next_;
+    }
+
+    void Taken(double now) {
         const double elapsed = std::max(0.0, now - next_);
         next_ += (std::floor(elapsed / period_) + 1) * period_;
     }
@@ -40,8 +49,8 @@ class ScanSchedule {
     double Next() const { return next_; }
 
   private:
-    double period_, next_{0}, previous_{0};
-    bool reset_{false};
+    double period_, phase_, next_, previous_{0};
+    bool initialized_{false};
 };
 
 } // namespace xgc2_simple_lidar
