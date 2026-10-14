@@ -399,8 +399,17 @@ class SimulationService::Impl {
     }
     void Acknowledge(gazebo::physics::ModelPtr model) {
         std::lock_guard<std::mutex> lock(ack_mutex_);
-        const auto found = pending_models_.find(model->GetName());
-        if (found != pending_models_.end()) {
+        if (stopping_)
+            return;
+        const auto create = pending_creates_.find(model->GetName());
+        if (create != pending_creates_.end()) {
+            create->second.model = std::move(model);
+            create_ack_ready_.store(true);
+            queue_cv_.notify_one();
+            return;
+        }
+        const auto found = pending_scene_models_.find(model->GetName());
+        if (found != pending_scene_models_.end()) {
             found->second = std::move(model);
             ack_cv_.notify_one();
         }
@@ -477,6 +486,11 @@ class SimulationService::Impl {
         std::atomic<bool> cancel{false};
         bool mutation = false;
         Clock::time_point terminal_at;
+    };
+    struct PendingCreate {
+        std::size_t slot;
+        Entity* entity;
+        gazebo::physics::ModelPtr model;
     };
     Json::Value Health() const {
         Json::Value v;
@@ -1145,9 +1159,9 @@ class SimulationService::Impl {
             return {};
         {
             std::lock_guard<std::mutex> lock(ack_mutex_);
-            pending_models_.clear();
+            pending_scene_models_.clear();
             for (const auto& [name, artifact] : artifacts)
-                pending_models_.emplace(name, gazebo::physics::ModelPtr{});
+                pending_scene_models_.emplace(name, gazebo::physics::ModelPtr{});
         }
         // Queue the complete scene before waiting. Waiting after each obstacle
         // forces a separate Gazebo factory/update round trip for every model.
@@ -1157,19 +1171,16 @@ class SimulationService::Impl {
         ack_cv_.wait(lock, [this] {
             if (stopping_)
                 return true;
-            for (const auto& [name, model] : pending_models_)
+            for (const auto& [name, model] : pending_scene_models_)
                 if (!model)
                     return false;
             return true;
         });
         if (stopping_)
             throw DomainError(503, "unavailable", "world ended before native factory completion");
-        auto models = std::move(pending_models_);
-        pending_models_.clear();
+        auto models = std::move(pending_scene_models_);
+        pending_scene_models_.clear();
         return models;
-    }
-    gazebo::physics::ModelPtr Realize(const sdf::SDFPtr& artifact, const std::string& name) {
-        return RealizeBatch({{name, artifact}}).at(name);
     }
     std::map<std::string, gazebo::physics::ModelPtr> ApplyScene(const std::map<std::string, SceneModel>& desired,
                                                                 Clock::time_point deadline) {
@@ -1253,7 +1264,8 @@ class SimulationService::Impl {
         }
         return models;
     }
-    void Execute(Slot& slot) {
+    // True means factory submission owns the slot until its native ACK.
+    bool Execute(Slot& slot, std::size_t index) {
         auto& c = slot.command;
         auto& r = slot.result;
         if (slot.cancel.load())
@@ -1262,20 +1274,20 @@ class SimulationService::Impl {
             throw DomainError(504, "deadline_exceeded", "expired before native application");
         if (c.kind == Kind::QueryScene) {
             r.extension_result = SceneSnapshot();
-            return;
+            return false;
         }
         if (c.kind == Kind::Sensor) {
             r.extension_result = Response(sensors_->Execute(c.sensor, &r.effects_started)).body;
-            return;
+            return false;
         }
         if (c.kind == Kind::Extension) {
             r.extension_result = Response(c.extension_owner->Execute(c.extension, &r.effects_started)).body;
-            return;
+            return false;
         }
         if (c.kind == Kind::Scene || c.kind == Kind::Motion) {
             r.extension_result = c.kind == Kind::Scene ? scene_->Execute(c.scene, &r.effects_started)
                                                        : motion_->Execute(c.motion, &r.effects_started);
-            return;
+            return false;
         }
         if (c.kind == Kind::Create) {
             for (const auto& e : entities_)
@@ -1295,14 +1307,18 @@ class SimulationService::Impl {
             r.effects_started = true;
             // Factory submission is irreversible. Expiry/disconnect does not make
             // the operation terminal; the native last-plugin ack reconciles it.
-            entity->model = Realize(c.artifact, c.native_name);
-            sensors_->CompleteParentSensors(entity->id, entity->generation);
-            if (c.chassis && !chassis_->Bound(c.id))
-                throw DomainError(503, "unavailable", "native chassis initialization did not complete");
-            entity->native_ready = true;
-            r.entities.push_back(Snapshot(*entity));
-            WorldState(r);
-            return;
+            {
+                std::lock_guard<std::mutex> lock(ack_mutex_);
+                pending_creates_.emplace(c.native_name, PendingCreate{index, entity, {}});
+            }
+            try {
+                world_->InsertModelSDF(*c.artifact);
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(ack_mutex_);
+                pending_creates_.erase(c.native_name);
+                throw;
+            }
+            return true;
         }
         if (c.kind == Kind::Step) {
             if (!world_->IsPaused())
@@ -1313,7 +1329,7 @@ class SimulationService::Impl {
             if (world_->Iterations() - before != c.steps)
                 throw DomainError(503, "unavailable", "world ended during step");
             WorldState(r);
-            return;
+            return false;
         }
         if (c.kind == Kind::ResetWorld) {
             for (const auto& ref : c.refs) {
@@ -1362,7 +1378,7 @@ class SimulationService::Impl {
             r.effects_started = true;
             world_->SetPaused(c.kind == Kind::Pause);
             WorldState(r);
-            return;
+            return false;
         }
         bool resume_after_reset = c.kind == Kind::ResetWorld && c.reset_time && !world_->IsPaused();
         if (resume_after_reset)
@@ -1438,6 +1454,72 @@ class SimulationService::Impl {
             world_->SetPaused(false);
             r.paused = false;
         }
+        return false;
+    }
+    template <typename Apply> void ApplySlot(Slot& slot, Apply apply) {
+        try {
+            if (apply())
+                return;
+        } catch (const DomainError& e) {
+            slot.result.status = e.status;
+            slot.result.code = e.code;
+            slot.result.message = e.what();
+        } catch (const SensorControlError& e) {
+            slot.result.status = e.status;
+            slot.result.code = e.code;
+            slot.result.message = e.what();
+        } catch (const NativeExtensionError& e) {
+            slot.result.status = e.status;
+            slot.result.code = e.code;
+            slot.result.message = e.what();
+        } catch (const std::invalid_argument& e) {
+            const std::string message = e.what();
+            const bool capacity =
+                message == "scene epoch capacity exceeded" || message == "entity motion capacity exceeded";
+            slot.result.status = capacity ? 429 : 409;
+            slot.result.code = capacity ? "resource_exhausted" : "conflict";
+            slot.result.message = message;
+        } catch (const std::exception&) {
+            slot.result.status = 500;
+            slot.result.code = "internal";
+            slot.result.message = "native engine operation failed";
+        }
+        slot.phase.store(3);
+        --pending_;
+        server_->wake();
+        if (scene_observers_active_)
+            scene_snapshot_requested_.store(true);
+    }
+    void CompleteCreates() {
+        if (!create_ack_ready_.exchange(false) && !stopping_)
+            return;
+        for (;;) {
+            PendingCreate create{};
+            {
+                std::lock_guard<std::mutex> lock(ack_mutex_);
+                auto found = pending_creates_.begin();
+                while (found != pending_creates_.end() && !found->second.model && !stopping_)
+                    ++found;
+                if (found == pending_creates_.end())
+                    break;
+                create = std::move(found->second);
+                pending_creates_.erase(found);
+            }
+            auto& slot = slots_[create.slot];
+            ApplySlot(slot, [&] {
+                if (stopping_)
+                    throw DomainError(503, "unavailable", "world ended before native factory completion");
+                auto& entity = *create.entity;
+                entity.model = std::move(create.model);
+                sensors_->CompleteParentSensors(entity.id, entity.generation);
+                if (slot.command.chassis && !chassis_->Bound(entity.id))
+                    throw DomainError(503, "unavailable", "native chassis initialization did not complete");
+                entity.native_ready = true;
+                slot.result.entities.push_back(Snapshot(entity));
+                WorldState(slot.result);
+                return false;
+            });
+        }
     }
     void Work() {
         world_->Physics()->InitForThread();
@@ -1446,7 +1528,7 @@ class SimulationService::Impl {
             {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
                 queue_cv_.wait(lock, [this] {
-                    return stopping_ || !queue_.empty() || scene_snapshot_requested_.load();
+                    return stopping_ || !queue_.empty() || scene_snapshot_requested_.load() || create_ack_ready_.load();
                 });
                 if (stopping_)
                     break;
@@ -1467,43 +1549,18 @@ class SimulationService::Impl {
                 } catch (...) { /* Waiters retain their deadlines; no fabricated snapshot. */
                 }
             }
-            if (index == slots_.size())
-                continue;
-            auto& slot = slots_[index];
-            slot.phase.store(2);
-            server_->wake();
-            try {
-                Execute(slot);
-            } catch (const DomainError& e) {
-                slot.result.status = e.status;
-                slot.result.code = e.code;
-                slot.result.message = e.what();
-            } catch (const SensorControlError& e) {
-                slot.result.status = e.status;
-                slot.result.code = e.code;
-                slot.result.message = e.what();
-            } catch (const NativeExtensionError& e) {
-                slot.result.status = e.status;
-                slot.result.code = e.code;
-                slot.result.message = e.what();
-            } catch (const std::invalid_argument& e) {
-                const std::string message = e.what();
-                const bool capacity =
-                    message == "scene epoch capacity exceeded" || message == "entity motion capacity exceeded";
-                slot.result.status = capacity ? 429 : 409;
-                slot.result.code = capacity ? "resource_exhausted" : "conflict";
-                slot.result.message = message;
-            } catch (const std::exception&) {
-                slot.result.status = 500;
-                slot.result.code = "internal";
-                slot.result.message = "native engine operation failed";
+            if (index != slots_.size()) {
+                auto& slot = slots_[index];
+                slot.phase.store(2);
+                server_->wake();
+                ApplySlot(slot, [&] {
+                    return Execute(slot, index);
+                });
             }
-            slot.phase.store(3);
-            --pending_;
-            server_->wake();
-            if (scene_observers_active_)
-                scene_snapshot_requested_.store(true);
+            CompleteCreates();
         }
+        // Quiesce every submitted factory receipt before releasing endpoint leases.
+        CompleteCreates();
     }
     gazebo::physics::WorldPtr world_;
     std::string path_, target_;
@@ -1534,7 +1591,9 @@ class SimulationService::Impl {
     std::mutex queue_mutex_, ack_mutex_;
     std::condition_variable queue_cv_, ack_cv_;
     std::deque<std::size_t> queue_;
-    std::map<std::string, gazebo::physics::ModelPtr> pending_models_;
+    std::map<std::string, gazebo::physics::ModelPtr> pending_scene_models_;
+    std::map<std::string, PendingCreate> pending_creates_;
+    std::atomic<bool> create_ack_ready_{false};
     std::array<Slot, kReceipts> slots_;
     std::array<Entity, kEntities> entities_;
     std::size_t waiters_ = 0;
