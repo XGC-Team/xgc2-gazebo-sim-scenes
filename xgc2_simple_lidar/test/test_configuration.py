@@ -144,6 +144,12 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(parameters['simple_lidar_rate_hz'], 12)
         self.assertEqual(parameters['simple_lidar_range_meters'], 30)
 
+    def test_xsim_body_selection_does_not_filter_gazebo_geometry(self):
+        expected = surface_parameters({'simpleLidar': {'enabled': True, 'acceleration': 'cpu'}})
+        for body_returns in (False, True):
+            self.assertEqual(surface_parameters({'simpleLidar': {
+                'enabled': True, 'acceleration': 'cpu', 'bodyReturns': body_returns}}), expected)
+
 
 class AutoBackendTest(unittest.TestCase):
     def tearDown(self):

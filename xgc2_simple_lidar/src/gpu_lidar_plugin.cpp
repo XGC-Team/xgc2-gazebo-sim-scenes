@@ -16,6 +16,7 @@
 #include <gazebo/rendering/RenderEngine.hh>
 #include <gazebo/rendering/RenderingIface.hh>
 #include <gazebo/rendering/Scene.hh>
+#include <gazebo/rendering/Visual.hh>
 #include <gazebo/rendering/ogre_gazebo.h>
 #include <gazebo/sensors/Sensor.hh>
 #include <gazebo/sensors/SensorFactory.hh>
@@ -48,7 +49,8 @@ class RangeFace final : public gazebo::rendering::DepthCamera {
     const float *Ranges() const { return pixels_.data(); }
     void Fini() override {
         if (!texture_name_.empty()) {
-            depthTarget->removeAllViewports();
+            if (depthTarget)
+                depthTarget->removeAllViewports();
             Ogre::TextureManager::getSingleton().remove(texture_name_);
             Ogre::MaterialManager::getSingleton().remove(material_name_);
             texture_name_.clear();
@@ -197,7 +199,9 @@ class GpuLidarSensor final : public gazebo::sensors::Sensor {
         const auto stamp = scene->SimTime();
         if (!schedule_.Due(stamp.Double()))
             return;
-        auto parent = world->EntityByName(ParentName());
+        // Use the parent pose from this rendered scene, at this scene stamp.
+        // Physics may already be ahead of the render thread.
+        auto parent = scene->GetVisual(ParentId());
         if (!parent)
             return;
         schedule_.Taken(stamp.Double());

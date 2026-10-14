@@ -66,7 +66,7 @@ def surface_parameters(sensors):
     lidar = {'enabled': authored} if isinstance(authored, bool) else authored
     if not isinstance(lidar, dict) or not isinstance(lidar.get('enabled', False), bool):
         raise ValueError('simpleLidar must be a boolean or sensor configuration')
-    if lidar.keys() - {'enabled', 'mode', 'preset', 'acceleration', 'rateHz', 'rangeMeters',
+    if lidar.keys() - {'enabled', 'bodyReturns', 'mode', 'preset', 'acceleration', 'rateHz', 'rangeMeters',
                        'hFovDeg', 'vFovDeg', 'hRes', 'vRes', 'publishBeams'}:
         raise ValueError('unknown simpleLidar field')
     if not isinstance(lidar.get('publishBeams', False), bool):
@@ -93,7 +93,7 @@ def surface_parameters(sensors):
         value = lidar.get(field, 0)
         if (isinstance(value, bool) or not isinstance(value, (int, float))
                 or not math.isfinite(value) or not 0 <= value <= maximum
-                or (integral and (not isinstance(value, int) or (value == 1 and mode != 'penetrating')))):
+                or (integral and (not isinstance(value, int) or value == 1))):
             raise ValueError('invalid simpleLidar.' + field)
         result['simple_lidar_' + target] = value or default
     return result
