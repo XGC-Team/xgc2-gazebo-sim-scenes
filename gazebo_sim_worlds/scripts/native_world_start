@@ -88,6 +88,8 @@ def compose(arguments, environment):
     if not math.isfinite(rate) or not 0 <= rate <= 1e6:
         raise ValueError('--clock-rate-hz must be finite in [0, 1000000]')
     env = dict(environment)
+    # This entry owns a local World; ROS_IP remains a separate user-data edge.
+    env['IGN_IP'] = '127.0.0.1'
     env.pop('XGC_SIM_SOCKET_PATH', None)
     if args.socket_path is not None:
         socket_path = args.socket_path

@@ -61,4 +61,18 @@ class NativeWorldStartTest(unittest.TestCase):
                 with self.subTest(socket_path=invalid), self.assertRaises(ValueError):
                     entry.compose(args+['--socket-path', invalid], environment)
 
+    def test_local_world_pins_ignition_without_repurposing_ros_interface(self):
+        with tempfile.TemporaryDirectory() as directory:
+            world = Path(directory)/'world.sdf'; world.write_text(WORLD)
+            original = {'GAZEBO_MASTER_URI': 'http://127.0.0.1:11345',
+                        'IGN_IP': '172.18.0.1', 'IGN_PARTITION': 'selected',
+                        'IGN_RELAY': 'selected-relay', 'ROS_IP': '192.168.51.4'}
+            args = ['--world', str(world), '--paused', 'false', '--gui', 'false',
+                    '--ros-data', 'false', '--gazebo-bin', '/usr/bin/true']
+            _, _, env = entry.compose(args, original)
+            self.assertEqual(env['IGN_IP'], '127.0.0.1')
+            for key in ('GAZEBO_MASTER_URI', 'IGN_PARTITION', 'IGN_RELAY', 'ROS_IP'):
+                self.assertEqual(env[key], original[key])
+            self.assertEqual(original['IGN_IP'], '172.18.0.1')
+
 if __name__ == '__main__': unittest.main()
