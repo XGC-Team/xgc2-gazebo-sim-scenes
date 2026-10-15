@@ -60,10 +60,9 @@ inline RingMeshGeometry MakeRingMesh(double a, double b, double r) {
         for (unsigned j = 0; j < m; ++j) {
             const double v = 2 * pi * j / m;
             const double s = r * std::abs(std::cos(v));
+            const bool axis_sample = j == m / 4 || j == 3 * m / 4;
             double rho = base;
-            if (j == m / 4 || j == 3 * m / 4) {
-                rho = base;
-            } else if (std::cos(v) < 0) {
+            if (!axis_sample && std::cos(v) < 0) {
                 // Erosion of a convex polygon: intersect all inward-offset
                 // halfplanes. This remains valid beyond the curvature radius.
                 rho = std::numeric_limits<double>::infinity();
@@ -72,11 +71,10 @@ inline RingMeshGeometry MakeRingMesh(double a, double b, double r) {
                     if (dot > 0)
                         rho = std::min(rho, (supports[k] - s) / dot);
                 }
-            } else {
+            } else if (!axis_sample) {
                 // Polygon Minkowski disk: intersect outward offset edges and
                 // endpoint circles analytically. Taking the farthest valid
                 // intersection is the outer radial boundary of this convex set.
-                rho = base;
                 for (unsigned k = 0; k < n; ++k) {
                     const auto& p = points[k];
                     const auto& q = points[(k + 1) % n];

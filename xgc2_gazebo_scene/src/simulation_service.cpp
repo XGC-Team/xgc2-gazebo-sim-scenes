@@ -1578,7 +1578,8 @@ class SimulationService::Impl {
                 create = pending_creates_.at(name);
             }
             Slot* slot = create.slot < slots_.size() ? &slots_[create.slot] : nullptr;
-            if (slot && (stopping_ || slot->cancel.load() || Clock::now() >= slot->command.expires)) {
+            if (slot && (stopping_ || slot->cancel.load() ||
+                         Clock::now().time_since_epoch().count() >= slot->command.expires.time_since_epoch().count())) {
                 ApplySlot(*slot, [&]() -> bool {
                     if (stopping_)
                         throw DomainError(503, "unavailable", "world ended before native factory completion");

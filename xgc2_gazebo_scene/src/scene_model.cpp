@@ -122,7 +122,7 @@ std::string RingMeshFile(const xgc2_geometry_msgs::SceneGeometry& geometry, cons
     name << std::hex << std::setfill('0');
     for (unsigned int word : digest)
         name << std::setw(8) << word;
-    const auto path = directory + "/ring-" + name.str() + ".obj";
+    auto path = directory + "/ring-" + name.str() + ".obj";
     std::ifstream existing(path);
     if (existing.good()) {
         if (std::string((std::istreambuf_iterator<char>(existing)), std::istreambuf_iterator<char>()) != bytes)

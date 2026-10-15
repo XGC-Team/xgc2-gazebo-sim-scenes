@@ -9,6 +9,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <set>
 #include <unistd.h>
@@ -179,8 +180,11 @@ TEST(RingMesh, CompilesOnePartToOneNativeMeshCollisionAndVisual) {
     }
     ASSERT_NE(dInitODE2(0), 0);
     const auto native_data = dGeomTriMeshDataCreate();
-    dGeomTriMeshDataBuildDouble(native_data, native_vertices.data(), 3 * sizeof(double), native_vertices.size() / 3,
-                                native_indices.data(), native_indices.size(), 3 * sizeof(dTriIndex));
+    ASSERT_LE(native_vertices.size() / 3, static_cast<std::size_t>(std::numeric_limits<int>::max()));
+    ASSERT_LE(native_indices.size(), static_cast<std::size_t>(std::numeric_limits<int>::max()));
+    dGeomTriMeshDataBuildDouble(native_data, native_vertices.data(), 3 * sizeof(double),
+                                static_cast<int>(native_vertices.size() / 3), native_indices.data(),
+                                static_cast<int>(native_indices.size()), 3 * sizeof(dTriIndex));
     const auto native_solid = dCreateTriMesh(nullptr, native_data, nullptr, nullptr, nullptr);
     const auto native_ray = dCreateRay(nullptr, 10);
     dContactGeom native_contact;
