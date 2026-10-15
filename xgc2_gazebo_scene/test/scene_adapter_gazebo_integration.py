@@ -2,7 +2,7 @@
 """Isolated adapter/Gazebo acceptance. Takes the algorithm-owned scene as input.
 
 The collision observer independently reads actual collision shapes through the
-planning geometry library and instances. No planner or control node is started.
+unified scene definitions. No planner or control node is started.
 All processes, ROS/Gazebo masters, files and save targets belong to this run.
 """
 
@@ -29,7 +29,8 @@ import rospy
 import yaml
 from gazebo_msgs.srv import GetModelState
 from std_msgs.msg import String
-from xgc2_geometry_msgs.msg import ConvexBodyArray, GeometryLibrary, SceneSnapshot, SceneState
+from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState
+from xgc2_math.geometry import decode_geometry
 from xgc2_xrpc.http import Client, Limits
 from xgc2_xrpc.reference import ServiceRef
 from xgc2_xrpc.runtime import Runtime
@@ -208,67 +209,22 @@ class Integration:
         return envelope
 
     def verify_collisions(self, document):
-        """Use collision-derived planning messages, independently of apply's receipt."""
-        with self.lock:
-            library = self.samples.get('geometry_library')
-            observed = self.samples.get('instances')
-        assert library is not None and observed is not None, 'no collision observer snapshot'
-        assert library.header.frame_id == observed.header.frame_id == 'world'
-        templates = {item.type: item for item in library.templates}
-        instances = {item.name: item for item in observed.instances}
-        expected_names = {
-            model_name(item['id'])[len('xgc2_obstacle_'):] + (
-                '/body/part_' + part['id'].encode('utf-8').hex() if len(item['parts']) != 1 else '')
-            for item in document['obstacles'] for part in item['parts']
-        }
-        assert set(instances) == expected_names
-        shape_types = {'box': 'cube', 'sphere': 'sphere', 'cylinder': 'cylinder'}
+        """Check actual Gazebo model poses and the single accepted geometry definition."""
         for item in document['obstacles']:
             state = self.get_model(model_name(item['id']), 'world')
             assert state.success, state.status_message
             close(vector(state.pose.position), item['pose']['position'])
             q = state.pose.orientation
             actual_q = [q.x, q.y, q.z, q.w]
-            expected_q = item['pose']['orientation']
-            assert abs(abs(sum(a*b for a, b in zip(actual_q, expected_q))) - 1) < 1e-6
-            logical_name = model_name(item['id'])[len('xgc2_obstacle_'):]
-            for expected in item['parts']:
-                name = logical_name
-                if len(item['parts']) != 1:
-                    name += '/body/part_' + expected['id'].encode('utf-8').hex()
-                actual = instances[name]
-                local_pose = expected.get('pose', {'position': [0, 0, 0], 'orientation': [0, 0, 0, 1]})
-                # Compose the model and collision poses to check the published world pose.
-                x, y, z = local_pose['position']
-                qx, qy, qz, qw = actual_q
-                tx, ty, tz = 2*(qy*z-qz*y), 2*(qz*x-qx*z), 2*(qx*y-qy*x)
-                offset = [x+qw*tx+qy*tz-qz*ty, y+qw*ty+qz*tx-qx*tz, z+qw*tz+qx*ty-qy*tx]
-                close(vector(actual.pose.position), [a+b for a, b in zip(vector(state.pose.position), offset)])
-                lx, ly, lz, lw = local_pose['orientation']
-                rotation = [qw*lx+qx*lw+qy*lz-qz*ly, qw*ly-qx*lz+qy*lw+qz*lx,
-                            qw*lz+qx*ly-qy*lx+qz*lw, qw*lw-qx*lx-qy*ly-qz*lz]
-                orientation = actual.pose.orientation
-                assert abs(abs(sum(a*b for a, b in zip(
-                    [orientation.x, orientation.y, orientation.z, orientation.w], rotation))) - 1) < 1e-6
-                geometry = expected['geometry']
-                if geometry['type'] == 'convex':
-                    assert actual.geometry_type.startswith('convex_mesh:')
-                    assert actual.geometry_type in templates
-                    close(vector(actual.scale), [1, 1, 1])
-                    vertices = sorted(vector(vertex) for vertex in templates[actual.geometry_type].support_points)
-                    expected_vertices = sorted(geometry['vertices'])
-                    assert len(vertices) == len(expected_vertices)
-                    for left, right in zip(vertices, expected_vertices):
-                        close(left, right)
-                else:
-                    assert actual.geometry_type == shape_types[geometry['type']]
-                    assert actual.geometry_type in templates
-                    if geometry['type'] == 'box':
-                        close(vector(actual.scale), geometry['size'])
-                    elif geometry['type'] == 'sphere':
-                        close(vector(actual.scale), [geometry['radius']] * 3)
-                    else:
-                        close(vector(actual.scale), [geometry['radius'], geometry['radius'], geometry['height']])
+            assert abs(abs(sum(a*b for a, b in zip(actual_q, item['pose']['orientation']))) - 1) < 1e-6
+        observed = rospy.wait_for_message('/xgc/scene/snapshot', SceneSnapshot, timeout=3)
+        assert observed.header.frame_id == document['frame']
+        assert {item.id for item in observed.obstacles} == {item['id'] for item in document['obstacles']}
+        for item in observed.obstacles:
+            expected = next(value for value in document['obstacles'] if value['id'] == item.id)
+            assert len(item.parts) == len(expected['parts'])
+            for part, original in zip(item.parts, expected['parts']):
+                assert decode_geometry(part.geometry.type, part.geometry.parameters) == original['geometry']
         return True
 
     def verify_current(self):
@@ -284,11 +240,7 @@ class Integration:
         rospy.init_node('scene_integration', anonymous=True, disable_signals=True)
         rospy.set_param('/use_sim_time', True)
         self.subscribers = [
-            rospy.Subscriber('/xgc2/simulation/obstacles/geometry_library', GeometryLibrary,
-                             lambda value: self.sample('geometry_library', value), queue_size=1),
-            rospy.Subscriber('/xgc2/simulation/obstacles/instances', ConvexBodyArray,
-                             lambda value: self.sample('instances', value), queue_size=1),
-            rospy.Subscriber('/xgc/scene/state', SceneState, lambda value: self.sample('state', value), queue_size=1),
+
         ]
         self.xrpc = Runtime(blocking_workers=1, max_calls=4)
         self.start_gazebo()

@@ -32,4 +32,6 @@
   <export>
     <gazebo_ros plugin_path="${prefix}/lib" />
   </export>
+  <depend>libxgc2-math-dev</depend>
+  <depend>nlohmann-json3-dev</depend>
 </package>

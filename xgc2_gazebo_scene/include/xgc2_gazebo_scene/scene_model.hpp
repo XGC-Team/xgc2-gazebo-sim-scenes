@@ -6,6 +6,8 @@
 #include <ignition/math/Pose3.hh>
 #include <xgc2_geometry_msgs/SceneSnapshot.h>
 
+#include <xgc2_math/geometry/geometry_payload.hpp>
+
 #include <map>
 #include <string>
 #include <vector>
@@ -15,7 +17,7 @@ namespace xgc2_gazebo_scene {
 struct SceneCollision {
     std::string name;
     ignition::math::Pose3d pose;
-    xgc2_geometry_msgs::SceneGeometry geometry;
+    xgc2_math::geometry::Geometry geometry;
     std::string mesh_uri;
 };
 

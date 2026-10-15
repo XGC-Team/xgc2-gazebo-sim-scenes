@@ -147,7 +147,7 @@ build_scene_deb() {
       lib/python3/dist-packages/xgc2_gazebo_scene/__init__.py \
       lib/python3/dist-packages/xgc2_gazebo_scene/simulation_client.py \
       lib/python3/dist-packages/xgc2_gazebo_scene/placement.py \
-      include/xgc2_gazebo_scene/obstacle_messages.hpp include/xgc2_gazebo_scene/simulation_service.hpp \
+      include/xgc2_gazebo_scene/scene_model.hpp include/xgc2_gazebo_scene/simulation_service.hpp \
       include/xgc2_gazebo_scene/native_scene_controller.hpp; do
     test -f "${pkg_root}${PREFIX}/${file}"
   done
@@ -192,7 +192,7 @@ EOF
     echo "Native scene runtime dependencies leaked build-only packages" >&2; exit 1
   fi
   write_control "${pkg_root}" "${package}" \
-    "${shlibdeps}, libxgc2-xrpc2 (>= 0.2.0-1~focal), libxgc2-chassis-hold1 (>= 0.2.0-1~focal), ros-noetic-gazebo-msgs, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-rosgraph-msgs, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.5.0-2)" \
+    "${shlibdeps}, libxgc2-xrpc2 (>= 0.2.0-1~focal), libxgc2-chassis-hold1 (>= 0.2.0-1~focal), ros-noetic-gazebo-msgs, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-rosgraph-msgs, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.5.0-3)" \
     "Native Gazebo Classic simulation-v1 service and exact scene geometry with ROS user data"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +

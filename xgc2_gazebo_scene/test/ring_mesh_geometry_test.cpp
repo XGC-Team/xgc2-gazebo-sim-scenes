@@ -127,7 +127,8 @@ TEST(RingMesh, RejectsInvalidOrUnrepresentableInputsExplicitly) {
     EXPECT_THROW(MakeRingMesh(2, 1, 1 - 1e-14), std::runtime_error);
 }
 
-TEST(RingMesh, CompilesOnePartToOneNativeMeshCollisionAndVisual) {
+class RingWireKind : public ::testing::TestWithParam<bool> {};
+TEST_P(RingWireKind, CompilesOnePartToOneNativeMeshCollisionAndVisual) {
     const auto directory = std::filesystem::temp_directory_path() / ("xgc-ring-" + std::to_string(getpid()));
     std::filesystem::create_directories(directory);
     xgc2_geometry_msgs::SceneSnapshot scene;
@@ -140,10 +141,12 @@ TEST(RingMesh, CompilesOnePartToOneNativeMeshCollisionAndVisual) {
     xgc2_geometry_msgs::ScenePart part;
     part.id = "ring";
     part.pose.orientation.w = 1;
-    part.geometry.type = "ring";
-    part.geometry.radii[0] = 2;
-    part.geometry.radii[1] = 1;
-    part.geometry.tube_radius = .8;
+    const auto explicit_mesh = MakeRingMesh(2, 1, .8);
+    const auto raw = GetParam() ? xgc2_math::geometry::Geometry::mesh(explicit_mesh.vertices, explicit_mesh.triangles)
+                                : xgc2_math::geometry::Geometry::ring({2, 1}, .8);
+    const auto payload = xgc2_math::geometry::encodeGeometry(raw);
+    part.geometry.type = payload.type;
+    part.geometry.parameters = payload.parameters;
     part.color.a = 1;
     obstacle.parts.push_back(part);
     scene.obstacles.push_back(obstacle);
@@ -153,7 +156,11 @@ TEST(RingMesh, CompilesOnePartToOneNativeMeshCollisionAndVisual) {
     ASSERT_EQ(models.size(), 1u);
     ASSERT_EQ(models.begin()->second.collisions.size(), 1u);
     const auto& model = models.begin()->second;
-    EXPECT_EQ(model.collisions.front().geometry.type, "ring");
+    EXPECT_EQ(model.collisions.front().geometry.type, raw.type);
+    if (GetParam()) {
+        EXPECT_EQ(model.collisions.front().geometry.vertices, explicit_mesh.vertices);
+        EXPECT_EQ(model.collisions.front().geometry.triangles, explicit_mesh.triangles);
+    }
     EXPECT_FALSE(model.collisions.front().mesh_uri.empty());
     ModelSdfParser parser;
     ASSERT_TRUE(parser.Parse(model.sdf));
@@ -198,6 +205,8 @@ TEST(RingMesh, CompilesOnePartToOneNativeMeshCollisionAndVisual) {
     dCloseODE();
     std::filesystem::remove_all(directory);
 }
+
+INSTANTIATE_TEST_SUITE_P(AnalyticAndExplicitMesh, RingWireKind, ::testing::Bool());
 
 TEST(RingMesh, TwentyActualEllipsesCost) {
     const auto begin = std::chrono::steady_clock::now();

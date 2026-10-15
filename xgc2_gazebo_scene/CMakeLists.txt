@@ -14,6 +14,8 @@ find_package(catkin REQUIRED COMPONENTS
 )
 find_package(gazebo REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(xgc2_math CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(XgcXrpc 0.2.0 CONFIG REQUIRED COMPONENTS http)
 find_package(XgcChassisHold 0.2.0 CONFIG REQUIRED COMPONENTS http)
 find_package(PkgConfig REQUIRED)
@@ -95,7 +97,7 @@ target_compile_options(xgc2_scene_model PRIVATE -Wall -Wextra -Wpedantic -Werror
 target_include_directories(xgc2_scene_model PUBLIC include)
 target_include_directories(xgc2_scene_model SYSTEM PUBLIC ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
 add_dependencies(xgc2_scene_model ${catkin_EXPORTED_TARGETS})
-target_link_libraries(xgc2_scene_model PUBLIC xgc2_gazebo_scene_geometry ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+target_link_libraries(xgc2_scene_model PUBLIC xgc2_math::scene xgc2_gazebo_scene_geometry ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 
 add_library(xgc2_simulation_ros_master SHARED src/ros_master_registration.cpp)
 target_compile_features(xgc2_simulation_ros_master PUBLIC cxx_std_17)
@@ -119,7 +121,7 @@ target_include_directories(xgc2_simulation_service PUBLIC include)
 target_include_directories(xgc2_simulation_service SYSTEM PUBLIC ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
 add_dependencies(xgc2_simulation_service ${catkin_EXPORTED_TARGETS})
 target_link_libraries(xgc2_simulation_service PUBLIC xgc2_scene_model xgc2_gazebo_scene_motion
-  PkgConfig::JSONCPP ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES}
+  PkgConfig::JSONCPP nlohmann_json::nlohmann_json ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES}
   PRIVATE XgcChassisHold::http XgcXrpc::http xgc2_simulation_ros_master)
 foreach(plugin simulation_world simulation_entity_ack simulation_sensor_ack)
   add_library(xgc2_${plugin} SHARED src/${plugin}_plugin.cpp)
@@ -172,13 +174,10 @@ if(CATKIN_ENABLE_TESTING)
   endforeach()
   catkin_install_python(PROGRAMS
     test/physical_contact_ground_truth_test.py
-    test/scene_ground_truth_test.py
     test/scene_adapter_gazebo_integration.py
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
   )
   add_rostest(test/physical_contact_ground_truth.test)
-  add_rostest(test/uav6_knot_ground_truth.test)
-  add_rostest(test/ugv4_figure_eight_ground_truth.test)
 
   catkin_add_gtest(xgc2_gazebo_scene_contact_test test/physical_contact_filter_test.cpp)
   if(TARGET xgc2_gazebo_scene_contact_test)
@@ -193,16 +192,6 @@ if(CATKIN_ENABLE_TESTING)
     target_compile_features(xgc2_gazebo_scene_model_snapshot_test PUBLIC cxx_std_17)
     target_compile_options(xgc2_gazebo_scene_model_snapshot_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_include_directories(xgc2_gazebo_scene_model_snapshot_test PRIVATE include)
-  endif()
-
-  catkin_add_gtest(xgc2_gazebo_scene_obstacle_messages_test test/obstacle_messages_test.cpp)
-  if(TARGET xgc2_gazebo_scene_obstacle_messages_test)
-    target_compile_features(xgc2_gazebo_scene_obstacle_messages_test PUBLIC cxx_std_17)
-    target_compile_options(xgc2_gazebo_scene_obstacle_messages_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    target_include_directories(xgc2_gazebo_scene_obstacle_messages_test
-      PRIVATE include ${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
-    add_dependencies(xgc2_gazebo_scene_obstacle_messages_test ${catkin_EXPORTED_TARGETS})
-    target_link_libraries(xgc2_gazebo_scene_obstacle_messages_test xgc2_gazebo_scene_motion)
   endif()
 
   catkin_add_gtest(xgc2_gazebo_scene_sdf_parser_test test/sdf_parser_test.cpp)
@@ -225,7 +214,7 @@ if(CATKIN_ENABLE_TESTING)
     find_library(XGC2_RING_TEST_ODE ode REQUIRED)
     target_compile_features(xgc2_gazebo_scene_ring_test PUBLIC cxx_std_17)
     target_compile_options(xgc2_gazebo_scene_ring_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    target_link_libraries(xgc2_gazebo_scene_ring_test xgc2_scene_model ${XGC2_RING_TEST_ODE})
+    target_link_libraries(xgc2_gazebo_scene_ring_test xgc2_scene_model ${XGC2_RING_TEST_ODE} gtest_main)
   endif()
 
   catkin_add_gtest(xgc2_gazebo_scene_geometry_test test/convex_mesh_geometry_test.cpp)

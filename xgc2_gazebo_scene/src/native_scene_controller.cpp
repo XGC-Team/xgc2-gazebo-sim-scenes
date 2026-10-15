@@ -6,10 +6,12 @@
 #include <gazebo/physics/World.hh>
 #include <json/json.h>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <regex>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <xgc2_math/geometry/geometry_json.hpp>
 
 namespace xgc2_gazebo_scene {
 namespace {
@@ -322,50 +324,10 @@ std::shared_ptr<const PreparedSceneCommand> NativeSceneController::Prepare(const
             const auto& geometry = part["geometry"];
             if (!geometry.isObject() || !geometry["type"].isString())
                 throw std::invalid_argument("scene geometry type required");
-            p.geometry.type = geometry["type"].asString();
-            if (p.geometry.type == "box") {
-                Fields(geometry, {"type", "size"});
-                const auto size = Vector(geometry["size"]);
-                p.geometry.size.x = size.X();
-                p.geometry.size.y = size.Y();
-                p.geometry.size.z = size.Z();
-            } else if (p.geometry.type == "sphere" || p.geometry.type == "cylinder" || p.geometry.type == "capsule") {
-                Fields(geometry, p.geometry.type == "sphere"
-                                     ? std::initializer_list<const char*>{"type", "radius"}
-                                     : std::initializer_list<const char*>{"type", "radius", "height"});
-                p.geometry.radius = Number(geometry["radius"], 1e-6, 1e4);
-                if (p.geometry.type != "sphere")
-                    p.geometry.height = Number(geometry["height"], p.geometry.type == "capsule" ? 0 : 1e-6, 1e4);
-            } else if (p.geometry.type == "ring") {
-                Fields(geometry, {"type", "radii", "tubeRadius"});
-                const auto& radii = geometry["radii"];
-                if (!radii.isArray() || radii.size() != 2)
-                    throw std::invalid_argument("ring requires two radii");
-                p.geometry.radii[0] = Number(radii[0], 1e-6, 1e4);
-                p.geometry.radii[1] = Number(radii[1], 1e-6, 1e4);
-                p.geometry.tube_radius = Number(geometry["tubeRadius"], 1e-6, 1e4);
-                if (p.geometry.tube_radius >= std::min(p.geometry.radii[0], p.geometry.radii[1]))
-                    throw std::invalid_argument("ring tubeRadius must preserve the hole");
-            } else if (p.geometry.type == "convex") {
-                Fields(geometry, {"type", "vertices", "triangles"});
-                const auto& vertices = geometry["vertices"];
-                const auto& triangles = geometry["triangles"];
-                if (!vertices.isArray() || vertices.size() < 4 || vertices.size() > 4096 || !triangles.isArray() ||
-                    triangles.size() < 12 || triangles.size() > 24576 || triangles.size() % 3)
-                    throw std::invalid_argument("invalid convex scene bounds");
-                for (const auto& point : vertices) {
-                    const auto v = Vector(point);
-                    geometry_msgs::Point out;
-                    out.x = v.X();
-                    out.y = v.Y();
-                    out.z = v.Z();
-                    p.geometry.vertices.push_back(out);
-                }
-                for (const auto& index : triangles) {
-                    p.geometry.triangles.push_back(Integer(index, 0, vertices.size() - 1));
-                }
-            } else
-                throw std::invalid_argument("unsupported scene geometry");
+            const auto payload = xgc2_math::geometry::geometryFromJson(
+                nlohmann::json::parse(Json::writeString(Json::StreamWriterBuilder{}, geometry)));
+            p.geometry.type = payload.type;
+            p.geometry.parameters = payload.parameters;
             JsonValue frozen_part;
             frozen_part["id"] = p.id;
             frozen_part["pose"] = part["pose"];

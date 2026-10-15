@@ -9,6 +9,9 @@ set +u
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
+geometry_version="$(dpkg-query -W -f='${Version}' "ros-${ROS_DISTRO}-xgc2-geometry-msgs")"
+dpkg --compare-versions "${geometry_version}" ge '1.5.0-3'
+
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-sim-worlds" >/dev/null
 for definition in gazebo-client gazebo-server gazebo-server-hybrid; do
   test -s "/usr/share/xgc2/process-definitions/${definition}.json"
@@ -45,7 +48,7 @@ for library in \
     libxgc2_gazebo_scene_system.so; do
   test -f "/opt/ros/${ROS_DISTRO}/lib/${library}"
 done
-test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/obstacle_messages.hpp"
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/scene_model.hpp"
 test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_gazebo_scene/obstacle_path_plugin.hpp"
 test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/ConfigureMotions.srv"
 test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_gazebo_scene/srv/StopMotions.srv"
@@ -104,7 +107,6 @@ fi
 dpkg-query -W -f '${Depends}\n' "ros-${ROS_DISTRO}-xgc2-simple-lidar" \
   | grep -Eq "(^|, )ros-${ROS_DISTRO}-xgc2-gazebo-scene \(= "
 
-"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray'
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_gazebo_scene.simulation_client import SimulationClient'
 "${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_gazebo_scene.placement import discover_world, place_entity; from xgc2_simple_lidar.configuration import robot_parameters, surface_parameters'
 

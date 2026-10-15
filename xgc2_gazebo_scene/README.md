@@ -12,8 +12,8 @@ readiness gates the world's health. HOLD has no parameters: chassis model plugin
 themselves through `xgc2_gazebo_scene/chassis_hold.hpp`. It builds against `libxgc2-xrpc-dev` and
 `libxgc2-chassis-hold-dev` 0.2 or later.
 
-The native world starts in parallel with ROS and its consumers. ROS data, legacy
-ground truth and simple lidar register through one shared master watcher outside
+The native world starts in parallel with ROS and its consumers. ROS data, physical
+contacts and simple lidar register through one shared master watcher outside
 the Gazebo initialization and update threads. Missing masters use exponential
 backoff with full jitter from 250 ms to a 30 s cap, with a single identity read in
 flight and at most one failure summary per 10 s. A different bound master PID or
@@ -130,35 +130,14 @@ scenes and ROS1 adapter install overlays; prepend the Gazebo scenes library
 directory to `GAZEBO_PLUGIN_PATH`. The adapter executable must be discoverable
 in `xgc_scene_ros1_adapter`. Test input is copied and all subprocesses are cleaned up.
 
-## Legacy world observation and motion
+## Physical contact observation
 
-`xgc2_gazebo_scene` is the Gazebo Classic scene director. It retains the
-legacy per-model `libobstaclePathPlugin.so` path animator used by existing
-worlds and provides the global XGC2 ground-truth scene layer. The SystemPlugin
-is loaded with `gzserver`; it discovers `xgc2_obstacle_*` models, reads their
-actual collisions, publishes convex geometry and synchronized state, and
-executes deterministic motion programs against Gazebo simulation time.
+The SystemPlugin loaded with `gzserver` observes raw physical contacts. Scene definitions and dynamic state use the scene adapter's `SceneSnapshot` and `SceneState`; geometry is transported as a numerical type and binary parameters. Native Gazebo CPU/GPU sensors measure the simulator's physical geometry.
 
-The plugin deliberately does not own `gzserver`, ROS Core, world selection, or
-model spawning. Existing XGC semantic operations keep using trusted Gazebo ROS
-services for one-shot scene edits. Continuous motion is configured through:
-
-- `/xgc2/gazebo/obstacles/configure_motions`
-- `/xgc2/gazebo/obstacles/stop_motions`
-
-Planning ground truth is published on:
-
-- `/xgc2/simulation/obstacles/geometry_library` (standard planning library,
-  latched)
-- `/xgc2/simulation/obstacles/instances` (standard planning instances,
-  latched latest snapshot at 30 Hz)
-
-High-fidelity regression collision truth is published independently of the
-planning geometry:
+Physical collision status is published on:
 
 - `/xgc2/simulation/physical_collision` (`std_msgs/Bool`, latched)
-- `/xgc2/simulation/physical_collision_detail` (`std_msgs/String`, latched on
-  the first forbidden contact)
+- `/xgc2/simulation/physical_collision_detail` (`std_msgs/String`, latched on the first forbidden contact)
 
 The SystemPlugin subscribes to Gazebo's raw physics contacts internally. It
 classifies contacts by top-level model, so wheel/chassis and rotor/body
@@ -177,39 +156,7 @@ disable the contact subscriber. The managed obstacle prefix is independently
 configurable at `/xgc2_gazebo_scene/managed_obstacle_prefix` and defaults to
 `xgc2_obstacle_`.
 
-The contact table and the managed obstacle set are derived from the world's
-model list. Each world update compares that list (models, names, static
-flags) with the previous one (`model_snapshot.hpp`) and rebuilds both only
-when it changed, or while a managed model is still rejected; an unchanged
-world costs one comparison per model instead of a fresh map per update.
-`test/run_model_snapshot_benchmark.sh` measures both without Gazebo.
-
-The 30 Hz instance message keeps instance ids and names, geometry types, scales
-and local collision poses in `ObstacleMessages` (`obstacle_messages.hpp`), which
-is rebuilt when the set of obstacles changes. A publication writes only world
-poses, velocities and static flags, so an unchanged set allocates nothing.
-`test/obstacle_messages_test.cpp` checks those values, membership changes and
-cache reuse without Gazebo. Geometry-library templates are published when
-the obstacle set changes.
-
-The planning topics use `xgc2_geometry_msgs/GeometryLibrary` and
-`xgc2_geometry_msgs/ConvexBodyArray` directly. Primitive instances keep the
-analytic `sphere`, `cylinder`, and `cube` geometry types. Convex meshes use one
-stable `convex_mesh:<mesh-uri>[#submesh][#centered]` template with exact
-unscaled local vertices, while every instance carries its world pose, collision
-scale, static flag, and velocity. A whole-mesh asset also publishes the
-GeometryLibrary-compatible alias `v_polytope:<mesh-file-stem>` with the same
-support points. Instances retain the canonical URI type; the alias lets
-robot-body and other non-obstacle consumers use the semantic template name
-without duplicating geometry. If two different URIs share one file stem, the
-ambiguous alias is rejected rather than bound to either mesh.
-
-The collision contract supports box, sphere, cylinder, and closed convex
-triangle meshes. The reusable geometry loader accepts Gazebo triangle lists,
-strips, and fans, resolves optional named/centered submeshes, and verifies that
-every triangle belongs to one closed convex body. Unsupported, open, concave,
-degenerate, or multi-body mesh collisions reject the entire managed obstacle
-instead of publishing partial or approximated planning geometry.
+The contact table is derived from the world's model list. Each world update compares models, names and static flags with the previous list (`model_snapshot.hpp`) and rebuilds the table only when they change.
 
 ## Robot placement CLI
 
