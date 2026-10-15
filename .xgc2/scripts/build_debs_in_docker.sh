@@ -60,7 +60,7 @@ docker run --rm --network "${DOCKER_NETWORK}" \
       sed -i "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g" /etc/apt/sources.list.d/xgc2.list
     fi
     apt-get update -o Dir::Etc::sourcelist=sources.list.d/xgc2.list -o Dir::Etc::sourceparts="-"
-    apt-get install -y --no-install-recommends libxgc2-xrpc-dev libxgc2-chassis-hold-dev libxgc2-math-dev nlohmann-json3-dev \
+    apt-get install -y --no-install-recommends libxgc2-xrpc-dev libxgc2-chassis-hold-dev libxgc2-math-dev \
       ros-noetic-xgc2-geometry-msgs
     for relation in "libxgc2-xrpc-dev 0.2.0-1~focal" "libxgc2-chassis-hold-dev 0.2.0-1~focal" \
       "ros-noetic-xgc2-geometry-msgs 1.5.0-3" \
