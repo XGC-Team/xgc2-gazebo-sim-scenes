@@ -3,6 +3,9 @@ import math
 import re
 import functools
 import subprocess
+import os
+import socket
+import tempfile
 
 
 
@@ -10,8 +13,15 @@ import subprocess
 def gpu_available():
     """Probe the installed native renderer, never infer GPU support from a label."""
     try:
-        return subprocess.run(['/usr/libexec/xgc2-sensing-probe'], stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+        with tempfile.TemporaryDirectory(prefix='gazebo-ray-probe-') as directory, socket.socket() as port:
+            port.bind(('127.0.0.1', 0))
+            master_port = port.getsockname()[1]
+            port.close()
+            environment = dict(os.environ, HOME=directory,
+                               GAZEBO_MASTER_URI=f'http://127.0.0.1:{master_port}',
+                               GAZEBO_MODEL_DATABASE_URI='')
+            return subprocess.run(['xgc2-gazebo-ray-probe'], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, timeout=10, env=environment).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -48,12 +58,6 @@ def robot_parameters(row, profile, run_mode):
         parameters.update(robot_description_param=namespace+'/robot_description',
                           tf_prefix=name, frame_prefix=name+'/', sensor_ns=name,
                           robot_state_publisher_ns=name, run_mode=run_mode)
-        for source, target in (('lidarSimulationEnabled', 'enable_lidar'),
-                               ('imageSimulationEnabled', 'enable_camera')):
-            value = scout.get(source, False)
-            if not isinstance(value, bool):
-                raise ValueError('Scout sensor switches must be boolean')
-            parameters[target] = value
     return parameters
 
 
@@ -69,20 +73,21 @@ def surface_parameters(sensors):
     if lidar.keys() - {'enabled', 'bodyReturns', 'mode', 'preset', 'acceleration', 'rateHz', 'rangeMeters',
                        'hFovDeg', 'vFovDeg', 'hRes', 'vRes', 'publishBeams'}:
         raise ValueError('unknown simpleLidar field')
-    if not isinstance(lidar.get('publishBeams', False), bool):
-        raise ValueError('simpleLidar.publishBeams must be boolean')
-    mode, preset = lidar.get('mode', ''), lidar.get('preset', '')
-    if mode not in ('', 'raycast', 'penetrating', 'depth_frustum'):
-        raise ValueError('invalid simpleLidar mode')
-    if preset not in ('', 'bridge_equivalent', 'zju_cpu_crop', 'zju_cpu_crop_ego_v2'):
-        raise ValueError('invalid simpleLidar preset')
-    acceleration = lidar.get('acceleration') or 'auto'
+    if lidar.get('mode', '') not in ('', 'raycast'):
+        raise ValueError('Gazebo simpleLidar.mode supports raycast only')
+    if lidar.get('preset', '') != '':
+        raise ValueError('Gazebo simpleLidar.preset must be empty')
+    for field in ('publishBeams', 'bodyReturns'):
+        if not isinstance(lidar.get(field, False), bool) or lidar.get(field, False):
+            raise ValueError('Gazebo simpleLidar.' + field + ' is unsupported')
+    acceleration = lidar.get('acceleration', '')
+    if not isinstance(acceleration, str) or acceleration not in ('', 'auto', 'cpu', 'gpu'):
+        raise ValueError('simpleLidar.acceleration must be a string: empty, auto, cpu or gpu')
+    acceleration = acceleration or 'auto'
     if acceleration == 'auto':
         acceleration = ('gpu' if gpu_available() else 'cpu') if lidar.get('enabled', False) else 'gpu'
     result = {'enable_simple_lidar': lidar.get('enabled', False),
               'simple_lidar_acceleration': acceleration}
-    if result['simple_lidar_acceleration'] not in ('cpu', 'gpu'):
-        raise ValueError('invalid simpleLidar acceleration')
     for field, target, default, maximum, integral in (
             ('rateHz', 'rate_hz', 10, 100, False),
             ('rangeMeters', 'range_meters', 20, 200, False),

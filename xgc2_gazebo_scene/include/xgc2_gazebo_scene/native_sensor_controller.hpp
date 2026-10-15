@@ -1,4 +1,6 @@
 #pragma once
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <gazebo/physics/PhysicsTypes.hh>
@@ -29,7 +31,8 @@ class NativeSensorController {
     ~NativeSensorController();
     std::shared_ptr<const PreparedSensorCommand> Prepare(const std::string& method, const std::string& route,
                                                          const Json::Value& body);
-    Json::Value Execute(const std::shared_ptr<const PreparedSensorCommand>& command, bool* effects_started = nullptr);
+    Json::Value Execute(const std::shared_ptr<const PreparedSensorCommand>& command, bool* effects_started = nullptr,
+                        const std::atomic<bool>* cancelled = nullptr);
     // Register every authored sensor before inserting its parent model. The
     // original sensor name and preceding plugins remain unchanged. Completion
     // stays pending until the final SensorPlugin Init after the model factory ack.
@@ -37,13 +40,14 @@ class NativeSensorController {
     // Nonblocking, worker-only completion probe; native ACKs wake the worker.
     bool CompleteParentSensors(const std::string& id, std::uint64_t generation, Json::Value* result);
     // Call before deleting the parent model, outside the physics update mutex.
-    // Returns only after each managed sensor's native destructor callback.
-    Json::Value RemoveParent(const std::string& id, std::uint64_t generation, std::uint32_t timeout_ms = 5000,
-                             bool* effects_started = nullptr);
+    // Success confirms each managed sensor's native destructor callback.
+    Json::Value RemoveParent(const std::string& id, std::uint64_t generation, std::chrono::steady_clock::time_point deadline,
+                             bool* effects_started = nullptr, const std::atomic<bool>* cancelled = nullptr);
     // World Stop calls this before joining the management worker. Native effects
-    // wait for Init/destruction after admission; caller deadlines do not orphan
-    // those effects. Stop wakes every native wait without waiting for the worker.
+    // retain their reservation if their deadline expires. Stop wakes every native
+    // wait without waiting for the worker.
     void Stop();
+    void NotifyCancellation();
 
   private:
     class Impl;

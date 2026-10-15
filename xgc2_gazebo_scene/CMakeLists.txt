@@ -163,6 +163,7 @@ catkin_install_python(PROGRAMS scripts/spawn_robot_model
 )
 
 if(CATKIN_ENABLE_TESTING)
+  add_test(NAME product_robot_placement COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_robot_placement.py)
   find_package(rostest REQUIRED)
   # Give the native ACK fixtures the service's public compile requirements.
   foreach(fixture create_ack sensor_ack)

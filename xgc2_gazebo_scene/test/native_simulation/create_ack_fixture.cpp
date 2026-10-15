@@ -21,9 +21,13 @@ class CreateAckFixture final : public gazebo::ModelPlugin {
     void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr config) override {
         if (config->HasElement("chassisRobotId"))
             return; // Deliberately missing required HOLD owner in the failure case.
-        const auto id = config->HasElement("public_entity_id") ? config->Get<std::string>("public_entity_id") : "";
+        auto id = config->HasElement("public_entity_id") ? config->Get<std::string>("public_entity_id") : "";
+        if (model->GetName() == "xgc2_obstacle_scene_68656c64")
+            id = "scene-held";
+        if (model->GetName() == "xgc2_obstacle_scene_63616e63656c")
+            id = "scene-cancel";
         const auto root = std::getenv("XGC2_CREATE_ACK_FIXTURE_ROOT");
-        if (id == "create-held" || id == "create-stop-held") {
+        if (id == "scene-cancel" || id == "scene-held" || id == "create-held" || id == "create-cancel-held" || id == "create-stop-held") {
             {
                 std::lock_guard<std::mutex> lock(mutex);
                 held[id] = model;
@@ -36,15 +40,16 @@ class CreateAckFixture final : public gazebo::ModelPlugin {
         if (root && !id.empty())
             std::ofstream(std::filesystem::path(root) / (id + ".factory")) << model->GetName();
         if (id == "create-release") {
-            gazebo::physics::ModelPtr first;
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                first = held.at("create-held").lock();
-                held.erase("create-held");
+            std::lock_guard<std::mutex> lock(mutex);
+            for (const auto& id : {"create-held", "create-cancel-held", "scene-held", "scene-cancel"}) {
+                if (!held.count(id))
+                    continue;
+                auto first = held.at(id).lock();
+                if (!first)
+                    throw std::runtime_error("held native model was lost before ACK release");
+                AcknowledgeSimulationModel(std::move(first));
+                held.erase(id);
             }
-            if (!first)
-                throw std::runtime_error("held native model was lost before ACK release");
-            AcknowledgeSimulationModel(std::move(first));
         }
         AcknowledgeSimulationModel(std::move(model));
     }

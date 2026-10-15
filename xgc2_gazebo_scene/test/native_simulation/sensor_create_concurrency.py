@@ -104,9 +104,10 @@ def main():
                 assert time.monotonic()<deadline, "first sensor Init never reached fixture"
                 time.sleep(.01)
             assert (root/"sensor-held.factory").exists(), "parent factory did not acknowledge"
-            time.sleep(.55)
-            cancelled = json.loads(client.call("/v1/operations/sensor-held/cancel", {}).body)
-            assert cancelled["state"] == "running", cancelled
+            started = time.monotonic()
+            expired = json.loads(client.call("/v1/operations/sensor-held/wait", {}, timeout=2).body)
+            assert expired["state"] == "failed" and expired["error"]["code"] == "deadline_exceeded", expired
+            assert time.monotonic() - started < 2, "missing sensor ACK did not settle within budget"
             following_submission = json.loads(client.call("/v1/entities", {
                 "entity": {**entity, "id": "sensor-following"}, "operation_timeout_ms": 5000},
                 request_id="sensor-following", timeout=5).body)
@@ -116,7 +117,7 @@ def main():
             assert (root/"sensor-following.factory").exists(), "following factory blocked behind held sensor ACK"
             following = json.loads(client.call('/v1/operations/'+following_submission["id"]+'/wait', {}, timeout=5).body)
             assert following["state"] == "succeeded", following
-            assert query("/v1/operations/sensor-held")["state"] == "running"
+            assert query("/v1/operations/sensor-held") == expired
             checks.append("following-create-completes-before-first-sensor-ack")
             duplicate = mutate("/v1/entities", {"entity": {**entity, "id": "sensor-held"}})
             assert duplicate["error"]["code"] == "conflict", duplicate
@@ -124,13 +125,20 @@ def main():
             checks.append("pending-parent-reserved-without-fabricated-ready")
             released = mutate("/v1/entities", {"entity": {**with_sensor("release_sensor"), "id": "sensor-release"}})
             assert released["state"] == "succeeded", released
-            reconciled = json.loads(client.call("/v1/operations/sensor-held/wait", {}, timeout=5).body)
-            assert reconciled["state"] == "succeeded" and reconciled["effects"]["applied"], reconciled
-            generation = reconciled["result"]["entities"][0]["ref"]["generation"]
+            assert query("/v1/operations/sensor-held") == expired
+            deadline = time.monotonic() + 2
+            while True:
+                listed = query("/v1/entities")["entities"]
+                ready = next((e for e in listed if e["ref"]["id"] == "sensor-held"), None)
+                if ready:
+                    break
+                assert time.monotonic() < deadline, "late sensor ACK never reconciled reserved parent"
+                time.sleep(.01)
+            generation = ready["ref"]["generation"]
             managed = query("/v1/sensors")["sensors"]
             assert all(s["native_initialized"] for s in managed), managed
             assert any(s["parent"]["id"] == "sensor-held" and s["parent"]["generation"] == generation for s in managed)
-            checks.append("sensor-ack-reconciles-post-submit-cancel-and-expiry")
+            checks.append("late-sensor-ack-preserves-deadline-receipt")
             removed = mutate("/v1/entities/sensor-held", {"generation": generation}, method="DELETE")
             assert removed["state"] == "succeeded", removed
             replacement = mutate("/v1/entities", {"entity": {**entity, "id": "sensor-held"}})
@@ -139,6 +147,57 @@ def main():
             assert all(s["parent"]["id"] != "sensor-held" for s in query("/v1/sensors")["sensors"])
             assert query("/v1/operations/sensor-following") == following
             checks.append("sensor-parent-generation-isolation-and-native-release")
+            parent_generation = following["result"]["entities"][0]["ref"]["generation"]
+            started = time.monotonic()
+            admitted = json.loads(client.call("/v1/sensors", {"sensor": {
+                "id": "deadline_sensor", "parent": {"id": "sensor-following", "generation": parent_generation, "link": "body"},
+                "realization": {"media_type": "application/sdf+xml", "content":
+                    '<sensor name="input" type="imu"><always_on>true</always_on><update_rate>10</update_rate></sensor>'}},
+                "operation_timeout_ms": 200}, request_id="sensor-deadline", timeout=2).body)
+            bounded = json.loads(client.call('/v1/operations/'+admitted["id"]+'/wait', {}, timeout=2).body)
+            assert bounded["state"] == "failed" and bounded["error"]["code"] == "deadline_exceeded", bounded
+            assert time.monotonic() - started < 2, "controller Wait ignored the sensor deadline"
+            assert query("/v1/entities/sensor-following")["entities"], "deadline blocked following commands"
+            checks.append("native-sensor-wait-bounded-missing-ack")
+            admitted = json.loads(client.call("/v1/sensors", {"sensor": {
+                "id": "cancel_sensor", "parent": {"id": "sensor-following", "generation": parent_generation, "link": "body"},
+                "realization": {"media_type": "application/sdf+xml", "content":
+                    '<sensor name="input" type="imu"><always_on>true</always_on><update_rate>10</update_rate></sensor>'}},
+                "operation_timeout_ms": 5000}, request_id="sensor-cancel", timeout=2).body)
+            deadline = time.monotonic() + 2
+            while not (root / "cancel_sensor.init").exists():
+                assert time.monotonic() < deadline, "cancel sensor never reached native initialization"
+                time.sleep(.01)
+            started = time.monotonic()
+            client.call('/v1/operations/'+admitted['id']+'/cancel', {})
+            cancelled = json.loads(client.call('/v1/operations/'+admitted['id']+'/wait', {}, timeout=2).body)
+            assert cancelled['state'] == 'cancelled', cancelled
+            assert time.monotonic()-started < 2, "sensor cancellation waited for native ACK or original budget"
+            checks.append("native-sensor-wait-cancellable-missing-ack")
+            parent = mutate('/v1/entities', {'entity': {**with_sensor('held_release_sensor'), 'id': 'release-parent'}})
+            parent_generation = parent['result']['entities'][0]['ref']['generation']
+            started = time.monotonic()
+            admitted = json.loads(client.call('/v1/entities/release-parent', {
+                'generation': parent_generation, 'operation_timeout_ms': 200}, method='DELETE',
+                request_id='release-deadline', timeout=2).body)
+            release_expired = json.loads(client.call('/v1/operations/'+admitted['id']+'/wait', {}, timeout=2).body)
+            assert release_expired['state']=='failed' and release_expired['error']['code']=='deadline_exceeded', release_expired
+            assert time.monotonic()-started<2, 'parent removal renewed or ignored its sensor-release budget'
+            parent = mutate('/v1/entities', {'entity': {**with_sensor('cancel_release_sensor'), 'id': 'cancel-release-parent'}})
+            parent_generation = parent['result']['entities'][0]['ref']['generation']
+            admitted = json.loads(client.call('/v1/entities/cancel-release-parent', {
+                'generation': parent_generation, 'operation_timeout_ms': 5000}, method='DELETE',
+                request_id='release-cancel', timeout=2).body)
+            deadline = time.monotonic()+2
+            while not (root/'cancel_release_sensor.released').exists():
+                assert time.monotonic()<deadline, 'native sensor release never reached fixture'
+                time.sleep(.01)
+            started = time.monotonic()
+            client.call('/v1/operations/'+admitted['id']+'/cancel', {})
+            release_cancelled = json.loads(client.call('/v1/operations/'+admitted['id']+'/wait', {}, timeout=2).body)
+            assert release_cancelled['state']=='cancelled', release_cancelled
+            assert time.monotonic()-started<2, 'parent removal cancellation waited for missing sensor release ACK'
+            checks.append('parent-sensor-release-missing-ack-bounded-and-cancellable')
             stopped = json.loads(client.call("/v1/entities", {
                 "entity": {**with_sensor("stop_sensor"), "id": "sensor-stop"}, "operation_timeout_ms": 5000},
                 request_id="sensor-stop", timeout=5).body)

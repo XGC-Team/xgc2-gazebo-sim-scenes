@@ -35,10 +35,16 @@ target_compile_options(xgc2_simple_lidar_cpu PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(xgc2_simple_lidar_cpu PRIVATE include ${catkin_INCLUDE_DIRS} ${xgc2_gazebo_scene_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
 target_link_libraries(xgc2_simple_lidar_cpu PRIVATE ${catkin_LIBRARIES} ${scene_ros_master} ${GAZEBO_LIBRARIES})
 
+add_executable(xgc2-gazebo-ray-probe src/gpu_ray_probe.cpp)
+target_compile_features(xgc2-gazebo-ray-probe PRIVATE cxx_std_17)
+target_include_directories(xgc2-gazebo-ray-probe SYSTEM PRIVATE ${GAZEBO_INCLUDE_DIRS})
+target_link_libraries(xgc2-gazebo-ray-probe PRIVATE ${GAZEBO_LIBRARIES})
+install(TARGETS xgc2-gazebo-ray-probe RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION})
+
 install(TARGETS xgc2_simple_lidar xgc2_simple_lidar_cpu LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 install(DIRECTORY models/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/models)
-catkin_install_python(PROGRAMS scripts/launch_robot.py scripts/prepare_robot_model.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+catkin_install_python(PROGRAMS scripts/launch_robot.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(DIRECTORY python/xgc2_simple_lidar DESTINATION ${CATKIN_GLOBAL_PYTHON_DESTINATION}
   PATTERN "__pycache__" EXCLUDE)
 

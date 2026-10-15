@@ -269,13 +269,19 @@ class NativeSensorController::Impl {
             }
         throw SensorControlError(404, "not_found", "sensor is not registered");
     }
-    void Wait(const std::shared_ptr<AckState>& ack, bool removal, Clock::time_point) {
+    void Wait(const std::shared_ptr<AckState>& ack, bool removal, Clock::time_point deadline,
+              const std::atomic<bool>* cancelled = nullptr) {
         std::unique_lock<std::mutex> lock(ack->mutex);
-        ack->changed.wait(lock, [&] {
-            return stopping_.load() || (removal ? ack->released : (ack->initialized || ack->released));
+        const bool completed = ack->changed.wait_until(lock, deadline, [&] {
+            return stopping_.load() || (cancelled && cancelled->load()) ||
+                   (removal ? ack->released : (ack->initialized || ack->released));
         });
         if (stopping_.load())
             throw SensorControlError(503, "unavailable", "world stopped during native sensor effect");
+        if (cancelled && cancelled->load())
+            throw SensorControlError(409, "cancelled", "cancelled during native sensor effect");
+        if (!completed)
+            throw SensorControlError(504, "deadline_exceeded", "native sensor acknowledgement deadline elapsed");
         if (!removal && ack->released)
             throw SensorControlError(503, "unavailable", "sensor released during initialization");
     }
@@ -438,28 +444,29 @@ class NativeSensorController::Impl {
         *output = std::move(result);
         return true;
     }
-    void Remove(Record& record, Clock::time_point deadline, bool* effects_started = nullptr) {
+    void Remove(Record& record, Clock::time_point deadline, bool* effects_started = nullptr,
+                const std::atomic<bool>* cancelled = nullptr) {
         if (record.native_name.empty()) {
-            Wait(record.ack, false, deadline);
+            Wait(record.ack, false, deadline, cancelled);
             auto sensor = Sensor(record);
             record.native_name = sensor->ScopedName();
         }
         if (effects_started)
             *effects_started = true;
         gazebo::sensors::SensorManager::Instance()->RemoveSensor(record.native_name);
-        Wait(record.ack, true, deadline);
+        Wait(record.ack, true, deadline, cancelled);
         {
             std::lock_guard<std::mutex> lock(registry_mutex);
             registry.erase(record.token);
         }
         record = Record{};
     }
-    Json::Value Execute(const PreparedSensorCommand& command, bool* effects_started) {
+    Json::Value Execute(const PreparedSensorCommand& command, bool* effects_started, const std::atomic<bool>* cancelled) {
         if (stopping_.load())
             throw SensorControlError(503, "unavailable", "world sensor controller stopped");
         if (Clock::now().time_since_epoch().count() >= command.admission_deadline.time_since_epoch().count())
             throw SensorControlError(504, "deadline_exceeded", "sensor admission budget expired before effects");
-        const auto deadline = Clock::now() + std::chrono::milliseconds(command.timeout_ms);
+        const auto deadline = command.admission_deadline;
         Json::Value result;
         result["sensors"] = Json::arrayValue;
         if (command.kind == PreparedSensorCommand::Kind::List) {
@@ -516,7 +523,7 @@ class NativeSensorController::Impl {
                     throw SensorControlError(503, "unavailable", "native sensor creation rejected");
                 link.reset();
                 model.reset();
-                Wait(ack, false, deadline);
+                Wait(ack, false, deadline, cancelled);
                 auto sensor = Sensor(*record);
                 record->desired = record->applied = Config(sensor);
                 result["sensors"].append(Describe(*record));
@@ -538,7 +545,7 @@ class NativeSensorController::Impl {
                 Json::Value ref;
                 ref["id"] = record.id;
                 ref["generation"] = Json::UInt64(record.generation);
-                Remove(record, deadline, effects_started);
+                Remove(record, deadline, effects_started, cancelled);
                 result["removed"].append(ref);
             } else if (command.kind == PreparedSensorCommand::Kind::Configure) {
                 if (record.desired_revision != command.expected_revision)
@@ -576,9 +583,8 @@ class NativeSensorController::Impl {
         result["effects"]["applied"] = command.kind != PreparedSensorCommand::Kind::Describe;
         return result;
     }
-    Json::Value RemoveParent(const std::string& id, std::uint64_t generation, std::uint32_t timeout,
-                             bool* effects_started) {
-        const auto deadline = Clock::now() + std::chrono::milliseconds(timeout);
+    Json::Value RemoveParent(const std::string& id, std::uint64_t generation, Clock::time_point deadline,
+                             bool* effects_started, const std::atomic<bool>* cancelled) {
         Json::Value result;
         result["removed"] = Json::arrayValue;
         for (auto& record : records_)
@@ -586,11 +592,19 @@ class NativeSensorController::Impl {
                 Json::Value ref;
                 ref["id"] = record.id;
                 ref["generation"] = Json::UInt64(record.generation);
-                Remove(record, deadline, effects_started);
+                Remove(record, deadline, effects_started, cancelled);
                 result["removed"].append(ref);
             }
         result["native_release_confirmed"] = true;
         return result;
+    }
+    void NotifyCancellation() {
+        std::lock_guard<std::mutex> lock(registry_mutex);
+        for (auto& item : registry)
+            if (auto ack = item.second.lock()) {
+                std::lock_guard<std::mutex> ack_lock(ack->mutex);
+                ack->changed.notify_all();
+            }
     }
     void Stop() {
         stopping_.store(true);
@@ -627,14 +641,14 @@ NativeSensorController::Prepare(const std::string& method, const std::string& ro
     return impl_->Prepare(method, route, body);
 }
 Json::Value NativeSensorController::Execute(const std::shared_ptr<const PreparedSensorCommand>& command,
-                                            bool* effects_started) {
+                                            bool* effects_started, const std::atomic<bool>* cancelled) {
     if (!command)
         Invalid("sensor command is missing");
-    return impl_->Execute(*command, effects_started);
+    return impl_->Execute(*command, effects_started, cancelled);
 }
-Json::Value NativeSensorController::RemoveParent(const std::string& id, std::uint64_t generation, std::uint32_t timeout,
-                                                 bool* effects_started) {
-    return impl_->RemoveParent(id, generation, timeout, effects_started);
+Json::Value NativeSensorController::RemoveParent(const std::string& id, std::uint64_t generation, Clock::time_point deadline,
+                                                 bool* effects_started, const std::atomic<bool>* cancelled) {
+    return impl_->RemoveParent(id, generation, deadline, effects_started, cancelled);
 }
 void NativeSensorController::Stop() {
     impl_->Stop();
@@ -647,4 +661,5 @@ bool NativeSensorController::CompleteParentSensors(const std::string& id, std::u
                                                    Json::Value* result) {
     return impl_->CompleteParentSensors(id, generation, result);
 }
+void NativeSensorController::NotifyCancellation() { impl_->NotifyCancellation(); }
 } // namespace xgc2_gazebo_scene

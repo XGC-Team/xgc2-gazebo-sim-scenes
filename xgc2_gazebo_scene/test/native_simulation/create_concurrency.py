@@ -89,10 +89,18 @@ def main():
                     time.sleep(.01)
                 assert query("/v1/operations/" + name)["state"] == "running"
 
+            started = time.monotonic()
             submit_held("create-held", timeout=500)
-            time.sleep(.55) # Expire only after actual factory submission, not while queued.
-            cancelled = json.loads(client.call("/v1/operations/create-held/cancel", {}).body)
-            assert cancelled["state"] == "running", cancelled
+            expired = json.loads(client.call("/v1/operations/create-held/wait", {}, timeout=2).body)
+            assert expired["state"] == "failed" and expired["error"]["code"] == "deadline_exceeded", expired
+            assert time.monotonic() - started < 2, "missing factory ACK did not settle within budget"
+            submit_held("create-cancel-held")
+            started = time.monotonic()
+            client.call("/v1/operations/create-cancel-held/cancel", {})
+            cancelled = json.loads(client.call("/v1/operations/create-cancel-held/wait", {}, timeout=2).body)
+            assert cancelled["state"] == "cancelled", cancelled
+            assert time.monotonic() - started < 2, "cancel waited for missing factory ACK"
+            checks.append("missing-factory-ack-bounded-expiry-and-cancel")
             following_submission = json.loads(client.call("/v1/entities", {
                 "entity": {**entity, "id": "create-following"}, "operation_timeout_ms": 5000},
                 request_id="create-following", timeout=5).body)
@@ -103,7 +111,7 @@ def main():
             following = json.loads(client.call(
                 f'/v1/operations/{following_submission["id"]}/wait', {}, timeout=5).body)
             assert following["state"] == "succeeded", following
-            assert query("/v1/operations/create-held")["state"] == "running"
+            assert query("/v1/operations/create-held") == expired
             checks.append("following-create-completes-before-first-ack")
             duplicate = mutate("/v1/entities", {"entity": {**entity, "id": "create-held"}})
             assert duplicate["error"]["code"] == "conflict", duplicate
@@ -116,15 +124,44 @@ def main():
             scene_create = mutate("/v1/extensions/scene/apply", {
                 "epoch": "concurrent-epoch", "revision": 1, "document": scene})
             assert scene_create["state"] == "succeeded", scene_create
-            assert query("/v1/operations/create-held")["state"] == "running"
+            assert query("/v1/operations/create-held") == expired
+            scene['obstacles'][0]['id'] = 'held'
+            started = time.monotonic()
+            admitted = json.loads(client.call("/v1/extensions/scene/apply", {
+                "epoch": "concurrent-epoch", "revision": 2, "document": scene, "operation_timeout_ms": 200},
+                request_id="scene-deadline", timeout=2).body)
+            scene_expired = json.loads(client.call('/v1/operations/'+admitted['id']+'/wait', {}, timeout=2).body)
+            assert (root / 'scene-held.factory').exists(), "scene factory did not reach withheld ACK"
+            assert scene_expired['state'] == 'failed' and scene_expired['error']['code'] == 'deadline_exceeded', scene_expired
+            assert time.monotonic() - started < 2, "missing scene factory ACK stalled worker"
+            query('/v1/entities')
+            checks.append('scene-factory-missing-ack-bounded-deadline')
+            scene['obstacles'][0]['id'] = 'cancel'
+            admitted = json.loads(client.call("/v1/extensions/scene/apply", {
+                "epoch": "concurrent-epoch", "revision": 3, "document": scene, "operation_timeout_ms": 5000},
+                request_id="scene-cancel", timeout=2).body)
+            deadline = time.monotonic()+2
+            while not (root/'scene-cancel.factory').exists():
+                assert time.monotonic()<deadline, "cancelled scene never reached native factory"
+                time.sleep(.01)
+            started = time.monotonic()
+            client.call('/v1/operations/'+admitted['id']+'/cancel', {})
+            scene_cancelled = json.loads(client.call('/v1/operations/'+admitted['id']+'/wait', {}, timeout=2).body)
+            assert scene_cancelled['state']=='cancelled', scene_cancelled
+            assert time.monotonic()-started<2, "scene cancellation waited for missing ACK"
+            checks.append('scene-factory-missing-ack-cancellable')
             released = mutate("/v1/entities", {"entity": {**entity, "id": "create-release"}})
             assert released["state"] == "succeeded", released
-            reconciled = json.loads(client.call("/v1/operations/create-held/wait", {}, timeout=5).body)
-            assert reconciled["state"] == "succeeded" and reconciled["effects"]["applied"], reconciled
-            assert reconciled["result"]["entities"][0]["ref"]["id"] == "create-held"
-            assert following["result"]["entities"][0]["ref"]["id"] == "create-following"
-            assert reconciled["result"]["entities"][0]["ref"]["generation"] != following["result"]["entities"][0]["ref"]["generation"]
-            checks.extend(["post-submit-cancel-expiry-reconciled", "scene-batch-ack-isolation"])
+            assert query("/v1/operations/create-held") == expired
+            assert query("/v1/operations/create-cancel-held") == cancelled
+            deadline = time.monotonic() + 2
+            while True:
+                listed = query("/v1/entities")["entities"]
+                if any(e["ref"]["id"] == "create-held" for e in listed):
+                    break
+                assert time.monotonic() < deadline, "late ACK never reconciled reserved native model"
+                time.sleep(.01)
+            checks.extend(["late-ack-preserves-terminal-receipts", "scene-batch-ack-isolation"])
             failed_sdf = artifact.replace("</model>", '<plugin name="unbound-chassis" '
                 'filename="libxgc2_simulation_entity_ack.so"><chassisRobotId>create-failed</chassisRobotId>'
                 '</plugin></model>')
@@ -133,7 +170,7 @@ def main():
             failed = mutate("/v1/entities", {"entity": failed_entity})
             assert failed["state"] == "failed" and failed["error"]["code"] == "unavailable", failed
             assert failed["effects"]["started"] and failed["effects"]["completion"] == "partial_or_unknown"
-            assert query("/v1/operations/create-held") == reconciled
+            assert query("/v1/operations/create-held") == expired
             assert query("/v1/entities/create-following")["entities"][0]["lifecycle"] == "ready"
             checks.append("failed-create-does-not-alter-other-receipts")
             submit_held("create-stop-held")

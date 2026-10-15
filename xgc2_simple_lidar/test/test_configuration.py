@@ -43,8 +43,7 @@ class ConfigurationTest(unittest.TestCase):
     def test_scout_parameters_keep_the_launch_contract(self):
         expected = dict(COMMON_PARAMETERS, robot_description_param='/ugv7/robot_description',
                         tf_prefix='ugv7', frame_prefix='ugv7/', sensor_ns='ugv7',
-                        robot_state_publisher_ns='ugv7', run_mode='hybrid',
-                        enable_lidar=True, enable_camera=True)
+                        robot_state_publisher_ns='ugv7', run_mode='hybrid')
         self.assertEqual(robot_parameters(SCOUT_ROW, 'scout', 'hybrid'), expected)
 
     def test_mecanum_parameters_keep_the_launch_contract(self):
@@ -63,31 +62,14 @@ class ConfigurationTest(unittest.TestCase):
                 for key, value in defaults.items():
                     self.assertEqual(parameters[key], value)
 
-    def test_omitted_scout_overrides_default_both_switches_to_false(self):
-        row = copy.deepcopy(SCOUT_ROW)
-        del row['binding']['scout']
-        parameters = robot_parameters(row, 'scout', 'physical')
-        self.assertFalse(parameters['enable_lidar'])
-        self.assertFalse(parameters['enable_camera'])
-        self.assertEqual(parameters['run_mode'], 'physical')
-
-    def test_omitted_scout_switch_defaults_to_false(self):
-        for source, target, other in (('lidarSimulationEnabled', 'enable_lidar', 'enable_camera'),
-                                      ('imageSimulationEnabled', 'enable_camera', 'enable_lidar')):
+    def test_scout_private_sensor_switches_do_not_enable_producers(self):
+        for switches in ({}, {'lidarSimulationEnabled': True, 'imageSimulationEnabled': True}):
             row = copy.deepcopy(SCOUT_ROW)
-            del row['binding']['scout'][source]
-            with self.subTest(source=source):
-                parameters = robot_parameters(row, 'scout', 'simulation')
-                self.assertFalse(parameters[target])
-                self.assertTrue(parameters[other])
-
-    def test_scout_switches_must_be_boolean(self):
-        for source in ('lidarSimulationEnabled', 'imageSimulationEnabled'):
-            for value in (None, 0, 1, 'true'):
-                row = copy.deepcopy(SCOUT_ROW)
-                row['binding']['scout'][source] = value
-                with self.subTest(source=source, value=value), self.assertRaisesRegex(ValueError, 'boolean'):
-                    robot_parameters(row, 'scout', 'simulation')
+            row['binding']['scout'] = switches
+            parameters = robot_parameters(row, 'scout', 'simulation')
+            self.assertNotIn('enable_lidar', parameters)
+            self.assertNotIn('enable_camera', parameters)
+            self.assertTrue(parameters['enable_simple_lidar'])
 
     def test_namespace_must_be_one_absolute_ros_segment(self):
         for namespace in (None, 7, '', 'ugv7', '/', '/ugv7/child', '/ugv-7'):
@@ -144,16 +126,44 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(parameters['simple_lidar_rate_hz'], 12)
         self.assertEqual(parameters['simple_lidar_range_meters'], 30)
 
-    def test_xsim_body_selection_does_not_filter_gazebo_geometry(self):
-        expected = surface_parameters({'simpleLidar': {'enabled': True, 'acceleration': 'cpu'}})
-        for body_returns in (False, True):
-            self.assertEqual(surface_parameters({'simpleLidar': {
-                'enabled': True, 'acceleration': 'cpu', 'bodyReturns': body_returns}}), expected)
+    def test_gazebo_rejects_unsupported_observation_requests(self):
+        for field, value in (('mode', 'penetrating'), ('mode', 'depth_frustum'),
+                             ('preset', 'bridge_equivalent'), ('preset', 'zju_cpu_crop'),
+                             ('bodyReturns', True), ('publishBeams', True), ('bodyReturns', 'false')):
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
+                surface_parameters({'simpleLidar': {'enabled': True, field: value}})
+        native = {'enabled': True, 'acceleration': 'cpu'}
+        self.assertEqual(surface_parameters({'simpleLidar': native}), surface_parameters({'simpleLidar': {
+            **native, 'mode': 'raycast', 'preset': '', 'bodyReturns': False, 'publishBeams': False}}))
 
 
 class AutoBackendTest(unittest.TestCase):
     def tearDown(self):
         configuration.gpu_available.cache_clear()
+
+    def test_acceleration_rejects_non_strings_before_backend_probe(self):
+        for enabled in (False, True):
+            with mock.patch.object(configuration, 'gpu_available') as probe:
+                for acceleration in (None, False, 0, [], {}, True, 1, 1.5, ['gpu'], {'backend': 'cpu'}, 'cuda'):
+                    with self.subTest(enabled=enabled, acceleration=acceleration), \
+                            self.assertRaisesRegex(ValueError, r'simpleLidar\.acceleration'):
+                        surface_parameters({'simpleLidar': {'enabled': enabled, 'acceleration': acceleration}})
+                probe.assert_not_called()
+
+    def test_acceleration_preserves_optional_string_contract(self):
+        for enabled in (False, True):
+            for acceleration in (None, '', 'auto', 'cpu', 'gpu'):
+                for available in (False, True):
+                    lidar = {'enabled': enabled}
+                    if acceleration is not None:
+                        lidar['acceleration'] = acceleration
+                    with self.subTest(enabled=enabled, acceleration=acceleration, available=available), \
+                            mock.patch.object(configuration, 'gpu_available', return_value=available) as probe:
+                        value = surface_parameters({'simpleLidar': lidar})
+                        automatic = acceleration in (None, '', 'auto')
+                        expected = ('gpu' if available or not enabled else 'cpu') if automatic else acceleration
+                        self.assertEqual(value['simple_lidar_acceleration'], expected)
+                        self.assertEqual(probe.call_count, int(enabled and automatic))
 
     def test_auto_probes_once_and_preserves_native_observation(self):
         for available in (True, False):
@@ -165,41 +175,31 @@ class AutoBackendTest(unittest.TestCase):
                     self.assertEqual(value['simple_lidar_acceleration'], 'gpu' if available else 'cpu')
                 self.assertEqual(probe.call_count, 1)
 
-    def test_legacy_observation_fields_keep_native_scan_and_explicit_backend(self):
-        for mode in ('', 'raycast', 'penetrating', 'depth_frustum'):
-            for preset in ('', 'bridge_equivalent', 'zju_cpu_crop', 'zju_cpu_crop_ego_v2'):
-                for backend in ('cpu', 'gpu'):
-                    for beams in (False, True):
-                        with self.subTest(mode=mode, preset=preset, backend=backend, beams=beams), \
-                                mock.patch.object(configuration.subprocess, 'run') as probe:
-                            value = surface_parameters({'simpleLidar': {
-                                'enabled': True, 'mode': mode, 'preset': preset,
-                                'publishBeams': beams, 'acceleration': backend,
-                                'rateHz': 4, 'rangeMeters': 37, 'hFovDeg': 270,
-                                'vFovDeg': 50, 'hRes': 720, 'vRes': 32}})
-                            self.assertTrue(value['enable_simple_lidar'])
-                            self.assertEqual(value['simple_lidar_acceleration'], backend)
-                            for field, expected in (('rate_hz', 4), ('range_meters', 37),
-                                    ('hfov_deg', 270), ('vfov_deg', 50), ('hres', 720), ('vres', 32)):
-                                self.assertEqual(value['simple_lidar_' + field], expected)
-                            probe.assert_not_called()
+    def test_probe_uses_gazebo_native_binary_and_isolated_master(self):
+        with mock.patch.object(configuration.subprocess, 'run', return_value=mock.Mock(returncode=0)) as probe:
+            self.assertTrue(configuration.gpu_available())
+        arguments = probe.call_args
+        self.assertEqual(arguments.args[0], ['xgc2-gazebo-ray-probe'])
+        self.assertIn('GAZEBO_MASTER_URI', arguments.kwargs['env'])
+        self.assertEqual(arguments.kwargs['timeout'], 10)
 
-    def test_legacy_penetrating_auto_selects_an_available_native_backend(self):
-        for available in (False, True):
-            configuration.gpu_available.cache_clear()
-            with mock.patch.object(configuration.subprocess, 'run',
-                    return_value=mock.Mock(returncode=0 if available else 1)) as probe:
-                value = surface_parameters({'simpleLidar': {'enabled': True,
-                    'mode': 'penetrating', 'preset': 'bridge_equivalent', 'publishBeams': True,
-                    'acceleration': 'auto'}})
-                self.assertTrue(value['enable_simple_lidar'])
-                self.assertEqual(value['simple_lidar_acceleration'], 'gpu' if available else 'cpu')
-                probe.assert_called_once()
+    def test_native_explicit_backend_preserves_scan(self):
+        for backend in ('cpu', 'gpu'):
+            with mock.patch.object(configuration.subprocess, 'run') as probe:
+                value = surface_parameters({'simpleLidar': {
+                    'enabled': True, 'mode': 'raycast', 'acceleration': backend,
+                    'rateHz': 4, 'rangeMeters': 37, 'hFovDeg': 270,
+                    'vFovDeg': 50, 'hRes': 720, 'vRes': 32}})
+                for field, expected in (('rate_hz', 4), ('range_meters', 37),
+                        ('hfov_deg', 270), ('vfov_deg', 50), ('hres', 720), ('vres', 32)):
+                    self.assertEqual(value['simple_lidar_' + field], expected)
+                self.assertEqual(value['simple_lidar_acceleration'], backend)
+                probe.assert_not_called()
 
     def test_author_disabled_stays_disabled_without_an_auto_probe(self):
         with mock.patch.object(configuration.subprocess, 'run') as probe:
             value = surface_parameters({'simpleLidar': {'enabled': False,
-                'mode': 'penetrating', 'preset': 'bridge_equivalent', 'acceleration': 'auto'}})
+                'mode': 'raycast', 'acceleration': 'auto'}})
             self.assertFalse(value['enable_simple_lidar'])
             probe.assert_not_called()
 

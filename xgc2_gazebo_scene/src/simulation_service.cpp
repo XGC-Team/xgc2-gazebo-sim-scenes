@@ -22,6 +22,7 @@
 #include <map>
 #include <mutex>
 #include <sdf/sdf.hh>
+#include <set>
 #include <sys/stat.h>
 #include <thread>
 #include <xgc2/xrpc/http.hpp>
@@ -408,20 +409,30 @@ class SimulationService::Impl {
         }
     }
     void Acknowledge(gazebo::physics::ModelPtr model) {
-        std::lock_guard<std::mutex> lock(ack_mutex_);
-        if (stopping_)
-            return;
-        const auto create = pending_creates_.find(model->GetName());
-        if (create != pending_creates_.end()) {
-            create->second.model = std::move(model);
+        bool wake_worker = false;
+        {
+            std::lock_guard<std::mutex> lock(ack_mutex_);
+            if (stopping_)
+                return;
+            const auto create = pending_creates_.find(model->GetName());
+            if (abandoned_scene_models_.count(model->GetName())) {
+                abandoned_scene_ready_.push_back(std::move(model));
+                wake_worker = true;
+            } else if (create != pending_creates_.end()) {
+                create->second.model = std::move(model);
+                wake_worker = true;
+            } else {
+                const auto found = pending_scene_models_.find(model->GetName());
+                if (found != pending_scene_models_.end()) {
+                    found->second = std::move(model);
+                    ack_cv_.notify_one();
+                }
+            }
+        }
+        if (wake_worker) {
+            std::lock_guard<std::mutex> lock(queue_mutex_);
             create_ack_ready_.store(true);
             queue_cv_.notify_one();
-            return;
-        }
-        const auto found = pending_scene_models_.find(model->GetName());
-        if (found != pending_scene_models_.end()) {
-            found->second = std::move(model);
-            ack_cv_.notify_one();
         }
     }
     void MarkNativeReady() noexcept {
@@ -501,6 +512,7 @@ class SimulationService::Impl {
         std::size_t slot;
         Entity* entity;
         gazebo::physics::ModelPtr model;
+        bool chassis = false;
     };
     Json::Value Health() const {
         Json::Value v;
@@ -978,8 +990,16 @@ class SimulationService::Impl {
                     Fields(Parse(r.body), {});
                 auto action = name.substr(slash);
                 if (action == "/cancel") {
-                    found->cancel.store(true);
+                    {
+                        std::lock_guard<std::mutex> lock(queue_mutex_);
+                        found->cancel.store(true);
+                    }
                     queue_cv_.notify_one();
+                    {
+                        std::lock_guard<std::mutex> lock(ack_mutex_);
+                        ack_cv_.notify_all();
+                    }
+                    sensors_->NotifyCancellation();
                     reply.complete(Response(Operation(*found)));
                     return;
                 }
@@ -1164,11 +1184,17 @@ class SimulationService::Impl {
         r.paused = world_->IsPaused();
         r.step_size = world_->Physics()->GetMaxStepSize();
     }
-    std::map<std::string, gazebo::physics::ModelPtr> RealizeBatch(const std::map<std::string, sdf::SDFPtr>& artifacts) {
+    std::map<std::string, gazebo::physics::ModelPtr> RealizeBatch(const std::map<std::string, sdf::SDFPtr>& artifacts,
+                                                              Clock::time_point deadline) {
         if (artifacts.empty())
             return {};
         {
             std::lock_guard<std::mutex> lock(ack_mutex_);
+            if (abandoned_scene_models_.size() + artifacts.size() > kEntities)
+                throw DomainError(429, "resource_exhausted", "unresolved native scene factory capacity reached");
+            for (const auto& [name, artifact] : artifacts)
+                if (abandoned_scene_models_.count(name))
+                    throw DomainError(409, "conflict", "previous native scene realization is still pending");
             pending_scene_models_.clear();
             for (const auto& [name, artifact] : artifacts)
                 pending_scene_models_.emplace(name, gazebo::physics::ModelPtr{});
@@ -1178,8 +1204,8 @@ class SimulationService::Impl {
         for (const auto& [name, artifact] : artifacts)
             world_->InsertModelSDF(*artifact);
         std::unique_lock<std::mutex> lock(ack_mutex_);
-        ack_cv_.wait(lock, [this] {
-            if (stopping_)
+        const bool completed = ack_cv_.wait_until(lock, deadline, [this] {
+            if (stopping_ || (scene_cancel_ && scene_cancel_->load()))
                 return true;
             for (const auto& [name, model] : pending_scene_models_)
                 if (!model)
@@ -1188,6 +1214,21 @@ class SimulationService::Impl {
         });
         if (stopping_)
             throw DomainError(503, "unavailable", "world ended before native factory completion");
+        const bool cancelled = scene_cancel_ && scene_cancel_->load();
+        if (!completed || cancelled) {
+            auto pending = std::move(pending_scene_models_);
+            pending_scene_models_.clear();
+            for (const auto& [name, model] : pending)
+                if (!model)
+                    abandoned_scene_models_.insert(name);
+            lock.unlock();
+            for (const auto& [name, model] : pending)
+                if (model)
+                    world_->RemoveModel(model);
+            if (cancelled)
+                throw DomainError(409, "cancelled", "cancelled during scene native factory completion");
+            throw DomainError(504, "deadline_exceeded", "scene native factory completion deadline elapsed");
+        }
         auto models = std::move(pending_scene_models_);
         pending_scene_models_.clear();
         return models;
@@ -1233,7 +1274,7 @@ class SimulationService::Impl {
             if (!exists)
                 additions.emplace(definition.name, artifacts.at(id));
         }
-        const auto created = RealizeBatch(additions);
+        const auto created = RealizeBatch(additions, deadline);
         std::map<std::string, gazebo::physics::ModelPtr> models;
         for (const auto& [id, definition] : desired) {
             Entity* entity = nullptr;
@@ -1287,7 +1328,7 @@ class SimulationService::Impl {
             return false;
         }
         if (c.kind == Kind::Sensor) {
-            r.extension_result = Response(sensors_->Execute(c.sensor, &r.effects_started)).body;
+            r.extension_result = Response(sensors_->Execute(c.sensor, &r.effects_started, &slot.cancel)).body;
             return false;
         }
         if (c.kind == Kind::Extension) {
@@ -1295,6 +1336,11 @@ class SimulationService::Impl {
             return false;
         }
         if (c.kind == Kind::Scene || c.kind == Kind::Motion) {
+            scene_cancel_ = &slot.cancel;
+            struct ResetCancellation {
+                const std::atomic<bool>*& value;
+                ~ResetCancellation() { value = nullptr; }
+            } reset{scene_cancel_};
             r.extension_result = c.kind == Kind::Scene ? scene_->Execute(c.scene, &r.effects_started)
                                                        : motion_->Execute(c.motion, &r.effects_started);
             return false;
@@ -1315,11 +1361,11 @@ class SimulationService::Impl {
             sensors_->PrepareParentSensors(c.id, generation, c.artifact);
             *entity = {c.id, c.role, c.native_name, generation, {}, c.pose, true, true, "", c.specification};
             r.effects_started = true;
-            // Factory submission is irreversible. Expiry/disconnect does not make
-            // the operation terminal; the native last-plugin ack reconciles it.
+            // Keep the native reservation after receipt expiry/cancellation so a late
+            // ACK can reconcile the effect without changing the terminal receipt.
             {
                 std::lock_guard<std::mutex> lock(ack_mutex_);
-                pending_creates_.emplace(c.native_name, PendingCreate{index, entity, {}});
+                pending_creates_.emplace(c.native_name, PendingCreate{index, entity, {}, c.chassis});
             }
             try {
                 world_->InsertModelSDF(*c.artifact);
@@ -1367,7 +1413,7 @@ class SimulationService::Impl {
             if (!entity.scene_body.empty())
                 throw DomainError(422, "unsupported", "scene membership and state are owned by the scene extension");
             if (c.kind == Kind::Remove) {
-                sensors_->RemoveParent(entity.id, entity.generation, 5000, &r.effects_started);
+                sensors_->RemoveParent(entity.id, entity.generation, c.expires, &r.effects_started, &slot.cancel);
                 {
                     // The model plugin is destroyed after Gazebo has finalized its joints and links: the
                     // HOLD seat ends here, before the removal.
@@ -1501,46 +1547,78 @@ class SimulationService::Impl {
             scene_snapshot_requested_.store(true);
     }
     void CompleteCreates() {
-        if (!create_ack_ready_.exchange(false) && !stopping_)
-            return;
+        create_ack_ready_.store(false);
+        std::vector<gazebo::physics::ModelPtr> abandoned;
+        {
+            std::lock_guard<std::mutex> lock(ack_mutex_);
+            abandoned.swap(abandoned_scene_ready_);
+        }
+        // Native ACK callbacks run inside Gazebo's factory/update ownership.
+        // Remove timed-out effects only here, after those callbacks return.
+        for (const auto& model : abandoned) {
+            const auto name = model->GetName();
+            world_->RemoveModel(model);
+            std::lock_guard<std::mutex> lock(ack_mutex_);
+            abandoned_scene_models_.erase(name);
+        }
         std::vector<std::string> candidates;
         {
             std::lock_guard<std::mutex> lock(ack_mutex_);
             for (const auto& entry : pending_creates_)
-                if (entry.second.model || stopping_)
-                    candidates.push_back(entry.first);
+                candidates.push_back(entry.first);
         }
         for (const auto& name : candidates) {
             PendingCreate create{};
             {
                 std::lock_guard<std::mutex> lock(ack_mutex_);
-                auto found = pending_creates_.find(name);
-                if (found == pending_creates_.end())
-                    continue;
-                create = found->second;
+                create = pending_creates_.at(name);
             }
-            auto& slot = slots_[create.slot];
+            Slot* slot = create.slot < slots_.size() ? &slots_[create.slot] : nullptr;
+            if (slot && (stopping_ || slot->cancel.load() || Clock::now() >= slot->command.expires)) {
+                ApplySlot(*slot, [&]() -> bool {
+                    if (stopping_)
+                        throw DomainError(503, "unavailable", "world ended before native factory completion");
+                    if (slot->cancel.load())
+                        throw DomainError(409, "cancelled", "cancelled during native factory completion");
+                    throw DomainError(504, "deadline_exceeded", "native factory completion deadline elapsed");
+                });
+                // The receipt may be evicted/reused independently of a late ACK.
+                std::lock_guard<std::mutex> lock(ack_mutex_);
+                pending_creates_.at(name).slot = slots_.size();
+                slot = nullptr;
+            }
+            if (!stopping_ && !create.model)
+                continue;
             bool awaiting_sensors = false;
-            ApplySlot(slot, [&] {
+            const auto reconcile = [&] {
                 if (stopping_)
-                    throw DomainError(503, "unavailable", "world ended before native factory completion");
+                    return false;
                 auto& entity = *create.entity;
                 Json::Value sensor_result;
                 if (!sensors_->CompleteParentSensors(entity.id, entity.generation, &sensor_result)) {
                     awaiting_sensors = true;
-                    return true; // Keep the original receipt and reservation pending.
+                    return true;
                 }
-                entity.model = std::move(create.model);
-                if (slot.command.chassis && !chassis_->Bound(entity.id))
+                entity.model = create.model;
+                if (create.chassis && !chassis_->Bound(entity.id))
                     throw DomainError(503, "unavailable", "native chassis initialization did not complete");
                 entity.native_ready = true;
-                slot.result.entities.push_back(Snapshot(entity));
-                WorldState(slot.result);
+                if (slot) {
+                    slot->result.entities.push_back(Snapshot(entity));
+                    WorldState(slot->result);
+                }
                 return false;
-            });
+            };
+            if (slot)
+                ApplySlot(*slot, reconcile);
+            else {
+                try {
+                    reconcile();
+                } catch (...) {
+                    // Preserve the native reservation for explicit reconciliation.
+                }
+            }
             if (!awaiting_sensors) {
-                // Retain the native model for explicit reconciliation after an
-                // initialization failure, as before; pending creates stay hidden.
                 if (!stopping_ && !create.entity->model && create.model)
                     create.entity->model = std::move(create.model);
                 std::lock_guard<std::mutex> lock(ack_mutex_);
@@ -1554,9 +1632,18 @@ class SimulationService::Impl {
             std::size_t index = slots_.size();
             {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
-                queue_cv_.wait(lock, [this] {
-                    return stopping_ || !queue_.empty() || scene_snapshot_requested_.load() || create_ack_ready_.load();
-                });
+                auto deadline = Clock::time_point::max();
+                {
+                    std::lock_guard<std::mutex> ack_lock(ack_mutex_);
+                    for (const auto& [name, create] : pending_creates_)
+                        if (create.slot < slots_.size()) {
+                            const auto& slot = slots_[create.slot];
+                            deadline = std::min(deadline, slot.cancel.load() ? Clock::now() : slot.command.expires);
+                        }
+                }
+                // Recompute after every wake, including operation cancellation.
+                if (queue_.empty() && !scene_snapshot_requested_.load() && !create_ack_ready_.load() && !stopping_)
+                    queue_cv_.wait_until(lock, deadline);
                 if (stopping_)
                     break;
                 if (!queue_.empty()) {
@@ -1619,6 +1706,9 @@ class SimulationService::Impl {
     std::condition_variable queue_cv_, ack_cv_;
     std::deque<std::size_t> queue_;
     std::map<std::string, gazebo::physics::ModelPtr> pending_scene_models_;
+    const std::atomic<bool>* scene_cancel_ = nullptr;
+    std::set<std::string> abandoned_scene_models_;
+    std::vector<gazebo::physics::ModelPtr> abandoned_scene_ready_;
     std::map<std::string, PendingCreate> pending_creates_;
     std::atomic<bool> create_ack_ready_{false};
     std::array<Slot, kReceipts> slots_;

@@ -19,11 +19,17 @@ std::map<std::string, Held> held;
 class SensorAckFixture final : public gazebo::SensorPlugin {
   public:
     ~SensorAckFixture() override {
+        if (name_ == "held_release_sensor" || name_ == "cancel_release_sensor") {
+            if (const auto root = std::getenv("XGC2_CREATE_ACK_FIXTURE_ROOT"))
+                std::ofstream(std::filesystem::path(root) / (name_ + ".released")) << token_;
+            return; // Native destruction occurred, but its final ACK is missing.
+        }
         if (!token_.empty())
             ReleaseSimulationSensor(token_);
     }
     void Load(gazebo::sensors::SensorPtr sensor, sdf::ElementPtr config) override {
         sensor_ = sensor;
+        name_ = sensor->Name();
         token_ = config->Get<std::string>("controller_token");
     }
     void Init() override {
@@ -32,7 +38,7 @@ class SensorAckFixture final : public gazebo::SensorPlugin {
             throw std::runtime_error("fixture sensor vanished");
         const auto name = sensor->Name();
         const auto root = std::getenv("XGC2_CREATE_ACK_FIXTURE_ROOT");
-        if (name == "held_sensor" || name == "stop_sensor") {
+        if (name == "held_sensor" || name == "deadline_sensor" || name == "cancel_sensor" || name == "stop_sensor") {
             std::lock_guard<std::mutex> lock(mutex);
             held[name] = {token_, sensor};
             std::ofstream(std::filesystem::path(root) / (name + ".init")) << token_;
@@ -55,7 +61,7 @@ class SensorAckFixture final : public gazebo::SensorPlugin {
 
   private:
     std::weak_ptr<gazebo::sensors::Sensor> sensor_;
-    std::string token_;
+    std::string token_, name_;
 };
 GZ_REGISTER_SENSOR_PLUGIN(SensorAckFixture)
 } // namespace xgc2_gazebo_scene
