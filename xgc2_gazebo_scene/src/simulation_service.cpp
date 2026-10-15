@@ -1185,7 +1185,7 @@ class SimulationService::Impl {
         r.step_size = world_->Physics()->GetMaxStepSize();
     }
     std::map<std::string, gazebo::physics::ModelPtr> RealizeBatch(const std::map<std::string, sdf::SDFPtr>& artifacts,
-                                                              Clock::time_point deadline) {
+                                                                  Clock::time_point deadline) {
         if (artifacts.empty())
             return {};
         {

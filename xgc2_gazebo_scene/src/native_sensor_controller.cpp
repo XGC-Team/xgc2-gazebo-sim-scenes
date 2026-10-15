@@ -461,7 +461,8 @@ class NativeSensorController::Impl {
         }
         record = Record{};
     }
-    Json::Value Execute(const PreparedSensorCommand& command, bool* effects_started, const std::atomic<bool>* cancelled) {
+    Json::Value Execute(const PreparedSensorCommand& command, bool* effects_started,
+                        const std::atomic<bool>* cancelled) {
         if (stopping_.load())
             throw SensorControlError(503, "unavailable", "world sensor controller stopped");
         if (Clock::now().time_since_epoch().count() >= command.admission_deadline.time_since_epoch().count())
@@ -646,8 +647,9 @@ Json::Value NativeSensorController::Execute(const std::shared_ptr<const Prepared
         Invalid("sensor command is missing");
     return impl_->Execute(*command, effects_started, cancelled);
 }
-Json::Value NativeSensorController::RemoveParent(const std::string& id, std::uint64_t generation, Clock::time_point deadline,
-                                                 bool* effects_started, const std::atomic<bool>* cancelled) {
+Json::Value NativeSensorController::RemoveParent(const std::string& id, std::uint64_t generation,
+                                                 Clock::time_point deadline, bool* effects_started,
+                                                 const std::atomic<bool>* cancelled) {
     return impl_->RemoveParent(id, generation, deadline, effects_started, cancelled);
 }
 void NativeSensorController::Stop() {
@@ -661,5 +663,7 @@ bool NativeSensorController::CompleteParentSensors(const std::string& id, std::u
                                                    Json::Value* result) {
     return impl_->CompleteParentSensors(id, generation, result);
 }
-void NativeSensorController::NotifyCancellation() { impl_->NotifyCancellation(); }
+void NativeSensorController::NotifyCancellation() {
+    impl_->NotifyCancellation();
+}
 } // namespace xgc2_gazebo_scene

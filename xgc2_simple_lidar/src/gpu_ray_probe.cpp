@@ -14,7 +14,8 @@ int main() {
         sdf::init(document);
         if (!sdf::readString(R"(<sdf version='1.6'><world name='ray_probe'>
           <model name='probe'><static>true</static><link name='body'/></model>
-        </world></sdf>)", document))
+        </world></sdf>)",
+                             document))
             throw std::runtime_error("invalid probe world");
         auto world = gazebo::physics::create_world("ray_probe");
         world->Load(document->Root()->GetElement("world"));
@@ -26,11 +27,13 @@ int main() {
             <ray><scan><horizontal><samples>8</samples><resolution>1</resolution>
               <min_angle>-0.5</min_angle><max_angle>0.5</max_angle></horizontal></scan>
               <range><min>0.1</min><max>2</max><resolution>0.01</resolution></range></ray>
-          </sensor></link></model></sdf>)", sensor_document))
+          </sensor></link></model></sdf>)",
+                             sensor_document))
             throw std::runtime_error("invalid probe sensor");
         auto sensor = std::make_shared<gazebo::sensors::GpuRaySensor>();
         sensor->SetParent("ray_probe::probe::body", world->ModelByName("probe")->GetLink("body")->GetId());
-        sensor->Load(world->Name(), sensor_document->Root()->GetElement("model")->GetElement("link")->GetElement("sensor"));
+        sensor->Load(world->Name(),
+                     sensor_document->Root()->GetElement("model")->GetElement("link")->GetElement("sensor"));
         sensor->Init();
         if (sensor->LaserCamera()) {
             sensor->SetActive(true);

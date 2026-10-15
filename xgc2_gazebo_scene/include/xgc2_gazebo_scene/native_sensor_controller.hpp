@@ -41,8 +41,9 @@ class NativeSensorController {
     bool CompleteParentSensors(const std::string& id, std::uint64_t generation, Json::Value* result);
     // Call before deleting the parent model, outside the physics update mutex.
     // Success confirms each managed sensor's native destructor callback.
-    Json::Value RemoveParent(const std::string& id, std::uint64_t generation, std::chrono::steady_clock::time_point deadline,
-                             bool* effects_started = nullptr, const std::atomic<bool>* cancelled = nullptr);
+    Json::Value RemoveParent(const std::string& id, std::uint64_t generation,
+                             std::chrono::steady_clock::time_point deadline, bool* effects_started = nullptr,
+                             const std::atomic<bool>* cancelled = nullptr);
     // World Stop calls this before joining the management worker. Native effects
     // retain their reservation if their deadline expires. Stop wakes every native
     // wait without waiting for the worker.

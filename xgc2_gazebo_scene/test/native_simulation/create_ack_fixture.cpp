@@ -27,7 +27,8 @@ class CreateAckFixture final : public gazebo::ModelPlugin {
         if (model->GetName() == "xgc2_obstacle_scene_63616e63656c")
             id = "scene-cancel";
         const auto root = std::getenv("XGC2_CREATE_ACK_FIXTURE_ROOT");
-        if (id == "scene-cancel" || id == "scene-held" || id == "create-held" || id == "create-cancel-held" || id == "create-stop-held") {
+        if (id == "scene-cancel" || id == "scene-held" || id == "create-held" || id == "create-cancel-held" ||
+            id == "create-stop-held") {
             {
                 std::lock_guard<std::mutex> lock(mutex);
                 held[id] = model;
