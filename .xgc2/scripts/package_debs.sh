@@ -192,7 +192,7 @@ EOF
     echo "Native scene runtime dependencies leaked build-only packages" >&2; exit 1
   fi
   write_control "${pkg_root}" "${package}" \
-    "${shlibdeps}, libxgc2-xrpc2 (>= 0.2.0-1~focal), libxgc2-chassis-hold1 (>= 0.2.0-1~focal), ros-noetic-gazebo-msgs, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-rosgraph-msgs, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.2.0-13)" \
+    "${shlibdeps}, libxgc2-xrpc2 (>= 0.2.0-1~focal), libxgc2-chassis-hold1 (>= 0.2.0-1~focal), ros-noetic-gazebo-msgs, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-rosgraph-msgs, ros-noetic-std-msgs, ros-noetic-xgc2-geometry-msgs (>= 1.5.0-2)" \
     "Native Gazebo Classic simulation-v1 service and exact scene geometry with ROS user data"
   find "${pkg_root}" -type d -exec chmod 0755 {} +
   find "${pkg_root}" -type f -exec chmod 0644 {} +
