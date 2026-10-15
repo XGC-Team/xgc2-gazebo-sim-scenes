@@ -64,8 +64,9 @@ class ChassisHoldHost::Sink final : public xgc2::chassis_hold::ZeroSink {
 };
 
 std::shared_ptr<ChassisHoldHost> ChassisHoldHost::Create(const gazebo::physics::WorldPtr& world,
-                                                         const std::string& instance_id) {
-    std::shared_ptr<ChassisHoldHost> host(new ChassisHoldHost(world, instance_id));
+                                                         const std::string& instance_id,
+                                                         std::function<void()> on_enrolled) {
+    std::shared_ptr<ChassisHoldHost> host(new ChassisHoldHost(world, instance_id, std::move(on_enrolled)));
     std::lock_guard<std::mutex> lock(hosts_mutex);
     auto& slot = hosts[world.get()];
     if (slot.lock())
@@ -80,13 +81,15 @@ std::shared_ptr<ChassisHoldHost> ChassisHoldHost::Of(const gazebo::physics::Worl
     return found == hosts.end() ? nullptr : found->second.lock();
 }
 
-ChassisHoldHost::ChassisHoldHost(const gazebo::physics::WorldPtr& world, const std::string& instance_id)
+ChassisHoldHost::ChassisHoldHost(const gazebo::physics::WorldPtr& world, const std::string& instance_id,
+                                 std::function<void()> on_enrolled)
     : world_(world), domain_(DomainOptions(instance_id,
                                            [this] {
                                                Wake();
                                            })),
       service_(std::make_unique<xgc2::chassis_hold::Service>(domain_, ServiceOptions())),
-      http_(std::make_unique<xgc2::chassis_hold::HttpAdapter>(*service_)), sink_(std::make_unique<Sink>(*this)) {}
+      http_(std::make_unique<xgc2::chassis_hold::HttpAdapter>(*service_)), sink_(std::make_unique<Sink>(*this)),
+      on_enrolled_(std::move(on_enrolled)) {}
 
 ChassisHoldHost::~ChassisHoldHost() {
     Stop();
@@ -103,6 +106,10 @@ void ChassisHoldHost::Start() {
 }
 
 void ChassisHoldHost::Stop() {
+    {
+        std::lock_guard<std::mutex> lock(enrollment_mutex_);
+        on_enrolled_ = {};
+    }
     {
         std::lock_guard<std::mutex> lock(hosts_mutex);
         for (auto it = hosts.begin(); it != hosts.end();) {
@@ -222,15 +229,20 @@ std::shared_ptr<CommandQueue> ChassisHoldHost::Queue() {
 }
 
 void ChassisHoldHost::Enroll(ChassisSeat& seat) {
-    std::lock_guard<std::mutex> lock(seat.mutex);
-    if (seat.closed)
-        throw std::runtime_error("chassis seat is closed");
-    try {
-        if (!domain_.add(seat.id, static_cast<bool>(seat.output.speed)))
-            throw std::runtime_error("chassis robot is already in the HOLD roster");
-    } catch (const std::length_error&) {
-        throw std::runtime_error("the HOLD roster of the world is full");
+    {
+        std::lock_guard<std::mutex> lock(seat.mutex);
+        if (seat.closed)
+            throw std::runtime_error("chassis seat is closed");
+        try {
+            if (!domain_.add(seat.id, static_cast<bool>(seat.output.speed)))
+                throw std::runtime_error("chassis robot is already in the HOLD roster");
+        } catch (const std::length_error&) {
+            throw std::runtime_error("the HOLD roster of the world is full");
+        }
     }
+    std::lock_guard<std::mutex> lock(enrollment_mutex_);
+    if (on_enrolled_)
+        on_enrolled_();
 }
 
 void ChassisHoldHost::Close(ChassisSeat& seat, bool write_zero) noexcept {

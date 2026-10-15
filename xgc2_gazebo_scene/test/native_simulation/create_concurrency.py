@@ -167,8 +167,11 @@ def main():
                 '</plugin></model>')
             failed_entity = {**entity, "id": "create-failed", "asset": {"id": "missing-chassis",
                 "realization": {"media_type": "application/sdf+xml", "content": failed_sdf}}}
-            failed = mutate("/v1/entities", {"entity": failed_entity})
-            assert failed["state"] == "failed" and failed["error"]["code"] == "unavailable", failed
+            submitted = json.loads(client.call("/v1/entities", {
+                "entity": failed_entity, "operation_timeout_ms": 500},
+                request_id="missing-chassis", timeout=5).body)
+            failed = json.loads(client.call(f'/v1/operations/{submitted["id"]}/wait', {}, timeout=2).body)
+            assert failed["state"] == "failed" and failed["error"]["code"] == "deadline_exceeded", failed
             assert failed["effects"]["started"] and failed["effects"]["completion"] == "partial_or_unknown"
             assert query("/v1/operations/create-held") == expired
             assert query("/v1/entities/create-following")["entities"][0]["lifecycle"] == "ready"

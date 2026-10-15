@@ -275,7 +275,11 @@ class SimulationService::Impl {
         }
         limits_ = WorldLimits();
         // One HOLD host per world: the domain shares the instance of the http.v1 server.
-        chassis_ = detail::ChassisHoldHost::Create(world_, instance_);
+        chassis_ = detail::ChassisHoldHost::Create(world_, instance_, [this] {
+            std::lock_guard<std::mutex> lock(queue_mutex_);
+            create_ack_ready_.store(true);
+            queue_cv_.notify_one();
+        });
         server_ = std::make_unique<xgc2::xrpc::HttpServer>(
             xgc2::xrpc::UnixOptions{path_, 0600, xgc2::xrpc::ExistingPath::ReclaimUnreachable},
             [this](const HttpRequest& r, HttpReply reply) {
@@ -1589,19 +1593,21 @@ class SimulationService::Impl {
             }
             if (!stopping_ && !create.model)
                 continue;
-            bool awaiting_sensors = false;
+            bool awaiting_native = false;
             const auto reconcile = [&] {
                 if (stopping_)
                     return false;
                 auto& entity = *create.entity;
                 Json::Value sensor_result;
                 if (!sensors_->CompleteParentSensors(entity.id, entity.generation, &sensor_result)) {
-                    awaiting_sensors = true;
+                    awaiting_native = true;
+                    return true;
+                }
+                if (create.chassis && !chassis_->Bound(entity.id)) {
+                    awaiting_native = true;
                     return true;
                 }
                 entity.model = create.model;
-                if (create.chassis && !chassis_->Bound(entity.id))
-                    throw DomainError(503, "unavailable", "native chassis initialization did not complete");
                 entity.native_ready = true;
                 if (slot) {
                     slot->result.entities.push_back(Snapshot(entity));
@@ -1618,7 +1624,7 @@ class SimulationService::Impl {
                     // Preserve the native reservation for explicit reconciliation.
                 }
             }
-            if (!awaiting_sensors) {
+            if (!awaiting_native) {
                 if (!stopping_ && !create.entity->model && create.model)
                     create.entity->model = std::move(create.model);
                 std::lock_guard<std::mutex> lock(ack_mutex_);

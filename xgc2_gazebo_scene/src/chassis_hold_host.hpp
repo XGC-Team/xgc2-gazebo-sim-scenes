@@ -3,6 +3,7 @@
 #include <boost/weak_ptr.hpp>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -56,7 +57,8 @@ class ChassisHoldHost : public std::enable_shared_from_this<ChassisHoldHost> {
   public:
     // `instance_id` is the instance of the world's http.v1 server: HOLD bodies and the transport agree on it.
     static std::shared_ptr<ChassisHoldHost> Create(const gazebo::physics::WorldPtr& world,
-                                                   const std::string& instance_id);
+                                                   const std::string& instance_id,
+                                                   std::function<void()> on_enrolled = {});
     // The running host of a world, or null.
     static std::shared_ptr<ChassisHoldHost> Of(const gazebo::physics::World* world);
     ~ChassisHoldHost();
@@ -86,7 +88,8 @@ class ChassisHoldHost : public std::enable_shared_from_this<ChassisHoldHost> {
     std::shared_ptr<CommandQueue> Queue();
 
   private:
-    ChassisHoldHost(const gazebo::physics::WorldPtr& world, const std::string& instance_id);
+    ChassisHoldHost(const gazebo::physics::WorldPtr& world, const std::string& instance_id,
+                    std::function<void()> on_enrolled);
     class Sink;
     std::shared_ptr<ChassisSeat> Find(const std::string& id) const;
     void Wake();
@@ -106,6 +109,10 @@ class ChassisHoldHost : public std::enable_shared_from_this<ChassisHoldHost> {
     std::map<std::string, std::weak_ptr<ChassisSeat>> seats_;
     std::shared_ptr<CommandQueue> queue_;
     bool accepting_ = false;
+
+    // Stop fences callbacks because model seats can outlive the simulation service.
+    std::mutex enrollment_mutex_;
+    std::function<void()> on_enrolled_;
 
     std::mutex wake_mutex_;
     std::condition_variable wake_cv_;
