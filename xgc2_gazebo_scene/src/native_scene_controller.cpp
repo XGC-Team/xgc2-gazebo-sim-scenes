@@ -336,6 +336,16 @@ std::shared_ptr<const PreparedSceneCommand> NativeSceneController::Prepare(const
                 p.geometry.radius = Number(geometry["radius"], 1e-6, 1e4);
                 if (p.geometry.type != "sphere")
                     p.geometry.height = Number(geometry["height"], p.geometry.type == "capsule" ? 0 : 1e-6, 1e4);
+            } else if (p.geometry.type == "ring") {
+                Fields(geometry, {"type", "radii", "tubeRadius"});
+                const auto& radii = geometry["radii"];
+                if (!radii.isArray() || radii.size() != 2)
+                    throw std::invalid_argument("ring requires two radii");
+                p.geometry.radii[0] = Number(radii[0], 1e-6, 1e4);
+                p.geometry.radii[1] = Number(radii[1], 1e-6, 1e4);
+                p.geometry.tube_radius = Number(geometry["tubeRadius"], 1e-6, 1e4);
+                if (p.geometry.tube_radius >= std::min(p.geometry.radii[0], p.geometry.radii[1]))
+                    throw std::invalid_argument("ring tubeRadius must preserve the hole");
             } else if (p.geometry.type == "convex") {
                 Fields(geometry, {"type", "vertices", "triangles"});
                 const auto& vertices = geometry["vertices"];

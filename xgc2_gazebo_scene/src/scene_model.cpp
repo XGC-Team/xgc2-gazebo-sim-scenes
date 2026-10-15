@@ -1,6 +1,9 @@
 #include "xgc2_gazebo_scene/scene_model.hpp"
 #include "xgc2_gazebo_scene/convex_mesh_geometry.hpp"
+#include "xgc2_gazebo_scene/ring_mesh_geometry.hpp"
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
+#include <gazebo/common/Mesh.hh>
+#include <gazebo/common/MeshManager.hh>
 
 #include <boost/uuid/detail/sha1.hpp>
 #include <gazebo/physics/BoxShape.hh>
@@ -102,6 +105,42 @@ std::string MeshFile(const xgc2_geometry_msgs::SceneGeometry& geometry, const st
     return path;
 }
 
+std::string RingMeshFile(const xgc2_geometry_msgs::SceneGeometry& geometry, const std::string& directory) {
+    const auto mesh = MakeRingMesh(geometry.radii[0], geometry.radii[1], geometry.tube_radius);
+    std::ostringstream contents;
+    contents << std::setprecision(17);
+    for (const auto& v : mesh.vertices)
+        contents << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+    for (const auto& t : mesh.triangles)
+        contents << "f " << t[0] + 1 << " " << t[1] + 1 << " " << t[2] + 1 << "\n";
+    const auto bytes = contents.str();
+    boost::uuids::detail::sha1 hash;
+    hash.process_bytes(bytes.data(), bytes.size());
+    unsigned int digest[5];
+    hash.get_digest(digest);
+    std::ostringstream name;
+    name << std::hex << std::setfill('0');
+    for (unsigned int word : digest)
+        name << std::setw(8) << word;
+    const auto path = directory + "/ring-" + name.str() + ".obj";
+    std::ifstream existing(path);
+    if (existing.good()) {
+        if (std::string((std::istreambuf_iterator<char>(existing)), std::istreambuf_iterator<char>()) != bytes)
+            throw std::runtime_error("ring mesh cache content mismatch");
+    } else {
+        std::ofstream file(path, std::ios::binary);
+        file << bytes;
+        file.close();
+        if (!file)
+            throw std::runtime_error("cannot write ring mesh cache");
+    }
+    const auto loaded = gazebo::common::MeshManager::Instance()->Load(path);
+    if (!loaded || loaded->GetVertexCount() < mesh.vertices.size() ||
+        loaded->GetIndexCount() != mesh.triangles.size() * 3)
+        throw std::runtime_error("Gazebo rejected whole-ring mesh");
+    return path;
+}
+
 std::string GeometryXml(const SceneCollision& collision) {
     const auto& g = collision.geometry;
     std::ostringstream out;
@@ -112,7 +151,7 @@ std::string GeometryXml(const SceneCollision& collision) {
         out << "<sphere><radius>" << g.radius << "</radius></sphere>";
     } else if (g.type == "cylinder") {
         out << "<cylinder><radius>" << g.radius << "</radius><length>" << g.height << "</length></cylinder>";
-    } else if (g.type == "convex") {
+    } else if (g.type == "convex" || g.type == "ring") {
         out << "<mesh><uri>" << collision.mesh_uri << "</uri><scale>1 1 1</scale></mesh>";
     } else {
         throw std::runtime_error("unsupported collision geometry: " + g.type);
@@ -210,6 +249,8 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
                     if (!Positive(g.radius) || !std::isfinite(g.height) || g.height < 0.0 ||
                         (g.type == "cylinder" && g.height == 0.0))
                         throw std::runtime_error(g.type + " requires positive radius and valid height");
+                } else if (g.type == "ring") {
+                    collision.mesh_uri = RingMeshFile(g, mesh_directory);
                 } else if (g.type == "convex") {
                     collision.mesh_uri = MeshFile(g, mesh_directory);
                 } else {
@@ -293,6 +334,24 @@ bool VerifySceneModel(const gazebo::physics::ModelPtr& model, const SceneModel& 
             return fail("part pose differs: " + part.name);
         const auto shape = collision->GetShape();
         const auto& geometry = part.geometry;
+        if (geometry.type == "ring") {
+            bool visual_matches = false;
+            for (auto visual = link_sdf->GetElement("visual"); visual; visual = visual->GetNextElement("visual")) {
+                if (visual->Get<std::string>("name") != part.name)
+                    continue;
+                if (!SamePose(visual->Get<ignition::math::Pose3d>("pose"), part.pose))
+                    return fail("ring visual pose differs: " + part.name);
+                auto visual_geometry = visual->GetElement("geometry");
+                if (!visual_geometry->HasElement("mesh"))
+                    break;
+                const auto mesh = visual_geometry->GetElement("mesh");
+                visual_matches = mesh->Get<std::string>("uri") == part.mesh_uri &&
+                                 mesh->Get<ignition::math::Vector3d>("scale").Equal({1, 1, 1}, 1.0e-6);
+                break;
+            }
+            if (!visual_matches)
+                return fail("ring visual mesh differs: " + part.name);
+        }
         bool matches = false;
         if (geometry.type == "box") {
             const auto box = boost::dynamic_pointer_cast<gazebo::physics::BoxShape>(shape);
@@ -304,7 +363,7 @@ bool VerifySceneModel(const gazebo::physics::ModelPtr& model, const SceneModel& 
             const auto cylinder = boost::dynamic_pointer_cast<gazebo::physics::CylinderShape>(shape);
             matches = cylinder && Near(cylinder->GetRadius(), geometry.radius) &&
                       Near(cylinder->GetLength(), geometry.height);
-        } else if (geometry.type == "convex") {
+        } else if (geometry.type == "convex" || geometry.type == "ring") {
             const auto mesh = boost::dynamic_pointer_cast<gazebo::physics::MeshShape>(shape);
             matches = mesh && mesh->GetMeshURI() == part.mesh_uri && mesh->Scale().Equal({1, 1, 1}, 1.0e-6);
             if (matches) {
