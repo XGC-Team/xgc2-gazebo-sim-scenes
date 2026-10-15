@@ -8,6 +8,7 @@
 
 #include <gazebo/common/Events.hh>
 #include <gazebo/common/Plugin.hh>
+#include <gazebo/physics/ode/ODECollision.hh>
 #include <gazebo/physics/ode/ODEPhysics.hh>
 #include <gazebo/physics/physics.hh>
 #include <gazebo/sensors/Sensor.hh>
@@ -15,6 +16,7 @@
 #include <ros/ros.h>
 #include <xgc2_gazebo_scene/ros_master_registration.hpp>
 
+#include "ode_ray_query.hpp"
 #include "xgc2_simple_lidar/scan_projection.hpp"
 #include "xgc2_simple_lidar/scan_schedule.hpp"
 
@@ -63,6 +65,8 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
         ranges_.resize(beams_.size());
         ray_space_ = dSimpleSpaceCreate(nullptr);
         dSpaceSetCleanup(ray_space_, 0);
+        ray_query_.space = ray_space_;
+        ray_query_.minimum_range = range_min_;
         dGeomSetCategoryBits(reinterpret_cast<dGeomID>(ray_space_), GZ_SENSOR_COLLIDE);
         dGeomSetCollideBits(reinterpret_cast<dGeomID>(ray_space_), ~GZ_SENSOR_COLLIDE);
         for (unsigned j = 0; j < height; ++j) {
@@ -72,7 +76,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
                 const double yaw = yaw_min + (yaw_max - yaw_min) * i / (width - 1);
                 beam.direction = {std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)};
                 beam.ray = dCreateRay(ray_space_, range_max_ - range_min_);
-                dGeomSetData(beam.ray, &beam);
+                dGeomSetData(beam.ray, &beam.range);
                 dGeomSetCategoryBits(beam.ray, GZ_SENSOR_COLLIDE);
                 dGeomSetCollideBits(beam.ray, ~GZ_SENSOR_COLLIDE);
                 dGeomRaySetParams(beam.ray, 0, 0);
@@ -127,22 +131,16 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
   private:
     static void Intersect(void* context, dGeomID first, dGeomID second) {
         auto* sensor = static_cast<CpuLidarSensor*>(context);
-        if (dGeomIsSpace(first) || dGeomIsSpace(second)) {
-            dSpaceCollide2(first, second, context, &Intersect);
-            return;
-        }
-        dGeomID query = nullptr;
-        if (dGeomGetSpace(first) == sensor->ray_space_)
-            query = first;
-        else if (dGeomGetSpace(second) == sensor->ray_space_)
-            query = second;
-        if (!query || (dGeomGetClass(first) == dRayClass && dGeomGetClass(second) == dRayClass))
-            return;
-        dContactGeom contact;
-        if (dCollide(first, second, 1, &contact, sizeof(contact)) > 0) {
-            auto* beam = static_cast<Beam*>(dGeomGetData(query));
-            beam->range = std::min(beam->range, static_cast<float>(contact.depth + sensor->range_min_));
-        }
+        OdeRayQuery::Intersect(&sensor->ray_query_, first, second);
+    }
+
+    void ExcludeEmitter(const gazebo::physics::ModelPtr& model) {
+        for (const auto& link : model->GetLinks())
+            for (const auto& collision : link->GetCollisions())
+                if (auto ode = boost::dynamic_pointer_cast<gazebo::physics::ODECollision>(collision))
+                    ray_query_.emitter_collisions.insert(ode->GetCollisionId());
+        for (const auto& nested : model->NestedModels())
+            ExcludeEmitter(nested);
     }
 
     void Frame() {
@@ -169,6 +167,14 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
         }
         {
             boost::recursive_mutex::scoped_lock physics_lock(*physics_->GetPhysicsUpdateMutex());
+            // Resolve the emitting MODEL on each scan. Its links (including
+            // nested model links) are not obstacles; other models remain rays'
+            // collision targets even when they are very close to the sensor.
+            const auto link = boost::dynamic_pointer_cast<gazebo::physics::Link>(parent);
+            if (!link || !link->GetModel())
+                return;
+            ray_query_.emitter_collisions.clear();
+            ExcludeEmitter(link->GetModel());
             dSpaceCollide2(reinterpret_cast<dGeomID>(ray_space_), reinterpret_cast<dGeomID>(physics_->GetSpaceId()),
                            this, &Intersect);
         }
@@ -180,6 +186,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
 
     boost::shared_ptr<gazebo::physics::ODEPhysics> physics_;
     dSpaceID ray_space_ = nullptr;
+    OdeRayQuery ray_query_;
     std::vector<Beam> beams_;
     std::vector<float> ranges_;
     double range_min_ = 0, range_max_ = 0;

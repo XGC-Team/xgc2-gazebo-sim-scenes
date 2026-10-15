@@ -49,6 +49,12 @@ install(DIRECTORY python/xgc2_simple_lidar DESTINATION ${CATKIN_GLOBAL_PYTHON_DE
   PATTERN "__pycache__" EXCLUDE)
 
 if(CATKIN_ENABLE_TESTING)
+  catkin_add_gtest(ode_ray_query_test test/ode_ray_query_test.cpp)
+  if(TARGET ode_ray_query_test)
+    target_compile_features(ode_ray_query_test PUBLIC cxx_std_17)
+    target_include_directories(ode_ray_query_test PRIVATE src ${GAZEBO_INCLUDE_DIRS})
+    target_link_libraries(ode_ray_query_test ode)
+  endif()
   catkin_add_gtest(scan_projection_test test/scan_projection_test.cpp)
   if(TARGET scan_projection_test)
     target_compile_features(scan_projection_test PUBLIC cxx_std_17)
