@@ -18,7 +18,10 @@ namespace fs = std::filesystem;
 struct WorkingDirectory {
     fs::path previous;
     explicit WorkingDirectory(const fs::path& next) : previous(fs::current_path()) { fs::current_path(next); }
-    ~WorkingDirectory() { std::error_code error; fs::current_path(previous, error); }
+    ~WorkingDirectory() {
+        std::error_code error;
+        fs::current_path(previous, error);
+    }
 };
 
 void ExpectSameInstalledSurface(const std::string& produced_sdf, const std::string& installed_sdf) {
@@ -32,28 +35,31 @@ void ExpectSameInstalledSurface(const std::string& produced_sdf, const std::stri
     const auto installed_surface =
         installed->Root()->GetElement("model")->GetElement("link")->GetElement("collision")->GetElement("surface");
     EXPECT_DOUBLE_EQ(produced_surface->GetElement("friction")->GetElement("ode")->Get<double>("mu"),
-                      installed_surface->GetElement("friction")->GetElement("ode")->Get<double>("mu"));
+                     installed_surface->GetElement("friction")->GetElement("ode")->Get<double>("mu"));
     EXPECT_DOUBLE_EQ(produced_surface->GetElement("friction")->GetElement("ode")->Get<double>("mu2"),
-                      installed_surface->GetElement("friction")->GetElement("ode")->Get<double>("mu2"));
+                     installed_surface->GetElement("friction")->GetElement("ode")->Get<double>("mu2"));
     EXPECT_EQ(produced_surface->GetElement("contact")->Get<std::string>("collide_bitmask"),
               installed_surface->GetElement("contact")->Get<std::string>("collide_bitmask"));
 }
 
 std::string Document(const std::string& models, const std::string& obstacles, const std::string& ground) {
-    return std::string(R"({"schema":"xgc2.scene.compiled.v1","id":"review","frame":"world","geometries":[{"type":"box","size":[1,1,1]}],"models":)") +
+    return std::string(
+               R"({"schema":"xgc2.scene.compiled.v1","id":"review","frame":"world","geometries":[{"type":"box","size":[1,1,1]}],"models":)") +
            models + R"(,"obstacles":)" + obstacles + R"(,"ground":)" + ground + "}";
 }
 
-const char* kBox = R"({"box":{"parts":[{"id":"slab","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[1,0.5,0.1,1]}]}})";
-const char* kHeld = R"([{"id":"held","name":"Held","model":"box","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"motion":{"type":"hold"}}])";
+const char* kBox =
+    R"({"box":{"parts":[{"id":"slab","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[1,0.5,0.1,1]}]}})";
+const char* kHeld =
+    R"([{"id":"held","name":"Held","model":"box","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"motion":{"type":"hold"}}])";
 
 TEST(GroundSlot, SwitchesModesWithoutRebuildingUnchangedGround) {
     EXPECT_TRUE(IsReservedConsumerGroundId(kConsumerGroundEntityId));
     EXPECT_FALSE(IsReservedConsumerGroundId("ground_plane"));
     const auto mesh = fs::temp_directory_path() / "xgc-ground-numeric";
     fs::create_directories(mesh);
-    const auto plane = InspectCompiledConsumer(Document(kBox, kHeld, R"({"mode":"default_plane","z":1.5})"), mesh.string(),
-                                                fs::temp_directory_path().string());
+    const auto plane = InspectCompiledConsumer(Document(kBox, kHeld, R"({"mode":"default_plane","z":1.5})"),
+                                               mesh.string(), fs::temp_directory_path().string());
     ASSERT_TRUE(plane.ground.has_value());
     EXPECT_EQ(plane.ground->name, kConsumerGroundName);
     EXPECT_EQ(plane.ground->sdf.find("ground_plane"), std::string::npos);
@@ -71,16 +77,17 @@ TEST(GroundSlot, SwitchesModesWithoutRebuildingUnchangedGround) {
     ExpectSameInstalledSurface(plane.ground->sdf, stock_bytes);
 
     const auto moved = InspectCompiledConsumer(
-        Document(kBox,
-                 R"([{"id":"other","name":"Other","model":"box","pose":{"position":[2,0,0],"orientation":[0,0,0,1]},"motion":{"type":"hold"}}])",
-                 R"({"mode":"default_plane","z":1.5})"),
+        Document(
+            kBox,
+            R"([{"id":"other","name":"Other","model":"box","pose":{"position":[2,0,0],"orientation":[0,0,0,1]},"motion":{"type":"hold"}}])",
+            R"({"mode":"default_plane","z":1.5})"),
         mesh.string(), fs::temp_directory_path().string());
     ASSERT_TRUE(moved.ground.has_value());
     EXPECT_TRUE(SamePhysicalGround(*plane.ground, *moved.ground));
     EXPECT_NE(plane.obstacles.begin()->first, moved.obstacles.begin()->first);
 
-    const auto higher = InspectCompiledConsumer(Document(kBox, kHeld, R"({"mode":"default_plane","z":2.5})"), mesh.string(),
-                                                 fs::temp_directory_path().string());
+    const auto higher = InspectCompiledConsumer(Document(kBox, kHeld, R"({"mode":"default_plane","z":2.5})"),
+                                                mesh.string(), fs::temp_directory_path().string());
     ASSERT_TRUE(higher.ground.has_value());
     EXPECT_FALSE(SamePhysicalGround(*plane.ground, *higher.ground));
     sdf::SDFPtr higher_sdf(new sdf::SDF());
@@ -89,12 +96,13 @@ TEST(GroundSlot, SwitchesModesWithoutRebuildingUnchangedGround) {
     EXPECT_NEAR(higher_sdf->Root()->GetElement("model")->Get<ignition::math::Pose3d>("pose").Pos().Z(), 2.5, 1e-9);
 
     const auto none = InspectCompiledConsumer(Document(kBox, kHeld, R"({"mode":"none"})"), mesh.string(),
-                                               fs::temp_directory_path().string());
+                                              fs::temp_directory_path().string());
     EXPECT_FALSE(none.ground.has_value());
     const auto moving = InspectCompiledConsumer(
-        Document(kBox,
-                 R"([{"id":"held","name":"Held","model":"box","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"motion":{"type":"hold"}},{"id":"mover","name":"Mover","model":"box","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"motion":{"type":"constant_twist","linear":[1,0,0],"angular":[0,0,0]}}])",
-                 R"({"mode":"default_plane","z":1.5})"),
+        Document(
+            kBox,
+            R"([{"id":"held","name":"Held","model":"box","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"motion":{"type":"hold"}},{"id":"mover","name":"Mover","model":"box","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"motion":{"type":"constant_twist","linear":[1,0,0],"angular":[0,0,0]}}])",
+            R"({"mode":"default_plane","z":1.5})"),
         mesh.string(), fs::temp_directory_path().string());
     EXPECT_EQ(moving.moving, 1u);
     EXPECT_TRUE(SamePhysicalGround(*plane.ground, *moving.ground));
@@ -128,10 +136,13 @@ f 4 5 8
 <collision name="shell"><geometry><mesh><uri>meshes/hole.obj</uri></mesh></geometry></collision>
 </link></model></sdf>)";
     const auto file = (root / "model.sdf").string();
-    const auto models = std::string(R"({"shell":{"parts":[{"id":"query","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[1,0.5,0.1,1]}],"resource":{"format":"sdformat-model","file":")") +
-                        file + R"("}}})";
+    const auto models =
+        std::string(
+            R"({"shell":{"parts":[{"id":"query","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[1,0.5,0.1,1]}],"resource":{"format":"sdformat-model","file":")") +
+        file + R"("}}})";
     const auto slice = InspectCompiledConsumer(
-        Document(models, "[]", R"({"mode":"model","model":"shell","pose":{"position":[4,5,6],"orientation":[0,0,0,1]}})"),
+        Document(models, "[]",
+                 R"({"mode":"model","model":"shell","pose":{"position":[4,5,6],"orientation":[0,0,0,1]}})"),
         (root / "numeric").string(), root.string());
     ASSERT_TRUE(slice.ground.has_value());
     EXPECT_TRUE(slice.obstacles.empty());
@@ -142,7 +153,11 @@ f 4 5 8
     const auto model = parsed->Root()->GetElement("model");
     EXPECT_NEAR(model->Get<ignition::math::Pose3d>("pose").Pos().X(), 4, 1e-9);
     EXPECT_NEAR(model->Get<ignition::math::Pose3d>("pose").Pos().Z(), 6, 1e-9);
-    const auto uri = model->GetElement("link")->GetElement("visual")->GetElement("geometry")->GetElement("mesh")->Get<std::string>("uri");
+    const auto uri = model->GetElement("link")
+                         ->GetElement("visual")
+                         ->GetElement("geometry")
+                         ->GetElement("mesh")
+                         ->Get<std::string>("uri");
     EXPECT_EQ(uri, (root / "meshes" / "hole.obj").lexically_normal().string());
     std::ifstream authored(file);
     const std::string authored_bytes((std::istreambuf_iterator<char>(authored)), {});

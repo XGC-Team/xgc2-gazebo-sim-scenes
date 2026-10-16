@@ -18,7 +18,10 @@ namespace fs = std::filesystem;
 struct WorkingDirectory {
     fs::path previous;
     explicit WorkingDirectory(const fs::path& next) : previous(fs::current_path()) { fs::current_path(next); }
-    ~WorkingDirectory() { std::error_code error; fs::current_path(previous, error); }
+    ~WorkingDirectory() {
+        std::error_code error;
+        fs::current_path(previous, error);
+    }
 };
 
 std::string SerializedMeshUri(const std::string& sdf) {
@@ -84,16 +87,19 @@ f 4 5 8
 )";
     }
     std::string Document(const std::string& file, const std::string& motion) const {
-        return std::string(R"({"schema":"xgc2.scene.compiled.v1","id":"review","frame":"world","geometries":[{"type":"box","size":[1,2,3]}],"models":{"shell":{"parts":[{"id":"query","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[1,0.5,0.1,1]}],"resource":{"format":"sdformat-model","file":")") +
-               file + R"("}},"floor":{"parts":[{"id":"slab","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[0.5,0.5,0.5,1]}]}},"obstacles":[{"id":"instance0","name":"Shell","model":"shell","pose":{"position":[4,5,6],"orientation":[0,0,0,1]},"motion":)" +
-               motion + R"(}],"ground":{"mode":"model","model":"floor","pose":{"position":[0,0,-1],"orientation":[0,0,0,1]}}})";
+        return std::string(
+                   R"({"schema":"xgc2.scene.compiled.v1","id":"review","frame":"world","geometries":[{"type":"box","size":[1,2,3]}],"models":{"shell":{"parts":[{"id":"query","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[1,0.5,0.1,1]}],"resource":{"format":"sdformat-model","file":")") +
+               file +
+               R"("}},"floor":{"parts":[{"id":"slab","pose":{"position":[0,0,0],"orientation":[0,0,0,1]},"geometryIndex":0,"color":[0.5,0.5,0.5,1]}]}},"obstacles":[{"id":"instance0","name":"Shell","model":"shell","pose":{"position":[4,5,6],"orientation":[0,0,0,1]},"motion":)" +
+               motion +
+               R"(}],"ground":{"mode":"model","model":"floor","pose":{"position":[0,0,-1],"orientation":[0,0,0,1]}}})";
     }
     fs::path root;
 };
 
 TEST_F(ResourceSdf, KeepsMaterialLinksAndMeshHole) {
     const auto models = BuildCompiledSceneModels(Document((root / "model.sdf").string(), R"({"type":"hold"})"),
-                                                  (root / "numeric").string(), root.string());
+                                                 (root / "numeric").string(), root.string());
     ASSERT_EQ(models.size(), 1u);
     ASSERT_EQ(models.count("instance0"), 1u);
     EXPECT_EQ(models.count("floor"), 0u);
@@ -170,12 +176,14 @@ TEST_F(ResourceSdf, KeepsMaterialLinksAndMeshHole) {
 
 TEST_F(ResourceSdf, RejectsIncludeEntityAndWaypoints) {
     Write("include.sdf",
-          "<sdf version=\"1.6\"><model name=\"m\"><link name=\"l\"><collision name=\"c\"><geometry><box><size>1 1 1</size></box></geometry></collision></link><include><uri>&#47;tmp&#47;outside-asset-root</uri></include></model></sdf>");
+          "<sdf version=\"1.6\"><model name=\"m\"><link name=\"l\"><collision name=\"c\"><geometry><box><size>1 1 "
+          "1</size></box></geometry></collision></link><include><uri>&#47;tmp&#47;outside-asset-root</uri></include></"
+          "model></sdf>");
     EXPECT_THROW(BuildCompiledSceneModels(Document((root / "include.sdf").string(), R"({"type":"hold"})"),
-                                           (root / "numeric").string(), root.string()),
+                                          (root / "numeric").string(), root.string()),
                  std::invalid_argument);
     EXPECT_THROW(BuildCompiledSceneModels(Document((root / "model.sdf").string(), R"({"type":"waypoints"})"),
-                                           (root / "numeric").string(), root.string()),
+                                          (root / "numeric").string(), root.string()),
                  std::invalid_argument);
 }
 
@@ -188,8 +196,9 @@ TEST_F(ResourceSdf, ResolvesSiblingFilesInsideTheAssetRoot) {
   <collision name="collision"><geometry><mesh><uri>../../packages/bridge/meshes/hole.obj</uri></mesh></geometry></collision>
   <visual name="visual"><geometry><mesh><uri>../../packages/bridge/meshes/hole.obj</uri></mesh></geometry></visual>
 </link></model></sdf>)");
-    const auto models = BuildCompiledSceneModels(Document((root / "models" / "bridge" / "model.sdf").string(), R"({"type":"hold"})"),
-                                                  (root / "numeric").string(), root.string());
+    const auto models =
+        BuildCompiledSceneModels(Document((root / "models" / "bridge" / "model.sdf").string(), R"({"type":"hold"})"),
+                                 (root / "numeric").string(), root.string());
     ASSERT_EQ(models.count("instance0"), 1u);
     const auto sealed = (root / "packages" / "bridge" / "meshes" / "hole.obj").lexically_normal().string();
     const auto uri = SerializedMeshUri(models.at("instance0").sdf);
@@ -208,9 +217,10 @@ TEST_F(ResourceSdf, ResolvesSiblingFilesInsideTheAssetRoot) {
 <sdf version="1.6"><model name="bridge"><link name="bridge_link">
   <collision name="collision"><geometry><mesh><uri>../../../outside-grant/secret.obj</uri></mesh></geometry></collision>
 </link></model></sdf>)");
-    EXPECT_THROW(BuildCompiledSceneModels(Document((root / "models" / "bridge" / "escape.sdf").string(), R"({"type":"hold"})"),
-                                           (root / "numeric").string(), root.string()),
-                 std::invalid_argument);
+    EXPECT_THROW(
+        BuildCompiledSceneModels(Document((root / "models" / "bridge" / "escape.sdf").string(), R"({"type":"hold"})"),
+                                 (root / "numeric").string(), root.string()),
+        std::invalid_argument);
     fs::remove_all(outside);
     fs::create_symlink(root / "meshes" / "hole.obj", root / "meshes" / "linked.obj");
     Write("linked.sdf", R"(<?xml version="1.0"?>
@@ -218,7 +228,7 @@ TEST_F(ResourceSdf, ResolvesSiblingFilesInsideTheAssetRoot) {
   <collision name="c"><geometry><mesh><uri>meshes/linked.obj</uri></mesh></geometry></collision>
 </link></model></sdf>)");
     EXPECT_THROW(BuildCompiledSceneModels(Document((root / "linked.sdf").string(), R"({"type":"hold"})"),
-                                           (root / "numeric").string(), root.string()),
+                                          (root / "numeric").string(), root.string()),
                  std::invalid_argument);
 }
 
@@ -231,7 +241,7 @@ TEST_F(ResourceSdf, AcceptsInstalledGazeboMediaAndRejectsOtherFileUris) {
   </visual>
 </link></model></sdf>)");
     const auto models = BuildCompiledSceneModels(Document((root / "stock.sdf").string(), R"({"type":"hold"})"),
-                                                  (root / "numeric").string(), root.string());
+                                                 (root / "numeric").string(), root.string());
     EXPECT_NE(models.at("instance0").sdf.find("file://media/materials/scripts/gazebo.material"), std::string::npos);
     fs::create_directories(root / "materials" / "scripts");
     std::ofstream(root / "materials" / "scripts" / "box.material") << "material Box/Authored {}\n";
@@ -243,7 +253,7 @@ TEST_F(ResourceSdf, AcceptsInstalledGazeboMediaAndRejectsOtherFileUris) {
   </visual>
 </link></model></sdf>)");
     const auto scripted = BuildCompiledSceneModels(Document((root / "script.sdf").string(), R"({"type":"hold"})"),
-                                                    (root / "numeric").string(), root.string());
+                                                   (root / "numeric").string(), root.string());
     const auto script_uri = (root / "materials" / "scripts").lexically_normal().string();
     EXPECT_NE(scripted.at("instance0").sdf.find(script_uri), std::string::npos);
     Write("script-dir-mesh.sdf", R"(<?xml version="1.0"?>
@@ -251,7 +261,7 @@ TEST_F(ResourceSdf, AcceptsInstalledGazeboMediaAndRejectsOtherFileUris) {
   <collision name="c"><geometry><mesh><uri>materials/scripts</uri></mesh></geometry></collision>
 </link></model></sdf>)");
     EXPECT_THROW(BuildCompiledSceneModels(Document((root / "script-dir-mesh.sdf").string(), R"({"type":"hold"})"),
-                                           (root / "numeric").string(), root.string()),
+                                          (root / "numeric").string(), root.string()),
                  std::invalid_argument);
     Write("remote.sdf", R"(<?xml version="1.0"?>
 <sdf version="1.6"><model name="box"><link name="l">
@@ -259,7 +269,7 @@ TEST_F(ResourceSdf, AcceptsInstalledGazeboMediaAndRejectsOtherFileUris) {
   <collision name="c"><geometry><box><size>1 1 1</size></box></geometry></collision>
 </link></model></sdf>)");
     EXPECT_THROW(BuildCompiledSceneModels(Document((root / "remote.sdf").string(), R"({"type":"hold"})"),
-                                           (root / "numeric").string(), root.string()),
+                                          (root / "numeric").string(), root.string()),
                  std::invalid_argument);
     Write("network.sdf", R"(<?xml version="1.0"?>
 <sdf version="1.6"><model name="box"><link name="l">
@@ -267,7 +277,7 @@ TEST_F(ResourceSdf, AcceptsInstalledGazeboMediaAndRejectsOtherFileUris) {
   <collision name="c"><geometry><box><size>1 1 1</size></box></geometry></collision>
 </link></model></sdf>)");
     EXPECT_THROW(BuildCompiledSceneModels(Document((root / "network.sdf").string(), R"({"type":"hold"})"),
-                                           (root / "numeric").string(), root.string()),
+                                          (root / "numeric").string(), root.string()),
                  std::invalid_argument);
 }
 

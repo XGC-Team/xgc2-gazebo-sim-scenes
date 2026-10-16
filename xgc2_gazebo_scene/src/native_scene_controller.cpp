@@ -1,14 +1,14 @@
 #include "xgc2_gazebo_scene/native_scene_controller.hpp"
 #include <atomic>
 #include <cmath>
-#include <limits>
-#include <optional>
 #include <gazebo/physics/Model.hh>
 #include <gazebo/physics/PhysicsEngine.hh>
 #include <gazebo/physics/World.hh>
 #include <json/json.h>
+#include <limits>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -425,7 +425,8 @@ class NativeSceneController::Impl {
             const auto found = models.find(entry.first);
             if (found == models.end())
                 continue;
-            const auto state = xgc2_math::scene::evaluateMotion(entry.second.initial, entry.second.motion, time, playing);
+            const auto state =
+                xgc2_math::scene::evaluateMotion(entry.second.initial, entry.second.motion, time, playing);
             found->second->SetWorldPose(IgnitionPose(state.pose));
             found->second->SetLinearVel(IgnitionVector(state.linear));
             found->second->SetAngularVel(IgnitionVector(state.angular));
@@ -436,9 +437,8 @@ class NativeSceneController::Impl {
     }
 };
 
-NativeSceneController::NativeSceneController(gazebo::physics::WorldPtr world, std::string root,
-                                             std::string asset_root, NativeSceneApply apply,
-                                             std::function<std::int64_t()> clock)
+NativeSceneController::NativeSceneController(gazebo::physics::WorldPtr world, std::string root, std::string asset_root,
+                                             NativeSceneApply apply, std::function<std::int64_t()> clock)
     : impl_(std::make_unique<Impl>()) {
     if (!world || root.empty() || asset_root.empty() || !apply || !clock)
         throw std::invalid_argument("native scene world, mesh root, asset root, clock and apply owner required");
