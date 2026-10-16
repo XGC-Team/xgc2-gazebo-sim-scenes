@@ -27,8 +27,9 @@ add_library(xgc2_simulation_service SHARED
   "${scene_dir}/src/scene_model.cpp"
   "${scene_dir}/src/convex_mesh_geometry.cpp")
 target_compile_features(xgc2_simulation_service PUBLIC cxx_std_20)
+target_include_directories(xgc2_simulation_service BEFORE PUBLIC "${GEOMETRY_MESSAGES_INCLUDE}")
 target_include_directories(xgc2_simulation_service PUBLIC "${scene_dir}/include")
-target_include_directories(xgc2_simulation_service SYSTEM PUBLIC "${GEOMETRY_MESSAGES_INCLUDE}" "/opt/ros/noetic/include")
+target_include_directories(xgc2_simulation_service SYSTEM PUBLIC "/opt/ros/noetic/include")
 target_link_libraries(xgc2_simulation_service PUBLIC XgcChassisHold::http XgcXrpc::http PkgConfig::JsonCpp PkgConfig::Gazebo Eigen3::Eigen Boost::thread Boost::filesystem
   /opt/ros/noetic/lib/libroscpp.so /opt/ros/noetic/lib/librostime.so /opt/ros/noetic/lib/librosconsole.so)
 add_library(xgc2_simulation_ros_master SHARED "${scene_dir}/src/ros_master_registration.cpp")

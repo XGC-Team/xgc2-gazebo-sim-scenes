@@ -145,8 +145,11 @@ TEST_P(RingWireKind, CompilesOnePartToOneNativeMeshCollisionAndVisual) {
     const auto raw = GetParam() ? xgc2_math::geometry::Geometry::mesh(explicit_mesh.vertices, explicit_mesh.triangles)
                                 : xgc2_math::geometry::Geometry::ring({2, 1}, .8);
     const auto payload = xgc2_math::geometry::encodeGeometry(raw);
-    part.geometry.type = payload.type;
-    part.geometry.parameters = payload.parameters;
+    xgc2_geometry_msgs::SceneGeometry geometry;
+    geometry.type = payload.type;
+    geometry.parameters = payload.parameters;
+    scene.geometries.push_back(geometry);
+    part.geometry_index = 0;
     part.color.a = 1;
     obstacle.parts.push_back(part);
     scene.obstacles.push_back(obstacle);

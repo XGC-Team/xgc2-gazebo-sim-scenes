@@ -89,8 +89,9 @@ class PlacementInputTest(unittest.TestCase):
         sys.path.insert(0, str(ROOT/'fs150-sitl/scripts'))
         import render_fs150_indoor_sdf as renderer
         robot = row('px4_multirotor')
-        robot['asset'] = dict(px4=dict(modelId='fs150'))
-        robot['derived'] = dict(sitlInstanceId=6)
+        robot['kind'] = 'px4_multirotor'
+        robot['binding']['applyModelDynamics'] = True
+        robot['derived'] = dict(modelId='fs150', sitlInstanceId=6)
         with tempfile.TemporaryDirectory() as directory:
             description = Path(directory)
             (description/'urdf').mkdir()

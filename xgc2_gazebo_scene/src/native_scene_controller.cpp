@@ -1,6 +1,8 @@
 #include "xgc2_gazebo_scene/native_scene_controller.hpp"
 #include <atomic>
 #include <cmath>
+#include <limits>
+#include <optional>
 #include <gazebo/physics/Model.hh>
 #include <gazebo/physics/PhysicsEngine.hh>
 #include <gazebo/physics/World.hh>
@@ -12,6 +14,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <xgc2_math/geometry/geometry_json.hpp>
+#include <xgc2_math/scene/placement.hpp>
 
 namespace xgc2_gazebo_scene {
 namespace {
@@ -96,75 +99,286 @@ JsonValue NativePose(const ignition::math::Pose3d& pose) {
     result["orientation"] = std::move(orientation);
     return result;
 }
-struct Trajectory {
-    std::string kind;
-    ignition::math::Pose3d initial;
-    ignition::math::Vector3d linear, angular, a, b;
-    double radius = 0, speed = 0, phase = 0;
-    void Sample(double elapsed, bool playing, ignition::math::Pose3d& pose, ignition::math::Vector3d& v,
-                ignition::math::Vector3d& w) const {
-        pose = initial;
-        v = ignition::math::Vector3d::Zero;
-        w = v;
-        if (kind == "constant_twist") {
-            pose.Pos() += elapsed * linear;
-            const double norm = angular.Length();
-            if (norm > 1e-12) {
-                pose.Rot() = ignition::math::Quaterniond(angular / norm, norm * elapsed) * initial.Rot();
-                pose.Rot().Normalize();
-            }
-            v = linear;
-            w = angular;
-        } else if (kind == "ping_pong") {
-            const auto delta = b - a;
-            const double length = delta.Length(), t = std::fmod(elapsed * speed / length, 2.0);
-            pose.Pos() = a + (t < 1.0 ? t : 2.0 - t) * delta;
-            v = (t < 1.0 ? 1.0 : -1.0) * speed / length * delta;
-        } else if (kind == "circle") {
-            const double angle = phase + elapsed * speed;
-            pose.Pos().Set(a.X() + radius * std::cos(angle), a.Y() + radius * std::sin(angle), a.Z());
-            v.Set(-radius * speed * std::sin(angle), radius * speed * std::cos(angle), 0);
-        }
-        if (!playing) {
-            v = ignition::math::Vector3d::Zero;
-            w = v;
-        }
-    }
+xgc2_math::Pose3 MathPose(const ignition::math::Pose3d& pose) {
+    xgc2_math::Pose3 result;
+    result.position = {pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z()};
+    result.orientation = Eigen::Quaterniond(pose.Rot().W(), pose.Rot().X(), pose.Rot().Y(), pose.Rot().Z());
+    return result;
+}
+ignition::math::Pose3d IgnitionPose(const xgc2_math::Pose3& pose) {
+    return {{pose.position.x(), pose.position.y(), pose.position.z()},
+            {pose.orientation.w(), pose.orientation.x(), pose.orientation.y(), pose.orientation.z()}};
+}
+ignition::math::Vector3d IgnitionVector(const Eigen::Vector3d& value) {
+    return {value.x(), value.y(), value.z()};
+}
+struct PlacedMotion {
+    xgc2_math::Pose3 initial;
+    xgc2_math::scene::Motion motion;
 };
-Trajectory ParseMotion(const JsonValue& value, const ignition::math::Pose3d& initial) {
+PlacedMotion ParseMotion(const JsonValue& value, const ignition::math::Pose3d& initial) {
     if (!value.isObject() || !value["type"].isString())
         throw std::invalid_argument("scene motion type required");
-    Trajectory t;
-    t.initial = initial;
-    t.kind = value["type"].asString();
-    if (t.kind == "hold")
+    PlacedMotion placed;
+    placed.initial = MathPose(initial);
+    const auto kind = value["type"].asString();
+    if (kind == "waypoints")
+        throw std::invalid_argument("unsupported scene motion");
+    if (kind == "hold") {
         Fields(value, {"type"});
-    else if (t.kind == "constant_twist") {
+        placed.motion.type = xgc2_math::scene::Motion::kHold;
+    } else if (kind == "constant_twist") {
         Fields(value, {"type", "linear", "angular"});
-        t.linear = Vector(value["linear"]);
-        t.angular = Vector(value["angular"]);
-    } else if (t.kind == "ping_pong") {
+        placed.motion.type = xgc2_math::scene::Motion::kConstantTwist;
+        const auto linear = Vector(value["linear"]);
+        const auto angular = Vector(value["angular"]);
+        placed.motion.linear = {linear.X(), linear.Y(), linear.Z()};
+        placed.motion.angular = {angular.X(), angular.Y(), angular.Z()};
+    } else if (kind == "ping_pong") {
         Fields(value, {"type", "point_a", "point_b", "speed"});
-        t.a = Vector(value["point_a"]);
-        t.b = Vector(value["point_b"]);
-        t.speed = Number(value["speed"], 1e-6, 1000);
-        if ((t.b - t.a).Length() < 1e-6 || (initial.Pos() - t.a).Length() > 1e-6)
-            throw std::invalid_argument("invalid ping_pong endpoints or initial pose");
-    } else if (t.kind == "circle") {
+        placed.motion.type = xgc2_math::scene::Motion::kPingPong;
+        const auto a = Vector(value["point_a"]);
+        const auto b = Vector(value["point_b"]);
+        placed.motion.point_a = {a.X(), a.Y(), a.Z()};
+        placed.motion.point_b = {b.X(), b.Y(), b.Z()};
+        placed.motion.speed = Number(value["speed"], 1e-6, 1000);
+    } else if (kind == "circle") {
         Fields(value, {"type", "center", "radius", "angular_speed", "phase"});
-        t.a = Vector(value["center"]);
-        t.radius = Number(value["radius"], 1e-6, 1e4);
-        t.speed = Number(value["angular_speed"], -1000, 1000);
-        t.phase = Number(value["phase"]);
-        ignition::math::Vector3d start(t.a.X() + t.radius * std::cos(t.phase), t.a.Y() + t.radius * std::sin(t.phase),
-                                       t.a.Z());
-        if ((initial.Pos() - start).Length() > 1e-6)
-            throw std::invalid_argument("circle initial pose disagrees with path");
+        placed.motion.type = xgc2_math::scene::Motion::kCircle;
+        const auto center = Vector(value["center"]);
+        placed.motion.center = {center.X(), center.Y(), center.Z()};
+        placed.motion.radius = Number(value["radius"], 1e-6, 1e4);
+        placed.motion.angular_speed = Number(value["angular_speed"], -1000, 1000);
+        placed.motion.phase = Number(value["phase"]);
     } else
         throw std::invalid_argument("unsupported scene motion");
-    return t;
+    if (placed.motion.type == xgc2_math::scene::Motion::kPingPong ||
+        placed.motion.type == xgc2_math::scene::Motion::kCircle) {
+        const auto start = xgc2_math::scene::motionStart(placed.initial.position, placed.motion);
+        if ((start - placed.initial.position).norm() > 1e-6)
+            throw std::invalid_argument("scene motion initial pose disagrees with path");
+    }
+    return placed;
+}
+xgc2_geometry_msgs::ScenePart CompiledPart(const JsonValue& part, std::size_t geometry_count) {
+    if (part.isMember("geometry"))
+        throw std::invalid_argument("compiled part has no inline geometry");
+    Fields(part, {"id", "pose", "geometryIndex", "color"});
+    xgc2_geometry_msgs::ScenePart message;
+    message.id = Id(part["id"]);
+    message.pose = Pose(part["pose"]);
+    if (geometry_count == 0 || geometry_count > std::numeric_limits<std::uint32_t>::max())
+        throw std::invalid_argument("compiled geometry index out of range");
+    message.geometry_index = static_cast<std::uint32_t>(Integer(part["geometryIndex"], 0, geometry_count - 1));
+    const auto& color = part["color"];
+    if (!color.isArray() || color.size() != 4)
+        throw std::invalid_argument("compiled part color required");
+    message.color.r = static_cast<float>(Number(color[0], 0, 1));
+    message.color.g = static_cast<float>(Number(color[1], 0, 1));
+    message.color.b = static_cast<float>(Number(color[2], 0, 1));
+    message.color.a = static_cast<float>(Number(color[3], 0, 1));
+    return message;
 }
 } // namespace
+
+struct CompiledBuild {
+    std::map<std::string, SceneModel> models;
+    std::map<std::string, PlacedMotion> trajectories;
+    std::optional<SceneModel> ground;
+    JsonValue definition;
+};
+
+const char* MotionName(const xgc2_math::scene::Motion& motion) {
+    switch (motion.type) {
+    case xgc2_math::scene::Motion::kHold:
+        return "hold";
+    case xgc2_math::scene::Motion::kConstantTwist:
+        return "constant_twist";
+    case xgc2_math::scene::Motion::kPingPong:
+        return "ping_pong";
+    case xgc2_math::scene::Motion::kCircle:
+        return "circle";
+    }
+    return "";
+}
+
+CompiledBuild ConsumeCompiled(const JsonValue& doc, const std::string& mesh_root, const std::string& asset_root,
+                              const std::string& epoch, std::uint64_t revision) {
+    Fields(doc, {"schema", "id", "frame", "geometries", "models", "obstacles", "ground"});
+    if (doc["schema"] != "xgc2.scene.compiled.v1" || doc["frame"] != "world")
+        throw std::invalid_argument("compiled scene in world frame required");
+    xgc2_geometry_msgs::SceneSnapshot snapshot;
+    snapshot.scene_id = Id(doc["id"]);
+    snapshot.epoch = epoch;
+    snapshot.revision = revision;
+    snapshot.header.frame_id = "world";
+    const auto& geometries = doc["geometries"];
+    if (!geometries.isArray() || geometries.size() > 4096)
+        throw std::invalid_argument("compiled geometry bound exceeded");
+    for (const auto& geometry : geometries) {
+        if (!geometry.isObject() || !geometry["type"].isString())
+            throw std::invalid_argument("compiled geometry type required");
+        const auto payload = xgc2_math::geometry::geometryFromJson(
+            nlohmann::json::parse(Json::writeString(Json::StreamWriterBuilder{}, geometry)));
+        xgc2_geometry_msgs::SceneGeometry message;
+        message.type = payload.type;
+        message.parameters = payload.parameters;
+        snapshot.geometries.push_back(std::move(message));
+    }
+    const auto& models = doc["models"];
+    if (!models.isObject())
+        throw std::invalid_argument("compiled models required");
+    struct ModelParts {
+        std::vector<xgc2_geometry_msgs::ScenePart> parts;
+        std::string resource_file;
+    };
+    std::map<std::string, ModelParts> table;
+    for (const auto& name : models.getMemberNames()) {
+        const auto& model = models[name];
+        if (!model.isObject() || name.empty() || name.size() > 128)
+            throw std::invalid_argument("compiled model name required");
+        bool has_parts = false, has_resource = false;
+        for (const auto& field : model.getMemberNames()) {
+            if (field == "parts")
+                has_parts = true;
+            else if (field == "resource")
+                has_resource = true;
+            else if (field != "unparsed")
+                throw std::invalid_argument("unknown compiled model field: " + field);
+        }
+        if (!has_parts)
+            throw std::invalid_argument("compiled model parts required");
+        if (model.isMember("unparsed") && !model["unparsed"].isArray())
+            throw std::invalid_argument("compiled unparsed annotations must be an array");
+        ModelParts parsed;
+        const auto& list = model["parts"];
+        if (!list.isArray() || list.empty() || list.size() > 128)
+            throw std::invalid_argument("scene part bound exceeded");
+        for (const auto& part : list)
+            parsed.parts.push_back(CompiledPart(part, snapshot.geometries.size()));
+        if (has_resource) {
+            const auto& resource = model["resource"];
+            Fields(resource, {"format", "file"});
+            if (resource["format"] != "sdformat-model" || !resource["file"].isString())
+                throw std::invalid_argument("compiled resource must be an sdformat model file");
+            parsed.resource_file = resource["file"].asString();
+        }
+        table.emplace(name, std::move(parsed));
+    }
+    const auto& ground = doc["ground"];
+    if (!ground.isObject() || !ground["mode"].isString())
+        throw std::invalid_argument("compiled ground mode required");
+    const auto mode = ground["mode"].asString();
+    snapshot.ground.mode = mode;
+    snapshot.ground.pose.orientation.w = 1;
+    if (mode == xgc2_geometry_msgs::SceneGround::MODE_DEFAULT_PLANE) {
+        Fields(ground, {"mode", "z"});
+        snapshot.ground.z = Number(ground["z"]);
+    } else if (mode == xgc2_geometry_msgs::SceneGround::MODE_NONE) {
+        Fields(ground, {"mode"});
+    } else if (mode == xgc2_geometry_msgs::SceneGround::MODE_MODEL) {
+        Fields(ground, {"mode", "model", "pose"});
+        if (!ground["model"].isString() || !table.count(ground["model"].asString()))
+            throw std::invalid_argument("compiled ground requires a known model");
+        snapshot.ground.pose = Pose(ground["pose"]);
+        snapshot.ground.parts = table.at(ground["model"].asString()).parts;
+    } else
+        throw std::invalid_argument("unsupported ground mode");
+    const auto& obstacles = doc["obstacles"];
+    if (!obstacles.isArray() || obstacles.size() > 256)
+        throw std::invalid_argument("scene obstacle bound exceeded");
+    CompiledBuild built;
+    built.definition["obstacles"] = JsonValue(Json::arrayValue);
+    built.definition["ground"]["mode"] = mode;
+    if (mode == xgc2_geometry_msgs::SceneGround::MODE_DEFAULT_PLANE)
+        built.definition["ground"]["z"] = snapshot.ground.z;
+    else if (mode == xgc2_geometry_msgs::SceneGround::MODE_MODEL) {
+        built.definition["ground"]["model"] = ground["model"];
+        built.definition["ground"]["pose"] = ground["pose"];
+    }
+    std::size_t parts = 0;
+    std::map<std::string, std::string> resources;
+    for (const auto& item : obstacles) {
+        if (item.isMember("parts"))
+            throw std::invalid_argument("compiled obstacle has no inline parts");
+        Fields(item, {"id", "name", "model", "pose", "motion"});
+        xgc2_geometry_msgs::SceneObstacle body;
+        body.id = Id(item["id"]);
+        if (!item["name"].isString() || item["name"].asString().empty() || item["name"].asString().size() > 256)
+            throw std::invalid_argument("scene obstacle name required");
+        body.name = item["name"].asString();
+        if (!item["model"].isString() || !table.count(item["model"].asString()))
+            throw std::invalid_argument("compiled obstacle requires a known model");
+        body.pose = Pose(item["pose"]);
+        const auto placed = ParseMotion(item["motion"], ScenePose(body.pose));
+        body.motion_type = MotionName(placed.motion);
+        body.dynamic = placed.motion.type != xgc2_math::scene::Motion::kHold;
+        if (placed.motion.type != xgc2_math::scene::Motion::kHold &&
+            !built.trajectories.emplace(body.id, placed).second)
+            throw std::invalid_argument("duplicate scene obstacle id");
+        const auto& parsed = table.at(item["model"].asString());
+        if ((parts += parsed.parts.size()) > 4096)
+            throw std::invalid_argument("scene part bound exceeded");
+        body.parts = parsed.parts;
+        if (!parsed.resource_file.empty())
+            resources.emplace(body.id, parsed.resource_file);
+        JsonValue frozen;
+        frozen["id"] = body.id;
+        frozen["name"] = body.name;
+        frozen["model"] = item["model"];
+        frozen["dynamic"] = body.dynamic;
+        frozen["motion_type"] = body.motion_type;
+        frozen["pose"] = item["pose"];
+        built.definition["obstacles"].append(frozen);
+        snapshot.obstacles.push_back(std::move(body));
+    }
+    std::string error;
+    if (!CompileScene(snapshot, mesh_root, &built.models, &error))
+        throw std::invalid_argument(error);
+    for (const auto& [id, file] : resources) {
+        auto& model = built.models.at(id);
+        const auto collisions = std::move(model.collisions);
+        const auto pose = model.pose;
+        if (!AuthorResourceModel(id, pose, file, asset_root, &model, &error))
+            throw std::invalid_argument(error);
+        model.collisions = collisions;
+    }
+    if (mode == xgc2_geometry_msgs::SceneGround::MODE_DEFAULT_PLANE) {
+        SceneModel plane;
+        if (!MakeInstalledGroundPlane(snapshot.ground.z, &plane, &error))
+            throw std::invalid_argument(error);
+        built.ground = std::move(plane);
+    } else if (mode == xgc2_geometry_msgs::SceneGround::MODE_MODEL) {
+        const auto& parsed = table.at(ground["model"].asString());
+        SceneModel ground_model;
+        if (!parsed.resource_file.empty()) {
+            if (!AuthorResourceModel(kConsumerGroundName, ScenePose(snapshot.ground.pose), parsed.resource_file,
+                                     asset_root, &ground_model, &error) ||
+                !UseConsumerGroundName(&ground_model, &error))
+                throw std::invalid_argument(error);
+        } else {
+            xgc2_geometry_msgs::SceneSnapshot local;
+            local.scene_id = snapshot.scene_id;
+            local.epoch = snapshot.epoch;
+            local.header.frame_id = "world";
+            local.geometries = snapshot.geometries;
+            local.ground.mode = xgc2_geometry_msgs::SceneGround::MODE_NONE;
+            xgc2_geometry_msgs::SceneObstacle standin;
+            standin.id = kConsumerGroundName;
+            standin.pose = snapshot.ground.pose;
+            standin.parts = snapshot.ground.parts;
+            local.obstacles.push_back(standin);
+            std::map<std::string, SceneModel> compiled;
+            if (!CompileScene(local, mesh_root, &compiled, &error))
+                throw std::invalid_argument(error);
+            ground_model = std::move(compiled.at(kConsumerGroundName));
+            if (!UseConsumerGroundName(&ground_model, &error))
+                throw std::invalid_argument(error);
+        }
+        built.ground = std::move(ground_model);
+    }
+    return built;
+}
 
 struct PreparedSceneCommand {
     bool apply = false;
@@ -172,7 +386,8 @@ struct PreparedSceneCommand {
     std::uint64_t revision = 0;
     std::chrono::milliseconds timeout{30000};
     std::map<std::string, SceneModel> models;
-    std::map<std::string, Trajectory> trajectories;
+    std::map<std::string, PlacedMotion> trajectories;
+    std::optional<SceneModel> ground;
     JsonValue definition;
 };
 
@@ -180,6 +395,7 @@ class NativeSceneController::Impl {
   public:
     gazebo::physics::WorldPtr world;
     std::string mesh_root;
+    std::string asset_root;
     NativeSceneApply apply;
     std::function<std::int64_t()> clock;
     mutable std::mutex mutex;
@@ -189,7 +405,7 @@ class NativeSceneController::Impl {
     bool playing = false, suspended = false;
     double elapsed = 0, started = 0;
     std::map<std::string, gazebo::physics::ModelPtr> models;
-    std::map<std::string, Trajectory> trajectories;
+    std::map<std::string, PlacedMotion> trajectories;
     std::set<std::string> retired_epochs;
     JsonValue definition;
     double sampled_time = -1;
@@ -209,12 +425,10 @@ class NativeSceneController::Impl {
             const auto found = models.find(entry.first);
             if (found == models.end())
                 continue;
-            ignition::math::Pose3d pose;
-            ignition::math::Vector3d linear, angular;
-            entry.second.Sample(time, playing, pose, linear, angular);
-            found->second->SetWorldPose(pose);
-            found->second->SetLinearVel(linear);
-            found->second->SetAngularVel(angular);
+            const auto state = xgc2_math::scene::evaluateMotion(entry.second.initial, entry.second.motion, time, playing);
+            found->second->SetWorldPose(IgnitionPose(state.pose));
+            found->second->SetLinearVel(IgnitionVector(state.linear));
+            found->second->SetAngularVel(IgnitionVector(state.angular));
         }
         if (playing && sampled_time != time)
             change_serial.fetch_add(1, std::memory_order_release);
@@ -222,13 +436,15 @@ class NativeSceneController::Impl {
     }
 };
 
-NativeSceneController::NativeSceneController(gazebo::physics::WorldPtr world, std::string root, NativeSceneApply apply,
+NativeSceneController::NativeSceneController(gazebo::physics::WorldPtr world, std::string root,
+                                             std::string asset_root, NativeSceneApply apply,
                                              std::function<std::int64_t()> clock)
     : impl_(std::make_unique<Impl>()) {
-    if (!world || root.empty() || !apply || !clock)
-        throw std::invalid_argument("native scene world, mesh root, clock and apply owner required");
+    if (!world || root.empty() || asset_root.empty() || !apply || !clock)
+        throw std::invalid_argument("native scene world, mesh root, asset root, clock and apply owner required");
     impl_->world = std::move(world);
     impl_->mesh_root = std::move(root);
+    impl_->asset_root = std::move(asset_root);
     impl_->apply = std::move(apply);
     impl_->clock = std::move(clock);
     impl_->definition["obstacles"] = JsonValue(Json::arrayValue);
@@ -271,75 +487,11 @@ std::shared_ptr<const PreparedSceneCommand> NativeSceneController::Prepare(const
         return command;
     }
     const auto& doc = value["document"];
-    Fields(doc, {"schema", "id", "frame", "obstacles"});
-    if (doc["schema"] != "xgc2.scene.v1" || doc["frame"] != "world")
-        throw std::invalid_argument("scene v1 in world frame required");
-    xgc2_geometry_msgs::SceneSnapshot snapshot;
-    snapshot.scene_id = Id(doc["id"]);
-    snapshot.epoch = command->epoch;
-    snapshot.revision = command->revision;
-    snapshot.header.frame_id = "world";
-    const auto& obstacles = doc["obstacles"];
-    if (!obstacles.isArray() || obstacles.size() > 256)
-        throw std::invalid_argument("scene obstacle bound exceeded");
-    std::size_t parts = 0;
-    command->definition["obstacles"] = JsonValue(Json::arrayValue);
-    for (const auto& item : obstacles) {
-        Fields(item, {"id", "name", "pose", "parts", "motion"});
-        xgc2_geometry_msgs::SceneObstacle body;
-        body.id = Id(item["id"]);
-        if (!item["name"].isString())
-            throw std::invalid_argument("scene obstacle name must be a string");
-        body.name = item["name"].asString();
-        if (body.name.empty() || body.name.size() > 256)
-            throw std::invalid_argument("scene obstacle name required");
-        body.pose = Pose(item["pose"]);
-        const auto trajectory = ParseMotion(item["motion"], ScenePose(body.pose));
-        if (!command->trajectories.emplace(body.id, trajectory).second)
-            throw std::invalid_argument("duplicate scene obstacle id");
-        body.motion_type = trajectory.kind;
-        body.dynamic = trajectory.kind != "hold";
-        JsonValue frozen;
-        frozen["id"] = body.id;
-        frozen["dynamic"] = body.dynamic;
-        frozen["motion_type"] = trajectory.kind;
-        frozen["pose"] = item["pose"];
-        frozen["parts"] = JsonValue(Json::arrayValue);
-        const auto& list = item["parts"];
-        if (!list.isArray() || list.empty() || list.size() > 128 || (parts += list.size()) > 4096)
-            throw std::invalid_argument("scene part bound exceeded");
-        for (const auto& part : list) {
-            Fields(part, {"id", "pose", "geometry", "color"});
-            xgc2_geometry_msgs::ScenePart p;
-            p.id = Id(part["id"]);
-            p.pose = Pose(part["pose"]);
-            const auto& color = part["color"];
-            if (part.isMember("color") && (!color.isArray() || color.size() != 4 || Number(color[0]) != 1.0 ||
-                                           Number(color[1]) != .5 || Number(color[2]) != .1 || Number(color[3]) != 1.0))
-                throw std::invalid_argument("scene v1 uses the declared opaque amber part color");
-            p.color.r = 1.0;
-            p.color.g = .5;
-            p.color.b = .1;
-            p.color.a = 1.0;
-            const auto& geometry = part["geometry"];
-            if (!geometry.isObject() || !geometry["type"].isString())
-                throw std::invalid_argument("scene geometry type required");
-            const auto payload = xgc2_math::geometry::geometryFromJson(
-                nlohmann::json::parse(Json::writeString(Json::StreamWriterBuilder{}, geometry)));
-            p.geometry.type = payload.type;
-            p.geometry.parameters = payload.parameters;
-            JsonValue frozen_part;
-            frozen_part["id"] = p.id;
-            frozen_part["pose"] = part["pose"];
-            frozen_part["geometry"] = geometry;
-            frozen["parts"].append(frozen_part);
-            body.parts.push_back(std::move(p));
-        }
-        command->definition["obstacles"].append(frozen);
-        snapshot.obstacles.push_back(std::move(body));
-    }
-    if (!CompileScene(snapshot, impl_->mesh_root, &command->models, &error))
-        throw std::invalid_argument(error);
+    auto built = ConsumeCompiled(doc, impl_->mesh_root, impl_->asset_root, command->epoch, command->revision);
+    command->models = std::move(built.models);
+    command->trajectories = std::move(built.trajectories);
+    command->ground = std::move(built.ground);
+    command->definition = std::move(built.definition);
     command->identity = Encode(doc);
     return command;
 }
@@ -386,7 +538,7 @@ std::string NativeSceneController::Execute(const std::shared_ptr<const PreparedS
         }
     }
     // Never hold our RT mutex while the world owner waits for native factory ack.
-    auto models = s.apply(command->models, deadline);
+    auto models = s.apply(command->models, command->ground ? &*command->ground : nullptr, deadline);
     std::lock_guard<std::mutex> lock(s.mutex);
     if (models.size() != command->models.size())
         throw std::runtime_error("world owner returned incomplete scene membership");
@@ -470,5 +622,49 @@ void NativeSceneController::Reset() {
         s.Sample(s.started);
     }
     s.change_serial.fetch_add(1, std::memory_order_release);
+}
+
+std::map<std::string, SceneModel> BuildCompiledSceneModels(const std::string& compiled_document,
+                                                           const std::string& mesh_directory,
+                                                           const std::string& asset_root) {
+    if (compiled_document.size() > NativeSceneController::kMaxRequestBytes)
+        throw std::invalid_argument("scene request exceeds 8 MiB");
+    Json::CharReaderBuilder builder;
+    builder["rejectDupKeys"] = true;
+    builder["failIfExtra"] = true;
+    builder["allowComments"] = false;
+    builder["strictRoot"] = true;
+    builder["stackLimit"] = 64;
+    Json::Value document;
+    std::string error;
+    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+    if (!reader->parse(compiled_document.data(), compiled_document.data() + compiled_document.size(), &document,
+                       &error))
+        throw std::invalid_argument("invalid scene JSON");
+    return ConsumeCompiled(document, mesh_directory, asset_root, "compiled", 1).models;
+}
+
+CompiledConsumerSlice InspectCompiledConsumer(const std::string& compiled_document, const std::string& mesh_directory,
+                                              const std::string& asset_root) {
+    if (compiled_document.size() > NativeSceneController::kMaxRequestBytes)
+        throw std::invalid_argument("scene request exceeds 8 MiB");
+    Json::CharReaderBuilder builder;
+    builder["rejectDupKeys"] = true;
+    builder["failIfExtra"] = true;
+    builder["allowComments"] = false;
+    builder["strictRoot"] = true;
+    builder["stackLimit"] = 64;
+    Json::Value document;
+    std::string error;
+    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+    if (!reader->parse(compiled_document.data(), compiled_document.data() + compiled_document.size(), &document,
+                       &error))
+        throw std::invalid_argument("invalid scene JSON");
+    auto built = ConsumeCompiled(document, mesh_directory, asset_root, "compiled", 1);
+    CompiledConsumerSlice slice;
+    slice.obstacles = std::move(built.models);
+    slice.ground = std::move(built.ground);
+    slice.moving = built.trajectories.size();
+    return slice;
 }
 } // namespace xgc2_gazebo_scene

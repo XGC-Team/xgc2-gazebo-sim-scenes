@@ -4,6 +4,7 @@
 #include "xgc2_gazebo_scene/scene_ownership.hpp"
 #include <gazebo/common/Mesh.hh>
 #include <gazebo/common/MeshManager.hh>
+#include <gazebo/common/SystemPaths.hh>
 #include <xgc2_math/scene/convex_mesh.hpp>
 #include <xgc2_math/scene/scene_conversion.hpp>
 
@@ -19,13 +20,17 @@
 #include <gazebo/physics/World.hh>
 #include <sdf/sdf.hh>
 
+#include <pugixml.hpp>
+
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 
 namespace xgc2_gazebo_scene {
 
@@ -44,14 +49,122 @@ std::string Encode(const std::string& value) {
     return out.str();
 }
 
-std::string PoseXml(const ignition::math::Pose3d& pose) {
+std::string PoseText(const ignition::math::Pose3d& pose) {
     std::ostringstream out;
     const auto euler = pose.Rot().Euler();
     // Ignition's vector stream operator rounds coordinates to six decimal
     // places regardless of stream precision; authoring must retain doubles.
-    out << std::setprecision(17) << "<pose>" << pose.Pos().X() << " " << pose.Pos().Y() << " " << pose.Pos().Z() << " "
-        << euler.X() << " " << euler.Y() << " " << euler.Z() << "</pose>";
+    out << std::setprecision(17) << pose.Pos().X() << " " << pose.Pos().Y() << " " << pose.Pos().Z() << " " << euler.X()
+        << " " << euler.Y() << " " << euler.Z();
     return out.str();
+}
+
+std::string PoseXml(const ignition::math::Pose3d& pose) {
+    return "<pose>" + PoseText(pose) + "</pose>";
+}
+
+std::string Trim(std::string value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return {};
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+bool StaysInside(const std::filesystem::path& root, const std::filesystem::path& target) {
+    const auto relative = target.lexically_normal().lexically_relative(root.lexically_normal());
+    if (relative.empty())
+        return false;
+    for (const auto& part : relative) {
+        if (part == "..")
+            return false;
+    }
+    return true;
+}
+
+bool SealedRegularFile(const std::filesystem::path& path) {
+    std::error_code status;
+    return !std::filesystem::is_symlink(path, status) && !status && std::filesystem::is_regular_file(path);
+}
+
+bool SealedDirectory(const std::filesystem::path& path) {
+    std::error_code status;
+    return !std::filesystem::is_symlink(path, status) && !status && std::filesystem::is_directory(path);
+}
+
+bool MaterialScriptUri(const pugi::xml_node& uri_node) {
+    for (auto parent = uri_node.parent(); parent; parent = parent.parent()) {
+        if (std::string(parent.name()) == "script")
+            return true;
+    }
+    return false;
+}
+
+// file://media/... is Gazebo's installed media tree. It is not a download and not a general file:// grant.
+bool InstalledGazeboMedia(const std::string& uri) {
+    constexpr std::string_view prefix = "file://media/";
+    if (uri.rfind(prefix, 0) != 0)
+        return false;
+    const auto rest = uri.substr(prefix.size());
+    if (rest.empty() || rest.find('\\') != std::string::npos || rest.find(':') != std::string::npos)
+        return false;
+    const std::filesystem::path relative(rest);
+    if (relative.is_absolute())
+        return false;
+    for (const auto& part : relative) {
+        if (part == ".." || part == ".")
+            return false;
+    }
+    const auto found = gazebo::common::SystemPaths::Instance()->FindFileURI(uri);
+    if (found.empty())
+        return false;
+    const std::filesystem::path resolved(found);
+    if (!SealedRegularFile(resolved))
+        return false;
+    const auto generic = resolved.generic_string();
+    const auto suffix = std::string("/media/") + rest;
+    return generic.size() >= suffix.size() &&
+           generic.compare(generic.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+void RejectResourceEscape(pugi::xml_document& document, const std::filesystem::path& model_file,
+                          const std::filesystem::path& asset_root) {
+    const auto include = document.find_node([](const pugi::xml_node& node) {
+        return std::string(node.name()) == "include";
+    });
+    if (include)
+        throw std::runtime_error("SDF include is unsupported");
+    if (!asset_root.is_absolute() || !std::filesystem::is_directory(asset_root))
+        throw std::runtime_error("Compiled resources require an absolute asset directory");
+    if (!StaysInside(asset_root, model_file))
+        throw std::runtime_error("Scene resource URI must stay inside the asset directory");
+    const auto model_dir = model_file.parent_path();
+    const auto visit = [&](auto&& self, const pugi::xml_node& node) -> void {
+        for (auto child = node.first_child(); child; child = child.next_sibling()) {
+            if (std::string(child.name()) == "uri") {
+                const auto uri = Trim(child.text().get());
+                if (uri.empty())
+                    throw std::runtime_error("Scene resource URI must stay inside the asset directory");
+                if (uri.find("://") != std::string::npos) {
+                    if (!InstalledGazeboMedia(uri))
+                        throw std::runtime_error("Scene resource URI must stay inside the asset directory");
+                } else {
+                    const std::filesystem::path target(uri);
+                    if (target.is_absolute() || uri.find('\\') != std::string::npos)
+                        throw std::runtime_error("Scene resource URI must stay inside the asset directory");
+                    const auto full = (model_dir / target).lexically_normal();
+                    if (!StaysInside(asset_root, full))
+                        throw std::runtime_error("Scene resource URI must stay inside the asset directory");
+                    if (SealedRegularFile(full) || (MaterialScriptUri(child) && SealedDirectory(full)))
+                        child.text().set(full.string().c_str());
+                    else
+                        throw std::runtime_error("Scene resource URI must stay inside the asset directory");
+                }
+            }
+            self(self, child);
+        }
+    };
+    visit(visit, document);
 }
 
 std::string MeshFile(xgc2_math::geometry::Geometry geometry, const std::string& directory) {
@@ -252,6 +365,145 @@ ignition::math::Pose3d ScenePose(const geometry_msgs::Pose& pose) {
             {pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z}};
 }
 
+bool AuthorResourceModel(const std::string& id, const ignition::math::Pose3d& instance_pose,
+                         const std::string& sdf_file, const std::string& asset_root, SceneModel* model,
+                         std::string* error) {
+    if (model == nullptr || error == nullptr)
+        return false;
+    error->clear();
+    try {
+        const std::filesystem::path path(sdf_file);
+        std::error_code status;
+        if (sdf_file.empty() || !path.is_absolute() || std::filesystem::is_symlink(path, status) || status ||
+            !std::filesystem::is_regular_file(path))
+            throw std::runtime_error("Scene resource file is missing");
+        std::ifstream input(path, std::ios::binary);
+        if (!input)
+            throw std::runtime_error("Scene resource file is missing");
+        const std::string bytes((std::istreambuf_iterator<char>(input)), {});
+        pugi::xml_document document;
+        const auto parsed = document.load_buffer(bytes.data(), bytes.size(), pugi::parse_default);
+        if (!parsed)
+            throw std::runtime_error(std::string("SDF resource could not be parsed: ") + parsed.description());
+        RejectResourceEscape(document, path, asset_root);
+        auto sdf = document.child("sdf");
+        auto root = sdf.child("model");
+        if (!sdf || !root || root.next_sibling("model") || document.child("world") || sdf.child("world"))
+            throw std::runtime_error("SDF resource requires one model");
+        if (!root.attribute("name"))
+            root.append_attribute("name");
+        root.attribute("name").set_value(SceneModelName(id).c_str());
+        while (root.child("pose"))
+            root.remove_child("pose");
+        root.prepend_child("pose").text().set(PoseText(instance_pose).c_str());
+        auto anchored = root.child("static");
+        if (!anchored)
+            anchored = root.prepend_child("static");
+        anchored.text().set("true");
+        std::ostringstream xml;
+        document.save(xml, "", pugi::format_raw | pugi::format_no_declaration);
+        pugi::xml_document body_document;
+        auto body = body_document.append_copy(root);
+        body.remove_child("pose");
+        body.remove_attribute("name");
+        std::ostringstream body_xml;
+        body.print(body_xml, "", pugi::format_raw | pugi::format_no_declaration);
+        model->id = id;
+        model->name = SceneModelName(id);
+        model->pose = instance_pose;
+        model->sdf = xml.str();
+        model->body = body_xml.str();
+        model->authored_resource = true;
+        model->source_file = path.lexically_normal().string();
+        ModelSdfParser parser;
+        if (!parser.Parse(model->sdf))
+            throw std::runtime_error("Gazebo rejected authored resource SDF");
+        return true;
+    } catch (const std::exception& exception) {
+        *error = exception.what();
+        return false;
+    }
+}
+
+bool UseConsumerGroundName(SceneModel* model, std::string* error) {
+    if (model == nullptr || error == nullptr)
+        return false;
+    try {
+        pugi::xml_document document;
+        if (!document.load_string(model->sdf.c_str()))
+            throw std::runtime_error("Gazebo rejected authored resource SDF");
+        auto root = document.child("sdf").child("model");
+        if (!root)
+            throw std::runtime_error("SDF resource requires one model");
+        if (!root.attribute("name"))
+            root.append_attribute("name");
+        root.attribute("name").set_value(kConsumerGroundName);
+        std::ostringstream xml;
+        document.save(xml, "", pugi::format_raw | pugi::format_no_declaration);
+        model->sdf = xml.str();
+        model->name = kConsumerGroundName;
+        model->id.clear();
+        return true;
+    } catch (const std::exception& exception) {
+        *error = exception.what();
+        return false;
+    }
+}
+
+bool MakeInstalledGroundPlane(double z, SceneModel* model, std::string* error) {
+    if (model == nullptr || error == nullptr)
+        return false;
+    try {
+        const auto located = gazebo::common::SystemPaths::Instance()->FindFileURI("model://ground_plane/model.sdf");
+        if (located.empty())
+            throw std::runtime_error("installed Gazebo ground plane is missing");
+        const std::filesystem::path path(located);
+        std::error_code status;
+        if (std::filesystem::is_symlink(path, status) || status || !std::filesystem::is_regular_file(path))
+            throw std::runtime_error("installed Gazebo ground plane is missing");
+        std::ifstream input(path, std::ios::binary);
+        if (!input)
+            throw std::runtime_error("installed Gazebo ground plane is missing");
+        const std::string bytes((std::istreambuf_iterator<char>(input)), {});
+        pugi::xml_document document;
+        if (!document.load_buffer(bytes.data(), bytes.size(), pugi::parse_default))
+            throw std::runtime_error("installed Gazebo ground plane is missing");
+        auto root = document.child("sdf").child("model");
+        if (!root)
+            throw std::runtime_error("installed Gazebo ground plane is missing");
+        ignition::math::Pose3d pose(0, 0, z, 0, 0, 0);
+        if (!root.attribute("name"))
+            root.append_attribute("name");
+        root.attribute("name").set_value(kConsumerGroundName);
+        while (root.child("pose"))
+            root.remove_child("pose");
+        root.prepend_child("pose").text().set(PoseText(pose).c_str());
+        std::ostringstream xml;
+        document.save(xml, "", pugi::format_raw | pugi::format_no_declaration);
+        pugi::xml_document body_document;
+        auto body = body_document.append_copy(root);
+        body.remove_child("pose");
+        body.remove_attribute("name");
+        std::ostringstream body_xml;
+        body.print(body_xml, "", pugi::format_raw | pugi::format_no_declaration);
+        *model = SceneModel{};
+        model->name = kConsumerGroundName;
+        model->pose = pose;
+        model->sdf = xml.str();
+        model->body = body_xml.str();
+        model->authored_resource = true;
+        model->source_file = path.lexically_normal().string();
+        return true;
+    } catch (const std::exception& exception) {
+        *error = exception.what();
+        return false;
+    }
+}
+
+bool SamePhysicalGround(const SceneModel& kept, const SceneModel& next) {
+    return kept.name == next.name && kept.body == next.body && SamePose(kept.pose, next.pose);
+}
+
 bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::string& mesh_directory,
                   std::map<std::string, SceneModel>* models, std::string* error) {
     models->clear();
@@ -262,6 +514,16 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
             throw std::runtime_error("scene ID and epoch are required");
         if (scene.header.frame_id != "world")
             throw std::runtime_error("Gazebo scene frame must be world");
+        if (scene.ground.mode == xgc2_geometry_msgs::SceneGround::MODE_MODEL) {
+            for (const auto& part : scene.ground.parts) {
+                if (part.geometry_index >= scene.geometries.size())
+                    throw std::runtime_error("ground geometry index out of range");
+            }
+        } else if (!scene.ground.mode.empty() &&
+                   scene.ground.mode != xgc2_geometry_msgs::SceneGround::MODE_DEFAULT_PLANE &&
+                   scene.ground.mode != xgc2_geometry_msgs::SceneGround::MODE_NONE) {
+            throw std::runtime_error("unsupported ground mode: " + scene.ground.mode);
+        }
         for (const auto& obstacle : scene.obstacles) {
             if (obstacle.id.empty() || obstacle.id.size() > 256 || models->count(obstacle.id)) {
                 throw std::runtime_error("obstacle ID must be unique, nonempty and at most 256 bytes: " + obstacle.id);
@@ -290,8 +552,10 @@ bool CompileScene(const xgc2_geometry_msgs::SceneSnapshot& scene, const std::str
                 SceneCollision collision;
                 collision.name = "part_" + Encode(part.id);
                 collision.pose = ScenePose(part.pose);
-                collision.geometry =
-                    xgc2_math::geometry::decodeGeometry({part.geometry.type, part.geometry.parameters});
+                if (part.geometry_index >= scene.geometries.size())
+                    throw std::runtime_error("compiled geometry index out of range: " + part.id);
+                const auto& geometry = scene.geometries[part.geometry_index];
+                collision.geometry = xgc2_math::geometry::decodeGeometry({geometry.type, geometry.parameters});
                 const auto& g = collision.geometry;
                 if (g.type == GeometryType::Box) {
                     if (!Positive(g.size[0]) || !Positive(g.size[1]) || !Positive(g.size[2]))
@@ -362,6 +626,11 @@ bool VerifySceneModel(const gazebo::physics::ModelPtr& model, const SceneModel& 
         return fail("model is absent");
     if (!model->IsStatic())
         return fail("scene model is not anchored");
+    if (expected.authored_resource) {
+        if (verify_pose && !SamePose(model->WorldPose(), expected.pose))
+            return fail("authored resource pose differs");
+        return true;
+    }
     if (verify_pose && !SamePose(model->WorldPose(), expected.pose)) {
         std::ostringstream details;
         details << std::setprecision(17) << "model pose differs: actual [" << model->WorldPose().Pos().X() << ", "

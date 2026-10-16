@@ -295,9 +295,9 @@ class SimulationService::Impl {
         if (!std::filesystem::create_directory(mesh_root_) || chmod(mesh_root_.c_str(), 0700) != 0)
             throw std::runtime_error("cannot allocate granted transient scene artifact directory");
         scene_ = std::make_unique<NativeSceneController>(
-            world_, mesh_root_.string(),
-            [this](const auto& desired, auto deadline) {
-                return ApplyScene(desired, deadline);
+            world_, mesh_root_.string(), resource_root_.string(),
+            [this](const auto& desired, const SceneModel* ground, auto deadline) {
+                return ApplyScene(desired, ground, deadline);
             },
             [this] {
                 return native_clock_ns_.load();
@@ -679,6 +679,8 @@ class SimulationService::Impl {
             Fields(e, {"id", "role", "asset", "pose", "parameters", "sensors"});
             c.kind = Kind::Create;
             c.id = e.isMember("id") ? Id(e["id"]) : "entity-" + xgc2::xrpc::new_instance_id();
+            if (IsReservedConsumerGroundId(c.id))
+                throw DomainError(409, "conflict", "entity ID is reserved for the scene ground");
             c.role = String(e["role"]);
             if (c.role != "robot" && c.role != "obstacle" && c.role != "object" && c.role != "sensor")
                 Invalid("unknown entity role");
@@ -1237,15 +1239,29 @@ class SimulationService::Impl {
         pending_scene_models_.clear();
         return models;
     }
+    void ConfirmRemoved(const std::string& name) {
+        auto model = world_->ModelByName(name);
+        if (!model)
+            return;
+        world_->RemoveModel(model);
+        if (world_->ModelByName(name))
+            throw DomainError(500, "internal", "scene model removal was not confirmed: " + name);
+    }
     std::map<std::string, gazebo::physics::ModelPtr> ApplyScene(const std::map<std::string, SceneModel>& desired,
-                                                                Clock::time_point deadline) {
-        if (desired.size() > kEntities)
+                                                                const SceneModel* ground, Clock::time_point deadline) {
+        for (const auto& entity : entities_)
+            if (entity.occupied && entity.id == kConsumerGroundEntityId && entity.role != "ground")
+                throw DomainError(409, "conflict", "entity ID is reserved for the scene ground");
+        if (world_->ModelByName("ground_plane") != nullptr)
+            throw DomainError(409, "conflict", "ground is owned by scene");
+        const std::size_t ground_slots = ground == nullptr ? 0 : 1;
+        if (desired.size() + ground_slots > kEntities)
             throw DomainError(429, "resource_exhausted", "scene entity bound exceeded");
         std::size_t others = 0;
         for (const auto& e : entities_)
             if (e.occupied && e.scene_body.empty())
                 ++others;
-        if (desired.size() + others > kEntities)
+        if (desired.size() + ground_slots + others > kEntities)
             throw DomainError(429, "resource_exhausted", "shared world entity bound exceeded");
         // Validate native artifacts before changing membership.
         std::map<std::string, sdf::SDFPtr> artifacts;
@@ -1262,7 +1278,7 @@ class SimulationService::Impl {
         if (Clock::now().time_since_epoch().count() >= deadline.time_since_epoch().count())
             throw DomainError(504, "deadline_exceeded", "scene expired before native application");
         for (auto& e : entities_)
-            if (e.occupied && !e.scene_body.empty()) {
+            if (e.occupied && e.role != "ground" && !e.scene_body.empty()) {
                 auto match = desired.find(e.id.substr(6));
                 if (match == desired.end() || match->second.body != e.scene_body) {
                     world_->RemoveModel(e.model);
@@ -1270,6 +1286,25 @@ class SimulationService::Impl {
                     e.occupied = false;
                 }
             }
+        Entity* ground_entity = nullptr;
+        for (auto& e : entities_)
+            if (e.occupied && e.role == "ground")
+                ground_entity = &e;
+        bool keep_ground = false;
+        if (ground != nullptr && ground_entity != nullptr && ground_entity->model) {
+            SceneModel kept;
+            kept.name = ground_entity->native_name;
+            kept.body = ground_entity->scene_body;
+            kept.pose = ground_entity->initial;
+            keep_ground = SamePhysicalGround(kept, *ground);
+        }
+        if (ground_entity != nullptr && !keep_ground) {
+            ConfirmRemoved(kConsumerGroundName);
+            ground_entity->model.reset();
+            ground_entity->occupied = false;
+            ground_entity->scene_body.clear();
+            ground_entity = nullptr;
+        }
         std::map<std::string, sdf::SDFPtr> additions;
         for (const auto& [id, definition] : desired) {
             bool exists = false;
@@ -1277,6 +1312,16 @@ class SimulationService::Impl {
                 exists |= e.occupied && e.id == "scene:" + id;
             if (!exists)
                 additions.emplace(definition.name, artifacts.at(id));
+        }
+        if (ground != nullptr && !keep_ground) {
+            auto artifact = sdf::SDFPtr(new sdf::SDF());
+            sdf::init(artifact);
+            if (!sdf::readString(ground->sdf, artifact))
+                Invalid("invalid prepared scene SDF");
+            auto plugin = artifact->Root()->GetElement("model")->AddElement("plugin");
+            plugin->GetAttribute("name")->Set("xgc2_rpc_completion");
+            plugin->GetAttribute("filename")->Set("libxgc2_simulation_entity_ack.so");
+            additions.emplace(ground->name, std::move(artifact));
         }
         const auto created = RealizeBatch(additions, deadline);
         std::map<std::string, gazebo::physics::ModelPtr> models;
@@ -1316,6 +1361,34 @@ class SimulationService::Impl {
             if (!VerifySceneModel(entity->model, definition, true, &error))
                 throw DomainError(500, "internal", "scene native verification failed: " + error);
             models.emplace(id, entity->model);
+        }
+        if (ground != nullptr && !keep_ground) {
+            Entity* entity = nullptr;
+            for (auto& e : entities_)
+                if (!e.occupied) {
+                    entity = &e;
+                    break;
+                }
+            if (!entity)
+                throw DomainError(429, "resource_exhausted", "scene entity capacity reached");
+            *entity = {std::string(kConsumerGroundEntityId),
+                       "ground",
+                       ground->name,
+                       ++generation_,
+                       {},
+                       ground->pose,
+                       true,
+                       true,
+                       ground->body,
+                       ""};
+            entity->model = created.at(ground->name);
+            entity->native_ready = true;
+            boost::recursive_mutex::scoped_lock native_lock(*world_->Physics()->GetPhysicsUpdateMutex());
+            entity->model->SetInitialRelativePose(ground->pose);
+            entity->model->SetWorldPose(ground->pose);
+            std::string error;
+            if (!VerifySceneModel(entity->model, *ground, true, &error))
+                throw DomainError(500, "internal", "scene native verification failed: " + error);
         }
         return models;
     }
