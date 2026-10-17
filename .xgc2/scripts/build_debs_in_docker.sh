@@ -63,8 +63,8 @@ docker run --rm --network "${DOCKER_NETWORK}" \
     apt-get install -y --no-install-recommends libxgc2-xrpc-dev libxgc2-chassis-hold-dev libxgc2-math-dev \
       ros-noetic-xgc2-geometry-msgs
     for relation in "libxgc2-xrpc-dev 0.2.0-1~focal" "libxgc2-chassis-hold-dev 0.2.0-1~focal" \
-      "ros-noetic-xgc2-geometry-msgs 1.5.0-3" \
-      "libxgc2-math-dev 0.6.0-5~focal"; do
+      "ros-noetic-xgc2-geometry-msgs 1.5.0-4" \
+      "libxgc2-math-dev 0.6.0-6~focal"; do
       read -r package floor <<<"${relation}"
       version="$(dpkg-query -W -f '\''${Version}'\'' "${package}")"
       dpkg --compare-versions "${version}" ge "${floor}"

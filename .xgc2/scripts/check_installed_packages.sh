@@ -10,7 +10,7 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 set -u
 
 geometry_version="$(dpkg-query -W -f='${Version}' "ros-${ROS_DISTRO}-xgc2-geometry-msgs")"
-dpkg --compare-versions "${geometry_version}" ge '1.5.0-3'
+dpkg --compare-versions "${geometry_version}" ge '1.5.0-4'
 
 dpkg -s "ros-${ROS_DISTRO}-xgc2-gazebo-sim-worlds" >/dev/null
 for definition in gazebo-client gazebo-server gazebo-server-hybrid; do
