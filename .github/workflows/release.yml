@@ -29,7 +29,7 @@ defaults:
   run:
     shell: bash
 env:
-  DOCKER_IMAGE: ${{ vars.XGC2_CLASSIC_BUILD_IMAGE }}
+  DOCKER_IMAGE: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.10@sha256:95f493947129f8f722af9b08fd1236601cb1a0dc39111ad8c8c025cb082b2f67
   XGC2_PYTHON_EXECUTABLE: ${{ vars.XGC2_CLASSIC_PYTHON_EXECUTABLE }}
   XGC2_APT_OVERLAY_URL: ${{ inputs.apt_overlay_url }}
   XGC2_DEPENDENCY_SET_DIGEST: ${{ inputs.dependency_set_digest }}

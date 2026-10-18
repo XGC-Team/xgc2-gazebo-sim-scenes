@@ -10,7 +10,7 @@ defaults:
   run:
     shell: bash
 env:
-  DOCKER_IMAGE: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.8@sha256:fce2d76fddf4f6439bf0a188249b731650febdc163befc360bed186b269d252a
+  DOCKER_IMAGE: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.10@sha256:95f493947129f8f722af9b08fd1236601cb1a0dc39111ad8c8c025cb082b2f67
   XGC2_PYTHON_EXECUTABLE: /usr/bin/python3
 jobs:
   build-debs:

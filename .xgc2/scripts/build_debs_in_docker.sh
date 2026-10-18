@@ -45,6 +45,11 @@ docker run --rm --network "${DOCKER_NETWORK}" \
     export CC=/usr/bin/clang-10 CXX=/usr/bin/clang++-10
     source /opt/ros/noetic/setup.bash
     test "$(. /etc/os-release; printf "%s" "$VERSION_CODENAME")" = focal
+    for package in libassimp-dev libpugixml-dev libsdformat9-dev; do
+      dpkg-query -W -f="\${Status}" "${package}" 2>/dev/null \
+        | grep -Fxq "install ok installed" \
+        || { echo "Build image is missing required package: ${package}" >&2; exit 1; }
+    done
     cmake --version
     "${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3, 8)"
     printf "#include <span>\nint main(){int a[1]{};return std::span<int>(a).size()!=1;}\n" > /workspace/work/toolchain.cpp
