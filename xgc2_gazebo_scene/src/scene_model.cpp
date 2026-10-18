@@ -63,7 +63,7 @@ std::string PoseXml(const ignition::math::Pose3d& pose) {
     return "<pose>" + PoseText(pose) + "</pose>";
 }
 
-std::string Trim(std::string value) {
+std::string Trim(const std::string& value) {
     const auto first = value.find_first_not_of(" \t\r\n");
     if (first == std::string::npos)
         return {};
