@@ -1,4 +1,6 @@
 import importlib.machinery
+import json
+import yaml
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -41,6 +43,38 @@ class NativeWorldStartTest(unittest.TestCase):
             world.write_text(WORLD)
             for extra in [['--probe'], ['__master:=http://station:11311'], ['__name:=one', '__name:=two'], ['--vrpn-config', 'relative.yaml']]:
                 with self.subTest(extra=extra), self.assertRaises(ValueError): entry.compose(args+extra, {})
+
+    def test_tracker_ports_override_is_explicit_and_strict(self):
+        with tempfile.TemporaryDirectory() as directory:
+            world = Path(directory)/'world.sdf'; world.write_text(WORLD)
+            config = Path(directory)/'source.yaml'; config.write_text('port: 3884\ntracker_ports: {existing: 41000}\n')
+            base = ['--world', str(world), '--paused', 'false', '--gui', 'false', '--ros-data', 'true',
+                    '--gazebo-bin', '/usr/bin/true', '--vrpn-config', str(config)]
+            _, _, env = entry.compose(base, {})
+            self.assertEqual(env['XGC_SIM_VRPN_CONFIG'], str(config))
+            _, _, env = entry.compose(base + ['--vrpn-tracker-ports', '{"uav1":41001,"uav2":41002}'], {})
+            prepared = yaml.safe_load(Path(env['XGC_SIM_VRPN_CONFIG']).read_text())
+            self.assertEqual(prepared['tracker_ports'], {'uav1': 41001, 'uav2': 41002})
+            self.assertEqual(prepared['port'], 3884)
+            _, _, env = entry.compose(base + ['--vrpn-tracker-ports', '{}'], {})
+            self.assertEqual(yaml.safe_load(Path(env['XGC_SIM_VRPN_CONFIG']).read_text())['tracker_ports'], {})
+            self.assertEqual(yaml.safe_load(config.read_text())['tracker_ports'], {'existing':41000})
+            for raw in ('[]', '{"uav1":true}', '{"uav1":0}', '{"uav1":65536}', '{"uav1":1,"uav2":1}',
+                        '{"uav1":1,"uav1":2}', '{"/uav1":1}', '{broken'):
+                with self.subTest(raw=raw), self.assertRaises(ValueError):
+                    entry.compose(base + ['--vrpn-tracker-ports', raw], {})
+            with self.assertRaises(ValueError):
+                entry.compose([*base[:-2], '--vrpn-tracker-ports', '{"uav1":41001}'], {})
+
+    def test_gazebo_process_definitions_pass_the_json_map_as_one_argument(self):
+        root = Path(__file__).resolve().parents[2] / 'process-definitions'
+        for filename in ('gazebo-server.json', 'gazebo-server-hybrid.json'):
+            definition = json.loads((root / filename).read_text())['definitions'][0]
+            parameter = definition['parameters']['properties']['vrpnTrackerPorts']
+            self.assertEqual(parameter['type'], 'json')
+            self.assertEqual(parameter['default'], '')
+            args = definition['command']['args']; index = args.index('--vrpn-tracker-ports')
+            self.assertEqual(args[index+1], '${vrpnTrackerPorts}')
 
     def test_allocated_socket_overrides_only_the_native_endpoint(self):
         with tempfile.TemporaryDirectory() as directory:

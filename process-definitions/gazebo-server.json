@@ -3,7 +3,7 @@
   "definitions": [
     {
       "id": "gazebo-server",
-      "version": "5.0.0",
+      "version": "5.0.1",
       "label": "Gazebo server",
       "description": "Native Gazebo world entry with owner-described simulation service; ROS carries user data.",
       "parameters": {
@@ -25,7 +25,8 @@
             "parameters": [
               "vrpnBindAddress",
               "vrpnPort",
-              "vrpnConfigPath"
+              "vrpnConfigPath",
+              "vrpnTrackerPorts"
             ]
           },
           {
@@ -223,6 +224,11 @@
             "default": "",
             "fixedOnly": true,
             "description": "Explicit private native world endpoint."
+          },
+          "vrpnTrackerPorts": {
+            "type": "json",
+            "default": "",
+            "description": "Startup-only tracker-to-port mapping for dedicated VRPN listeners. Empty string keeps the authored config."
           }
         },
         "required": [
@@ -263,6 +269,8 @@
           "${vrpnConfigPath}",
           "--vrpn-bind-address",
           "${vrpnBindAddress}",
+          "--vrpn-tracker-ports",
+          "${vrpnTrackerPorts}",
           "--vrpn-port",
           "${vrpnPort}",
           "--vrpn-publish-rate",

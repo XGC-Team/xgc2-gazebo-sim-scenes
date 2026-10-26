@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Execute the explicitly prepared native world; ROS is a user-data edge."""
 import argparse
+import json
 import os
 import math
 from pathlib import Path
@@ -54,6 +55,7 @@ def compose(arguments, environment):
     for name in ('paused', 'gui', 'ros-data'):
         parser.add_argument('--'+name, required=True, choices=('true', 'false'))
     parser.add_argument('--vrpn-config', default='')
+    parser.add_argument('--vrpn-tracker-ports', default='', help='JSON mapping of tracker names to dedicated listener ports')
     parser.add_argument('--gazebo-bin', default='')
     parser.add_argument('--plugin-dir', action='append', default=[])
     parser.add_argument('--verbose', nargs='?', const='true', default='false', choices=('true', 'false'))
@@ -108,10 +110,31 @@ def compose(arguments, environment):
         plugins.append('libgazebo_ros_paths_plugin.so')
         plugins.append('libxgc2_simulation_ros_data.so')
         env['XGC_SIM_ROS_CLOCK_RATE_HZ'] = str(rate)
+    if args.vrpn_tracker_ports and not args.vrpn_config:
+        raise ValueError('--vrpn-tracker-ports requires --vrpn-config')
     if args.vrpn_config:
         if args.ros_data != 'true': raise ValueError('VRPN user data requires --ros-data true')
         vrpn_path = absolute_file(args.vrpn_config, '--vrpn-config', 1024*1024)
         overrides = {}
+        if args.vrpn_tracker_ports:
+            def unique_pairs(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result: raise ValueError('Duplicate tracker in --vrpn-tracker-ports')
+                    result[key] = value
+                return result
+            try:
+                tracker_ports = json.loads(args.vrpn_tracker_ports, object_pairs_hook=unique_pairs)
+            except (json.JSONDecodeError, RecursionError) as error:
+                raise ValueError('--vrpn-tracker-ports must be a JSON mapping') from error
+            if (not isinstance(tracker_ports, dict) or len(tracker_ports) > 128 or
+                    any(not name or len(name) > 256 or name.strip('/') != name or
+                        any(ord(c) < 32 or ord(c) == 127 for c in name) or
+                        type(port) is not int or not 1 <= port <= 65535
+                        for name, port in tracker_ports.items()) or
+                    len(set(tracker_ports.values())) != len(tracker_ports)):
+                raise ValueError('--vrpn-tracker-ports must map unique tracker names to unique ports in 1..65535')
+            overrides['tracker_ports'] = tracker_ports
         for name in ('bind_address', 'port', 'publish_rate', 'scan_interval', 'stale_timeout',
                      'velocity_filter_cutoff', 'acceleration_filter_cutoff', 'derivative_reset_timeout',
                      'match_mode', 'auto_track_known_models'):
