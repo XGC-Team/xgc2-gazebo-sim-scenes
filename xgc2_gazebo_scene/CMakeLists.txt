@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   xgc2_geometry_msgs
 )
 find_package(gazebo REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem system)
 find_package(Eigen3 REQUIRED)
 find_package(xgc2_math CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
@@ -206,6 +207,14 @@ if(CATKIN_ENABLE_TESTING)
     target_compile_options(xgc2_gazebo_scene_sdf_parser_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_include_directories(xgc2_gazebo_scene_sdf_parser_test PRIVATE include ${GAZEBO_INCLUDE_DIRS})
     target_link_libraries(xgc2_gazebo_scene_sdf_parser_test ${GAZEBO_LIBRARIES})
+  endif()
+
+  catkin_add_gtest(xgc2_gazebo_scene_native_logging_test test/native_runtime_logging_test.cpp)
+  if(TARGET xgc2_gazebo_scene_native_logging_test)
+    target_compile_features(xgc2_gazebo_scene_native_logging_test PUBLIC cxx_std_17)
+    target_compile_options(xgc2_gazebo_scene_native_logging_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_include_directories(xgc2_gazebo_scene_native_logging_test PRIVATE include ${GAZEBO_INCLUDE_DIRS})
+    target_link_libraries(xgc2_gazebo_scene_native_logging_test ${GAZEBO_LIBRARIES} Boost::filesystem Boost::system)
   endif()
 
   catkin_add_gtest(xgc2_gazebo_scene_model_index_test test/model_index_test.cpp)

@@ -6,6 +6,7 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--as-needed")
 
 find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs)
 find_package(gazebo REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem system)
 
 # The plugins share the process-wide ROS master watcher of the scene package and link only that helper library. The
 # scene package's other libraries are built as C++20, which the Ogre headers of the rendering plugin do not accept,
@@ -33,7 +34,7 @@ add_library(xgc2_simple_lidar_cpu SHARED src/cpu_lidar_plugin.cpp)
 target_compile_features(xgc2_simple_lidar_cpu PUBLIC cxx_std_17)
 target_compile_options(xgc2_simple_lidar_cpu PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(xgc2_simple_lidar_cpu PRIVATE include ${catkin_INCLUDE_DIRS} ${xgc2_gazebo_scene_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
-target_link_libraries(xgc2_simple_lidar_cpu PRIVATE ${catkin_LIBRARIES} ${scene_ros_master} ${GAZEBO_LIBRARIES})
+target_link_libraries(xgc2_simple_lidar_cpu PRIVATE ${catkin_LIBRARIES} ${scene_ros_master} ${GAZEBO_LIBRARIES} Boost::filesystem Boost::system)
 
 add_executable(xgc2-gazebo-ray-probe src/gpu_ray_probe.cpp)
 target_compile_features(xgc2-gazebo-ray-probe PRIVATE cxx_std_17)

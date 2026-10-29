@@ -71,6 +71,7 @@ class NativeWorldStartTest(unittest.TestCase):
         for filename in ('gazebo-server.json', 'gazebo-server-hybrid.json'):
             definition = json.loads((root / filename).read_text())['definitions'][0]
             parameter = definition['parameters']['properties']['vrpnTrackerPorts']
+            self.assertEqual(definition['parameters']['properties']['rosLogDir']['default'], '')
             self.assertEqual(parameter['type'], 'json')
             self.assertEqual(parameter['default'], '')
             args = definition['command']['args']; index = args.index('--vrpn-tracker-ports')

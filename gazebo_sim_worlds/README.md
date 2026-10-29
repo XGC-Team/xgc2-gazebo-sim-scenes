@@ -36,6 +36,29 @@ sudo apt install ros-noetic-xgc2-gazebo-sim-worlds
 
 The package compliance check validates every world XML file, every shared model metadata file, same-name scene layout, required per-scene README files, optional PNG previews, all `model://` references against the packaged `models/` directory, and Gazebo SDF validity through `gz sdf -k`.
 
+## Native server diagnostics
+
+The first selected native SystemPlugin switches Gazebo 11 diagnostics to the
+process supervisor's stdout/stderr owner. The existing process log supplies
+the byte/file bound; no second live Gazebo text file is written by default.
+`XGC_GAZEBO_LOG_OUTPUT=file` explicitly retains native file diagnostics and
+caller-owned retention. Unknown values fail. This changes neither HOME nor
+the native world/process lifecycle.
+
+Upstream initializes `HOME/.gazebo/server-PORT/default.log` immediately before
+SystemPlugin Load, leaving one fixed version header per selected port, which
+is overwritten at startup. It is not a zero-file claim or generic HOME
+cleanup. The public FileLogger.Init seam retires that stream to `/dev/null`;
+Focal Boost path concatenation requires a path relative to the actual native
+log directory, including a symlinked HOME.
+
+The source test target `xgc2_gazebo_scene_native_logging_test` exercises real
+Gazebo FileLogger routing, unchanged header size after 20,000 console messages,
+explicit file mode and invalid-policy rejection. Native build/runtime evidence
+requires the existing Gazebo development environment; an argv-only source test
+does not establish that acceptance. GUI-client diagnostics are a separate
+native consumer from this server policy.
+
 <!-- WORLD_CATALOG_START -->
 
 ## World Catalog

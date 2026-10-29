@@ -14,6 +14,7 @@
 #include <gazebo/sensors/Sensor.hh>
 #include <gazebo/sensors/SensorFactory.hh>
 #include <ros/ros.h>
+#include <xgc2_gazebo_scene/native_runtime_logging.hpp>
 #include <xgc2_gazebo_scene/ros_master_registration.hpp>
 
 #include "ode_ray_query.hpp"
@@ -203,6 +204,7 @@ class CpuLidarSensor final : public gazebo::sensors::Sensor {
 class CpuLidarRegistration final : public gazebo::SystemPlugin {
   public:
     void Load(int, char**) override {
+        xgc2_gazebo_scene::ConfigureNativeServerLogging();
         gazebo::sensors::SensorFactory::RegisterSensor("xgc2_cpu_lidar", []() -> gazebo::sensors::Sensor* {
             return new CpuLidarSensor();
         });

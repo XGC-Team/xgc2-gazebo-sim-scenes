@@ -110,8 +110,9 @@
           },
           "rosLogDir": {
             "type": "string",
-            "default": "/tmp/xgc2/ros/log",
-            "x-xgc-path-kind": "directory"
+            "default": "",
+            "x-xgc-path-kind": "directory",
+            "description": "Explicit ROS directory override; empty uses process-owned ephemeral runtime storage."
           },
           "rosMasterUri": {
             "type": "string",
