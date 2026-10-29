@@ -3,8 +3,8 @@
 #include <iterator>
 #include <string>
 #include <tuple>
-#include <vector>
 #include <unistd.h>
+#include <vector>
 
 #include <boost/filesystem.hpp>
 #include <gazebo/common/Console.hh>
@@ -57,9 +57,9 @@ TEST_F(NativeRuntimeLogging, StreamKeepsOnlyTheInitialHeaderAndUsesTheRealNullDe
     ASSERT_FALSE(header.empty());
     xgc2_gazebo_scene::ConfigureNativeServerLogging();
     EXPECT_FALSE(gazebo::common::Console::GetQuiet());
-    EXPECT_EQ(boost::filesystem::canonical(
-                  boost::filesystem::path(gazebo::common::Console::log.GetLogDirectory()) / "null"),
-              boost::filesystem::path("/dev/null"));
+    EXPECT_EQ(
+        boost::filesystem::canonical(boost::filesystem::path(gazebo::common::Console::log.GetLogDirectory()) / "null"),
+        boost::filesystem::path("/dev/null"));
     testing::internal::CaptureStdout();
     testing::internal::CaptureStderr();
     for (unsigned index = 0; index < 20000; ++index)

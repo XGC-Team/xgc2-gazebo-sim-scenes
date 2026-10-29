@@ -25,8 +25,8 @@ inline void ConfigureNativeServerLogging() {
         // Focal's Boost Filesystem concatenates an absolute rhs in operator/=.
         // FileLogger::Init uses that operator, so an absolute /dev/null would
         // name a file below HOME instead. Resolve from its actual native dir.
-        const auto relative = boost::filesystem::path("/dev/null").lexically_relative(
-            boost::filesystem::canonical(directory));
+        const auto relative =
+            boost::filesystem::path("/dev/null").lexically_relative(boost::filesystem::canonical(directory));
         logger.Init("server-", relative.string());
         logger.clear();
         logger << "Native diagnostics use supervised stdout/stderr.\n" << std::flush;
