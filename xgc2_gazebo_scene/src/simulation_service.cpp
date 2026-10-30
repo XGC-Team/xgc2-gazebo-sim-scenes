@@ -1082,9 +1082,12 @@ class SimulationService::Impl {
             if (slot.phase.load() == 2)
                 slot.state = "running";
             if (slot.phase.load() == 3) {
-                slot.state = slot.result.code == "cancelled" ? "cancelled"
-                             : slot.result.code.empty()      ? "succeeded"
-                                                             : "failed";
+                if (slot.result.code == "cancelled")
+                    slot.state = "cancelled";
+                else if (slot.result.code.empty())
+                    slot.state = "succeeded";
+                else
+                    slot.state = "failed";
                 slot.terminal_at = Clock::now();
                 slot.phase.store(4);
                 if (!slot.mutation) {
