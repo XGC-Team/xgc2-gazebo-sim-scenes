@@ -20,7 +20,7 @@ from xgc2_gazebo_scene.robot_placement import ground_model, read_placement
 
 
 def row(kind='scout_mini'):
-    return dict(kind=kind, slotId='slot-7', namespace='/vehicle_7',
+    return dict(source='simulation', kind=kind, slotId='slot-7', namespace='/vehicle_7',
                 binding=dict(hybridSource='simulation', initialPose=dict(x=1.25, y=-2.5, z=0.2, yaw=0.75),
                              simulationSensors=dict(simpleLidar=False)))
 
@@ -34,6 +34,22 @@ def load_script(name, path):
 
 
 class PlacementInputTest(unittest.TestCase):
+    def test_uses_frozen_source_for_typed_and_other_bindings(self):
+        robot = row()
+        del robot['binding']['hybridSource']
+        robot['binding']['slotDeployment'] = {'resource': {'kind': 'asset-agent'}, 'plant': 'simulation'}
+        for mode in ('simulation', 'hybrid'):
+            actual, _ = read_placement(io.BytesIO(json.dumps(dict(robot=robot, runMode=mode)).encode()))
+            self.assertEqual(actual, robot)
+        # Non-onboard declarations can legitimately retain a different raw
+        # Hybrid source; the frozen effective source is the consumed fact.
+        robot['binding'] = dict(robot['binding'], hybridSource='physical')
+        self.assertEqual(read_placement(io.BytesIO(json.dumps(dict(robot=robot, runMode='hybrid')).encode()))[0], robot)
+        robot['source'] = 'physical'
+        robot['binding']['hybridSource'] = 'simulation'
+        with self.assertRaises(ValueError):
+            read_placement(io.BytesIO(json.dumps(dict(robot=robot, runMode='hybrid')).encode()))
+
     def test_complete_envelope_preserves_frozen_values(self):
         robot = dict(row(), namespace='/fleet/vehicle_7')
         actual, mode = read_placement(io.BytesIO(json.dumps(dict(robot=robot, runMode='hybrid')).encode()))
@@ -43,7 +59,7 @@ class PlacementInputTest(unittest.TestCase):
     def test_rejects_bare_robot_physical_member_and_unbounded_input(self):
         robot = row()
         cases = [robot, dict(robot=robot, runMode='physical'),
-                 dict(robot=dict(robot, binding=dict(robot['binding'], hybridSource='physical')), runMode='hybrid')]
+                 dict(robot=dict(robot, source='physical'), runMode='hybrid')]
         for value in cases:
             with self.subTest(value=value), self.assertRaises(ValueError):
                 read_placement(io.BytesIO(json.dumps(value).encode()))

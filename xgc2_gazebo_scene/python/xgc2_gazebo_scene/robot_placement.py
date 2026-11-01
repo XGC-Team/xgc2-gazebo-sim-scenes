@@ -16,7 +16,7 @@ def read_placement(stream=None):
     row, mode = value['robot'], value['runMode']
     if not isinstance(row, dict) or mode not in ('simulation', 'hybrid'):
         raise ValueError('placement requires a simulated robot')
-    if mode == 'hybrid' and row.get('binding', {}).get('hybridSource') != 'simulation':
+    if row.get('source') != 'simulation':
         raise ValueError('physical hybrid members cannot be placed')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', row.get('slotId', '')):
         raise ValueError('invalid frozen robot identity')
