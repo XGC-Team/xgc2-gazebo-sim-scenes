@@ -105,7 +105,7 @@ build_worlds_deb() {
   write_control \
     "${pkg_root}" \
     "${package}" \
-    "ros-${ROS_DISTRO}-xgc2-gazebo-scene (= ${VERSION})" \
+    "ros-${ROS_DISTRO}-xgc2-gazebo-scene (= ${VERSION}), python3-xgc2-xrpc (>= 0.2.1)" \
     "Reusable Gazebo Classic world and model assets for XGC2"
   fakeroot dpkg-deb --build \
     "${pkg_root}" \
