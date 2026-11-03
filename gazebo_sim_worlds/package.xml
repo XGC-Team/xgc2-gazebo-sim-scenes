@@ -10,6 +10,7 @@
   <buildtool_depend>catkin</buildtool_depend>
   <exec_depend>gazebo</exec_depend>
   <exec_depend>xgc2_gazebo_scene</exec_depend>
+  <exec_depend version_gte="0.2.1">python3-xgc2-xrpc</exec_depend>
   <test_depend>python3-nose</test_depend>
   <test_depend>python3-yaml</test_depend>
   <export>

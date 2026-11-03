@@ -20,6 +20,7 @@
   <depend>xgc2_geometry_msgs</depend>
   <build_depend version_gte="0.2.0">libxgc2-xrpc-dev</build_depend>
   <exec_depend version_gte="0.2.0">libxgc2-xrpc2</exec_depend>
+  <exec_depend version_gte="0.2.1">python3-xgc2-xrpc</exec_depend>
   <build_depend version_gte="0.2.0">libxgc2-chassis-hold-dev</build_depend>
   <exec_depend version_gte="0.2.0">libxgc2-chassis-hold1</exec_depend>
   <build_depend>libjsoncpp-dev</build_depend>

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/lib/xgc2/xrpc/python/bin/python3
 """Run a bounded obstacle plan through the current native world ServiceRef."""
 import argparse
 import json

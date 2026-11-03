@@ -65,7 +65,7 @@ docker run --rm --network "${DOCKER_NETWORK}" \
       sed -i "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g" /etc/apt/sources.list.d/xgc2.list
     fi
     apt-get update -o Dir::Etc::sourcelist=sources.list.d/xgc2.list -o Dir::Etc::sourceparts="-"
-    apt-get install -y --no-install-recommends libxgc2-xrpc-dev libxgc2-chassis-hold-dev libxgc2-math-dev \
+    apt-get install -y --no-install-recommends libxgc2-xrpc-dev python3-xgc2-xrpc libxgc2-chassis-hold-dev libxgc2-math-dev \
       ros-noetic-xgc2-geometry-msgs
     for relation in "libxgc2-xrpc-dev 0.2.0-1~focal" "libxgc2-chassis-hold-dev 0.2.0-1~focal" \
       "ros-noetic-xgc2-geometry-msgs 1.5.0-4" \
@@ -75,13 +75,7 @@ docker run --rm --network "${DOCKER_NETWORK}" \
       dpkg --compare-versions "${version}" ge "${floor}"
       printf "%s=%s\n" "${package}" "${version}"
     done
-    wheel="/workspace/work/xgc2_xrpc-0.2.0-py3-none-any.whl"
-    curl -fL https://github.com/XGC-Team/xgc2-xrpc/releases/download/v0.2.0-1/xgc2_xrpc-0.2.0-py3-none-any.whl -o "${wheel}"
-    printf "%s  %s\n" fc81fe2ee5ef1abf2e7313ff4ae9401ce60f3dee14292b5228ea46e01f97c298 "${wheel}" | sha256sum --check --status
-    # Install only the formal first-party wheel; third-party requirements are
-    # image-owned and may not be bootstrapped by this product build.
-    "${XGC2_PYTHON_EXECUTABLE}" -m pip install --no-deps --no-index "${wheel}"
-    "${XGC2_PYTHON_EXECUTABLE}" -c "from xgc2_xrpc.http import Client; import yaml; import rospy"
+    /usr/lib/xgc2/xrpc/python/bin/python3 -c "from xgc2_xrpc.http import Client; import yaml; import rospy"
     cd /workspace/gazebo-sim-scenes
     .xgc2/scripts/check_package_compliance.sh
     CPP_QUALITY_WORK_DIR=/workspace/work/cpp-quality .xgc2/scripts/check_cpp_quality.sh
