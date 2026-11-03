@@ -106,7 +106,7 @@ fi
 dpkg-query -W -f '${Depends}\n' "ros-${ROS_DISTRO}-xgc2-simple-lidar" \
   | grep -Eq "(^|, )ros-${ROS_DISTRO}-xgc2-gazebo-scene \(= "
 
-"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_gazebo_scene.simulation_client import SimulationClient'
-"${XGC2_PYTHON_EXECUTABLE}" -c 'from xgc2_gazebo_scene.placement import discover_world, place_entity; from xgc2_simple_lidar.configuration import robot_parameters, surface_parameters'
+/usr/lib/xgc2/xrpc/python/bin/python3 -c 'from xgc2_geometry_msgs.msg import SceneSnapshot, SceneState; from xgc2_gazebo_scene.simulation_client import SimulationClient'
+/usr/lib/xgc2/xrpc/python/bin/python3 -c 'from xgc2_gazebo_scene.placement import discover_world, place_entity; from xgc2_simple_lidar.configuration import robot_parameters, surface_parameters'
 
 echo "Installed scene packages check passed"
