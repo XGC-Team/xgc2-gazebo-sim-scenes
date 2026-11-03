@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 unset DISPLAY WAYLAND_DISPLAY
-: "${XGC2_PYTHON_EXECUTABLE:?select image Python >=3.8 explicitly}"
-"${XGC2_PYTHON_EXECUTABLE}" -c "import sys; assert sys.version_info >= (3,8); from xgc2_xrpc.http import Client"
+sdk_python=/usr/lib/xgc2/xrpc/python/bin/python3
+"${sdk_python}" -c "import sys; assert sys.version_info >= (3,8); from xgc2_xrpc.http import Client"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
@@ -10,13 +10,13 @@ ros_distro="${ROS_DISTRO:-noetic}"
 workspace="${XGC2_GAZEBO_SIM_SCENES_TEST_WS:-${repo_root}/.ci/package-tests}"
 
 PYTHONPATH="${repo_root}/xgc2_gazebo_scene/python:${PYTHONPATH:-}" \
-  "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_simulation_client.py -v
+  "${sdk_python}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_simulation_client.py -v
 PYTHONPATH="${repo_root}/xgc2_gazebo_scene/python:${PYTHONPATH:-}" \
-  "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_placement.py -v
+  "${sdk_python}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_placement.py -v
 PYTHONPATH="${repo_root}/xgc2_gazebo_scene/python:${PYTHONPATH:-}" \
-  "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_spawn_robot_model.py -v
+  "${sdk_python}" -m unittest discover -s "${repo_root}/xgc2_gazebo_scene/test" -p test_spawn_robot_model.py -v
 PYTHONPATH="${repo_root}/xgc2_simple_lidar/python:${PYTHONPATH:-}" \
-  "${XGC2_PYTHON_EXECUTABLE}" -m unittest discover -s "${repo_root}/xgc2_simple_lidar/test" -p test_launch_robot.py -v
+  "${sdk_python}" -m unittest discover -s "${repo_root}/xgc2_simple_lidar/test" -p test_launch_robot.py -v
 
 if [[ ! -f "/opt/ros/${ros_distro}/setup.bash" ]]; then
   echo "Missing ROS setup: /opt/ros/${ros_distro}/setup.bash" >&2
@@ -41,7 +41,7 @@ ln -s "${repo_root}/gazebo_sim_worlds" "${workspace}/src/gazebo_sim_worlds"
 export GAZEBO_MODEL_PATH="${repo_root}/gazebo_sim_worlds/models:${GAZEBO_MODEL_PATH:-}"
 export GAZEBO_MODEL_DATABASE_URI=""
 
-catkin_make -C "${workspace}" -j2 -DPYTHON_EXECUTABLE="${XGC2_PYTHON_EXECUTABLE}" -DCATKIN_ENABLE_TESTING=ON
+catkin_make -C "${workspace}" -j2 -DPYTHON_EXECUTABLE="${sdk_python}" -DCATKIN_ENABLE_TESTING=ON
 catkin_make -C "${workspace}" -j2 run_tests_xgc2_gazebo_scene
 catkin_make -C "${workspace}" -j2 run_tests_xgc2_simple_lidar
 catkin_test_results "${workspace}/build/test_results"
