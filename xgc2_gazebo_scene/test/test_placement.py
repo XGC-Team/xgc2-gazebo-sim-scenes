@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from xgc2_xrpc import Host, Limits, Runtime
+from xgc2_xrpc.http import TransportError
 from xgc2_gazebo_scene.placement import discover_world, place_entity
 from xgc2_gazebo_scene.simulation_client import SimulationError
 
@@ -136,9 +137,17 @@ class PlacementTest(unittest.TestCase):
 
     def test_not_ready_at_deadline_never_rearms_discovery(self):
         with FakeWorld(ready=False) as world:
-            with self.assertRaisesRegex(Exception, 'deadline|ready'):
+            owners = []
+            def runtime(**kwargs):
+                owner = Runtime(**kwargs)
+                owners.append(owner)
+                return owner
+            with patch('xgc2_gazebo_scene.placement.Runtime', side_effect=runtime), \
+                    self.assertRaisesRegex(SimulationError, 'deadline|ready'):
                 place_entity(world.endpoint, 'fixture', {'id': 'robot'}, .15)
             self.assertEqual([call[0] for call in world.calls], ['describe'])
+            self.assertEqual(len(owners), 1)
+            self.assertTrue(owners[0].closed)
 
     def test_conflict_and_uncompleted_operation_never_replay(self):
         for options in ({'conflict': True}, {'accepted': True, 'incomplete': True}):
@@ -236,6 +245,27 @@ class PlacementTest(unittest.TestCase):
             discover_world('/tmp/world.sock', 'fixture', 2)
         discovery.close.assert_called_once_with()
         runtime.close.assert_called_once_with()
+        for phase, advance, reason in (
+                ('early', 0.0, 'World discovery failed'),
+                ('at_deadline', 2.0, 'deadline.*ready'),
+        ):
+            with self.subTest(phase=phase):
+                discovery.reset_mock()
+                runtime.reset_mock()
+                clock = SimpleNamespace(now=100.0)
+                fake_time = SimpleNamespace(monotonic=lambda: clock.now)
+                def fail_describe(*_args, **_kwargs):
+                    clock.now += advance
+                    raise TransportError('Server disconnected without sending a response.', 'outcome_unknown')
+                discovery.json.side_effect = fail_describe
+                with patch('xgc2_gazebo_scene.placement.time', fake_time), patch(
+                        'xgc2_gazebo_scene.placement._wait_for_socket'), patch(
+                        'xgc2_gazebo_scene.placement.Runtime', return_value=runtime), patch(
+                        'xgc2_gazebo_scene.placement.Client', return_value=discovery), \
+                        self.assertRaisesRegex(SimulationError, reason):
+                    discover_world('/tmp/world.sock', 'fixture', 2)
+                discovery.close.assert_called_once_with()
+                runtime.close.assert_called_once_with()
 
 
 if __name__ == '__main__':

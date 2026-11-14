@@ -7,6 +7,7 @@ import select
 import time
 
 from xgc2_xrpc import Client, Limits, Runtime, ServiceRef
+from xgc2_xrpc.http import Fault, TransportError
 
 from .simulation_client import SimulationClient, SimulationError
 
@@ -67,8 +68,20 @@ def discover_world(endpoint, target_id, timeout):
                            limits=Limits(call_timeout=_remaining(deadline), shutdown_timeout=1))
         try:
             remaining = _remaining(deadline)
-            description = discovery.json('/v1/describe?wait_ready_ms={}'.format(
-                min(30000, max(1, int(remaining * 1000)))), method='GET', timeout=remaining)
+            try:
+                description = discovery.json('/v1/describe?wait_ready_ms={}'.format(
+                    min(30000, max(1, int(remaining * 1000)))), method='GET', timeout=remaining)
+            except (TransportError, Fault) as error:
+                detail = getattr(error, 'disposition', None) or getattr(error, 'code', 'unknown')
+                if (getattr(error, 'code', None) == 'deadline_exceeded'
+                        or 'deadline' in str(error).lower()
+                        or time.monotonic() + 0.005 >= deadline):
+                    raise SimulationError(
+                        'World discovery deadline exceeded before ready: {} ({})'.format(error, detail)
+                    ) from error
+                raise SimulationError(
+                    'World discovery failed: {} ({})'.format(error, detail)
+                ) from error
             reference = ServiceRef.from_dict(description['facts']['service_ref']).validate()
             if (description.get('service') != 'xgc2.simulation'
                     or reference.service != 'xgc2.simulation'):
