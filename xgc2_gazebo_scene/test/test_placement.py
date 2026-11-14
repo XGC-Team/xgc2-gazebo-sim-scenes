@@ -8,13 +8,13 @@ import unittest
 from unittest.mock import Mock, patch
 
 from xgc2_xrpc import Host, Limits, Runtime
-from xgc2_xrpc.http import TransportError
+from xgc2_xrpc.http import Fault, TransportError
 from xgc2_gazebo_scene.placement import discover_world, place_entity
 from xgc2_gazebo_scene.simulation_client import SimulationError
 
 
 class FakeWorld:
-    def __init__(self, *, start=True, ready=True, ready_after=0, accepted=False,
+    def __init__(self, *, start=True, ready=True, ready_after=0, hold=True, accepted=False,
                  incomplete=False, conflict=False):
         self.directory = tempfile.TemporaryDirectory()
         self.endpoint = str(Path(self.directory.name) / 'world.sock')
@@ -23,7 +23,7 @@ class FakeWorld:
                           'endpoint': {'kind': 'unix', 'address': self.endpoint}}
         self.description = dict(service='xgc2.simulation', api_version='v1',
                                 instance_id='world-one', facts={'service_ref': self.reference}, ready=ready)
-        self.ready_after, self.accepted = ready_after, accepted
+        self.ready_after, self.hold, self.accepted = ready_after, hold, accepted
         self.incomplete, self.conflict = incomplete, conflict
         self.calls, self.headers = [], []
         self.runtime = Runtime(blocking_workers=1, log_level='error')
@@ -47,7 +47,7 @@ class FakeWorld:
         if self.ready_after:
             await asyncio.sleep(min(self.ready_after, held))
             self.description['ready'] = self.ready_after < held
-        elif not self.description['ready']:
+        elif self.hold and not self.description['ready']:
             await asyncio.sleep(held)
         return self.description
 
@@ -143,8 +143,29 @@ class PlacementTest(unittest.TestCase):
                 owners.append(owner)
                 return owner
             with patch('xgc2_gazebo_scene.placement.Runtime', side_effect=runtime), \
-                    self.assertRaisesRegex(SimulationError, 'deadline|ready'):
+                    self.assertRaises(SimulationError) as ctx:
                 place_entity(world.endpoint, 'fixture', {'id': 'robot'}, .15)
+            self.assertIsInstance(ctx.exception.__cause__, TransportError)
+            self.assertRegex(
+                str(ctx.exception),
+                r'^(World discovery deadline exceeded before ready:|World discovery failed: .* \(outcome_unknown\))',
+            )
+            self.assertEqual([call[0] for call in world.calls], ['describe'])
+            self.assertEqual(len(owners), 1)
+            self.assertTrue(owners[0].closed)
+        with FakeWorld(ready=False, hold=False) as world:
+            owners = []
+            def runtime(**kwargs):
+                owner = Runtime(**kwargs)
+                owners.append(owner)
+                return owner
+            with patch('xgc2_gazebo_scene.placement.Runtime', side_effect=runtime), \
+                    self.assertRaisesRegex(
+                        SimulationError,
+                        r'^World did not become ready within the held describe deadline$',
+                    ) as ctx:
+                place_entity(world.endpoint, 'fixture', {'id': 'robot'}, 1)
+            self.assertIsNone(ctx.exception.__cause__)
             self.assertEqual([call[0] for call in world.calls], ['describe'])
             self.assertEqual(len(owners), 1)
             self.assertTrue(owners[0].closed)
@@ -158,7 +179,7 @@ class PlacementTest(unittest.TestCase):
                     owners.append(owner)
                     return owner
                 with patch('xgc2_gazebo_scene.placement.Runtime', side_effect=runtime), \
-                        self.assertRaisesRegex(SimulationError, 'conflict|deadline|closed'):
+                        self.assertRaisesRegex(SimulationError, 'conflict|deadline|closed|outcome_unknown'):
                     place_entity(world.endpoint, 'fixture', {'id': 'robot'}, .15)
                 self.assertEqual(len(owners), 1)
                 self.assertTrue(owners[0].closed)
@@ -245,9 +266,37 @@ class PlacementTest(unittest.TestCase):
             discover_world('/tmp/world.sock', 'fixture', 2)
         discovery.close.assert_called_once_with()
         runtime.close.assert_called_once_with()
-        for phase, advance, reason in (
-                ('early', 0.0, 'World discovery failed'),
-                ('at_deadline', 2.0, 'deadline.*ready'),
+        for phase, advance, err, reason in (
+                (
+                    'early_reset',
+                    0.25,
+                    TransportError('Connection reset by peer', 'outcome_unknown'),
+                    r'^World discovery failed: .* \(outcome_unknown\)$',
+                ),
+                (
+                    'early_deadline_text_not_misclassified',
+                    0.25,
+                    TransportError('Peer exceeded call deadline early', 'outcome_unknown'),
+                    r'^World discovery failed: .* \(outcome_unknown\)$',
+                ),
+                (
+                    'reset_4ms_before_deadline',
+                    1.996,
+                    TransportError('Connection reset by peer', 'outcome_unknown'),
+                    r'^World discovery failed: .* \(outcome_unknown\)$',
+                ),
+                (
+                    'at_deadline',
+                    2.0,
+                    TransportError('Connection reset by peer', 'outcome_unknown'),
+                    r'^World discovery deadline exceeded before ready: .* \(outcome_unknown\)$',
+                ),
+                (
+                    'explicit_deadline_fault_before_deadline',
+                    0.25,
+                    Fault('deadline_exceeded', 'held describe timed out'),
+                    r'^World discovery deadline exceeded before ready: .* \(deadline_exceeded\)$',
+                ),
         ):
             with self.subTest(phase=phase):
                 discovery.reset_mock()
@@ -256,14 +305,15 @@ class PlacementTest(unittest.TestCase):
                 fake_time = SimpleNamespace(monotonic=lambda: clock.now)
                 def fail_describe(*_args, **_kwargs):
                     clock.now += advance
-                    raise TransportError('Server disconnected without sending a response.', 'outcome_unknown')
+                    raise err
                 discovery.json.side_effect = fail_describe
                 with patch('xgc2_gazebo_scene.placement.time', fake_time), patch(
                         'xgc2_gazebo_scene.placement._wait_for_socket'), patch(
                         'xgc2_gazebo_scene.placement.Runtime', return_value=runtime), patch(
                         'xgc2_gazebo_scene.placement.Client', return_value=discovery), \
-                        self.assertRaisesRegex(SimulationError, reason):
+                        self.assertRaisesRegex(SimulationError, reason) as ctx:
                     discover_world('/tmp/world.sock', 'fixture', 2)
+                self.assertIs(ctx.exception.__cause__, err)
                 discovery.close.assert_called_once_with()
                 runtime.close.assert_called_once_with()
 

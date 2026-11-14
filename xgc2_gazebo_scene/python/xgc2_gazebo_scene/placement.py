@@ -73,9 +73,7 @@ def discover_world(endpoint, target_id, timeout):
                     min(30000, max(1, int(remaining * 1000)))), method='GET', timeout=remaining)
             except (TransportError, Fault) as error:
                 detail = getattr(error, 'disposition', None) or getattr(error, 'code', 'unknown')
-                if (getattr(error, 'code', None) == 'deadline_exceeded'
-                        or 'deadline' in str(error).lower()
-                        or time.monotonic() + 0.005 >= deadline):
+                if (isinstance(error, Fault) and error.code == 'deadline_exceeded') or time.monotonic() >= deadline:
                     raise SimulationError(
                         'World discovery deadline exceeded before ready: {} ({})'.format(error, detail)
                     ) from error
