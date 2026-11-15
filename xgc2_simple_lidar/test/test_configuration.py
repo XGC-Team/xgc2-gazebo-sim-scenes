@@ -128,7 +128,8 @@ class ConfigurationTest(unittest.TestCase):
 
     def test_gazebo_rejects_unsupported_observation_requests(self):
         for field, value in (('mode', 'penetrating'), ('mode', 'depth_frustum'),
-                             ('preset', 'bridge_equivalent'), ('preset', 'zju_cpu_crop'),
+                             ('preset', 'bridge_equivalent'), ('preset', 'heading_cone_crop'),
+                             ('preset', 'heading_halfspace_crop'),
                              ('bodyReturns', True), ('publishBeams', True), ('bodyReturns', 'false')):
             with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
                 surface_parameters({'simpleLidar': {'enabled': True, field: value}})
